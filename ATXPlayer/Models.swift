@@ -179,3 +179,93 @@ struct ShortEPGResponse: Codable {
     let epgListings: [EPGListing]?
     enum CodingKeys: String, CodingKey { case epgListings = "epg_listings" }
 }
+
+
+struct SeriesInfoResponse: Decodable {
+    let info: SeriesDetails?
+    let episodes: [String: [Episode]]
+
+    enum CodingKeys: String, CodingKey { case info, episodes }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        info = try? c.decodeIfPresent(SeriesDetails.self, forKey: .info)
+        episodes = (try? c.decodeIfPresent([String: [Episode]].self, forKey: .episodes)) ?? [:]
+    }
+}
+
+struct SeriesDetails: Decodable {
+    let name: String?
+    let cover: String?
+    let plot: String?
+    let cast: String?
+    let director: String?
+    let genre: String?
+    let releaseDate: String?
+    let rating: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name, cover, plot, cast, director, genre, rating
+        case releaseDate = "releaseDate"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = c.flexibleString(forKey: .name)
+        cover = c.flexibleString(forKey: .cover)
+        plot = c.flexibleString(forKey: .plot)
+        cast = c.flexibleString(forKey: .cast)
+        director = c.flexibleString(forKey: .director)
+        genre = c.flexibleString(forKey: .genre)
+        releaseDate = c.flexibleString(forKey: .releaseDate)
+        rating = c.flexibleString(forKey: .rating)
+    }
+}
+
+struct Episode: Decodable, Identifiable, Hashable {
+    let id: Int
+    let episodeNum: Int
+    let title: String
+    let containerExtension: String?
+    let season: Int?
+    let info: EpisodeInfo?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, season, info
+        case episodeNum = "episode_num"
+        case containerExtension = "container_extension"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.flexibleInt(forKey: .id) ?? 0
+        episodeNum = c.flexibleInt(forKey: .episodeNum) ?? 0
+        title = c.flexibleString(forKey: .title) ?? "Episodio \(episodeNum)"
+        containerExtension = c.flexibleString(forKey: .containerExtension)
+        season = c.flexibleInt(forKey: .season)
+        info = try? c.decodeIfPresent(EpisodeInfo.self, forKey: .info)
+    }
+}
+
+struct EpisodeInfo: Decodable, Hashable {
+    let plot: String?
+    let duration: String?
+    let movieImage: String?
+    let rating: String?
+    let releaseDate: String?
+
+    enum CodingKeys: String, CodingKey {
+        case plot, duration, rating
+        case movieImage = "movie_image"
+        case releaseDate = "releasedate"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        plot = c.flexibleString(forKey: .plot)
+        duration = c.flexibleString(forKey: .duration)
+        movieImage = c.flexibleString(forKey: .movieImage)
+        rating = c.flexibleString(forKey: .rating)
+        releaseDate = c.flexibleString(forKey: .releaseDate)
+    }
+}

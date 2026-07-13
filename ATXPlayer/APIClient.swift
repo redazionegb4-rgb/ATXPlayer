@@ -38,12 +38,17 @@ actor APIClient {
         return response.epgListings ?? []
     }
 
-    private func request<T: Decodable>(baseURL: String, username: String, password: String, action: String?, categoryID: String? = nil, streamID: Int? = nil) async throws -> T {
+    func seriesInfo(baseURL: String, username: String, password: String, seriesID: Int) async throws -> SeriesInfoResponse {
+        try await request(baseURL: baseURL, username: username, password: password, action: "get_series_info", seriesID: seriesID)
+    }
+
+    private func request<T: Decodable>(baseURL: String, username: String, password: String, action: String?, categoryID: String? = nil, streamID: Int? = nil, seriesID: Int? = nil) async throws -> T {
         guard var components = URLComponents(string: baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/player_api.php") else { throw APIError.invalidURL }
         var query = [URLQueryItem(name: "username", value: username), URLQueryItem(name: "password", value: password)]
         if let action { query.append(URLQueryItem(name: "action", value: action)) }
         if let categoryID { query.append(URLQueryItem(name: "category_id", value: categoryID)) }
         if let streamID { query.append(URLQueryItem(name: "stream_id", value: String(streamID))) }
+        if let seriesID { query.append(URLQueryItem(name: "series_id", value: String(seriesID))) }
         components.queryItems = query
         guard let url = components.url else { throw APIError.invalidURL }
         var request = URLRequest(url: url)

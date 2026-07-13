@@ -2,6 +2,7 @@ import SwiftUI
 import AVKit
 
 private let brandGradient = LinearGradient(colors: [.cyan, .purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
+private let pageBackground = LinearGradient(colors: [Color.black, Color(red: 0.015, green: 0.03, blue: 0.05)], startPoint: .top, endPoint: .bottom)
 
 struct MainTabView: View {
     var body: some View {
@@ -18,32 +19,24 @@ struct MainTabView: View {
 
 struct HomeView: View {
     @EnvironmentObject var session: AppSession
+    @State private var featuredIndex = 0
+    @State private var showSearch = false
+    private let timer = Timer.publish(every: 8, on: .main, in: .common).autoconnect()
 
-    private var featuredTitle: String {
-        session.allMovies.first?.name ?? session.allSeries.first?.name ?? "Tutto il tuo intrattenimento"
+    private var features: [FeaturedContent] {
+        let movies = session.allMovies.filter { !($0.streamIcon ?? "").isEmpty }.prefix(20).map { FeaturedContent.movie($0) }
+        let series = session.allSeries.filter { !($0.cover ?? "").isEmpty }.prefix(20).map { FeaturedContent.series($0) }
+        return Array(movies) + Array(series)
     }
-    private var featuredImage: String? {
-        session.allMovies.first(where: { !($0.streamIcon ?? "").isEmpty })?.streamIcon
-        ?? session.allSeries.first(where: { !($0.cover ?? "").isEmpty })?.cover
-    }
-    private var featuredSubtitle: String {
-        session.allMovies.first?.plot ?? session.allSeries.first?.plot ?? "Dirette, film e serie in un’unica app."
-    }
-    private var recentMovies: [VODStream] {
-        Array(session.allMovies.sorted { ($0.added ?? "") > ($1.added ?? "") }.prefix(14))
-    }
-    private var recentSeries: [SeriesItem] {
-        Array(session.allSeries.sorted { ($0.num ?? 0) > ($1.num ?? 0) }.prefix(14))
-    }
+    private var featured: FeaturedContent? { features.isEmpty ? nil : features[featuredIndex % features.count] }
+    private var recentMovies: [VODStream] { Array(session.allMovies.sorted { ($0.added ?? "") > ($1.added ?? "") }.prefix(16)) }
+    private var recentSeries: [SeriesItem] { Array(session.allSeries.sorted { ($0.num ?? 0) > ($1.num ?? 0) }.prefix(16)) }
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
-            LinearGradient(colors: [.purple.opacity(0.18), .clear, .cyan.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                .ignoresSafeArea()
-
+            pageBackground.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 25) {
+                LazyVStack(alignment: .leading, spacing: 24) {
                     topBar
                     hero
                     counters
@@ -52,22 +45,17 @@ struct HomeView: View {
                     if !recentMovies.isEmpty { movieRail }
                     updateStatus
                 }
-                .padding(.bottom, 105)
+                .padding(.bottom, 110)
             }
             .refreshable { await session.refreshSafely() }
-
-            if session.isRefreshing {
-                Color.black.opacity(0.45).ignoresSafeArea()
-                VStack(spacing: 14) {
-                    ProgressView().scaleEffect(1.25).tint(.white)
-                    Text("Aggiornamento playlist…").font(.headline).foregroundStyle(.white)
-                }
-                .padding(26)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            }
+            if session.isRefreshing { loadingOverlay }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showSearch) { NavigationStack { GlobalSearchView() } }
+        .onReceive(timer) { _ in
+            guard features.count > 1 else { return }
+            withAnimation(.easeInOut(duration: 0.8)) { featuredIndex = (featuredIndex + 1) % features.count }
+        }
         .alert("Attenzione", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK", role: .cancel) { session.errorMessage = nil }
         } message: { Text(session.errorMessage ?? "") }
@@ -81,52 +69,49 @@ struct HomeView: View {
                 Text("Ciao, \(session.username)").font(.caption).foregroundStyle(.white.opacity(0.58))
             }
             Spacer()
-            Button { Task { await session.refreshSafely() } } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.headline.bold())
-                    .foregroundStyle(.white)
-                    .frame(width: 46, height: 46)
-                    .background(.white.opacity(0.1))
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(.white.opacity(0.1)))
-            }
+            circleButton("magnifyingglass") { showSearch = true }
+            circleButton("arrow.clockwise") { Task { await session.refreshSafely() } }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
+        .padding(.horizontal, 20).padding(.top, 10)
     }
 
-    private var hero: some View {
-        ZStack(alignment: .bottomLeading) {
-            AsyncImage(url: URL(string: featuredImage ?? "")) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
-                    LinearGradient(colors: [.indigo, .purple, Color(red: 0.04, green: 0.05, blue: 0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .overlay(Image(systemName: "play.circle.fill").font(.system(size: 82)).foregroundStyle(.white.opacity(0.18)))
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 285)
-            .clipped()
-
-            LinearGradient(colors: [.clear, .black.opacity(0.18), .black.opacity(0.96)], startPoint: .top, endPoint: .bottom)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("IN EVIDENZA").font(.caption2.bold()).tracking(2).foregroundStyle(.cyan)
-                Text(featuredTitle)
-                    .font(.system(size: 27, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                Text(featuredSubtitle)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(2)
-            }
-            .padding(22)
+    private func circleButton(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.headline.bold()).foregroundStyle(.white)
+                .frame(width: 44, height: 44).background(.white.opacity(0.1)).clipShape(Circle())
+                .overlay(Circle().stroke(.white.opacity(0.1)))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.1)))
-        .padding(.horizontal, 20)
+    }
+
+    @ViewBuilder private var hero: some View {
+        if let featured {
+            NavigationLink { featured.destination(session: session) } label: {
+                ZStack(alignment: .bottomLeading) {
+                    AsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                        else { heroFallback }
+                    }
+                    .frame(maxWidth: .infinity).frame(height: 300).clipped()
+                    LinearGradient(colors: [.clear, .black.opacity(0.2), .black.opacity(0.98)], startPoint: .top, endPoint: .bottom)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(featured.kind).font(.caption2.bold()).tracking(2).foregroundStyle(.cyan)
+                        Text(featured.title).font(.system(size: 28, weight: .black, design: .rounded)).foregroundStyle(.white).lineLimit(2)
+                        Text(featured.subtitle).font(.caption).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
+                        Label("Apri dettaglio", systemImage: "play.circle.fill").font(.caption.bold()).foregroundStyle(.white).padding(.top, 3)
+                    }.padding(22)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.1)))
+                .padding(.horizontal, 20)
+            }.buttonStyle(.plain)
+        } else {
+            heroFallback.frame(height: 260).clipShape(RoundedRectangle(cornerRadius: 28)).padding(.horizontal, 20)
+        }
+    }
+
+    private var heroFallback: some View {
+        LinearGradient(colors: [.indigo, .purple, Color(red: 0.04, green: 0.05, blue: 0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            .overlay(Image(systemName: "play.circle.fill").font(.system(size: 82)).foregroundStyle(.white.opacity(0.2)))
     }
 
     private var counters: some View {
@@ -134,8 +119,7 @@ struct HomeView: View {
             stat("Canali", session.allLive.count, "tv.fill")
             stat("Film", session.allMovies.count, "film.fill")
             stat("Serie", session.allSeries.count, "rectangle.stack.fill")
-        }
-        .padding(.horizontal, 20)
+        }.padding(.horizontal, 20)
     }
 
     private func stat(_ title: String, _ value: Int, _ icon: String) -> some View {
@@ -143,12 +127,9 @@ struct HomeView: View {
             Image(systemName: icon).font(.title3).foregroundStyle(brandGradient)
             Text(value.formatted()).font(.title3.bold()).foregroundStyle(.white)
             Text(title).font(.caption).foregroundStyle(.white.opacity(0.55))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(.white.opacity(0.075))
-        .overlay(RoundedRectangle(cornerRadius: 21).stroke(.white.opacity(0.07)))
-        .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+        }.frame(maxWidth: .infinity).padding(.vertical, 16)
+            .background(.white.opacity(0.075)).overlay(RoundedRectangle(cornerRadius: 21).stroke(.white.opacity(0.07)))
+            .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
     }
 
     private var quickActions: some View {
@@ -158,53 +139,30 @@ struct HomeView: View {
                 quickLink("Diretta", "dot.radiowaves.left.and.right", .live)
                 quickLink("Film", "film.fill", .movies)
                 quickLink("Serie", "rectangle.stack.fill", .series)
-            }
-            .padding(.horizontal, 20)
+            }.padding(.horizontal, 20)
         }
     }
 
     private func quickLink(_ title: String, _ icon: String, _ type: ContentType) -> some View {
         NavigationLink { ContentBrowser(type: type) } label: {
-            VStack(spacing: 10) {
-                Image(systemName: icon).font(.title2)
-                Text(title).font(.subheadline.bold())
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 19)
-            .background(brandGradient)
-            .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+            VStack(spacing: 10) { Image(systemName: icon).font(.title2); Text(title).font(.subheadline.bold()) }
+                .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 19)
+                .background(brandGradient).clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
         }
     }
 
     private var movieRail: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            sectionTitle("Ultimi film aggiunti")
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 14) {
-                    ForEach(recentMovies) { item in
-                        NavigationLink { PlayerScreen(title: item.name, url: session.streamURL(type: .movies, id: item.streamID, ext: item.containerExtension)) } label: {
-                            PosterCard(title: item.name, imageURL: item.streamIcon, badge: item.rating).frame(width: 138)
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
+        MediaRail(title: "Ultimi film aggiunti") {
+            ForEach(recentMovies) { item in
+                NavigationLink { MovieDetailView(item: item) } label: { PosterCard(title: item.name, imageURL: item.streamIcon, badge: item.rating).frame(width: 138) }
             }
         }
     }
 
     private var seriesRail: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            sectionTitle("Ultime serie TV aggiunte")
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 14) {
-                    ForEach(recentSeries) { item in
-                        NavigationLink { SeriesPlaceholderView(item: item) } label: {
-                            PosterCard(title: item.name, imageURL: item.cover, badge: item.rating).frame(width: 138)
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
+        MediaRail(title: "Ultime serie TV aggiunte") {
+            ForEach(recentSeries) { item in
+                NavigationLink { SeriesDetailView(item: item) } label: { PosterCard(title: item.name, imageURL: item.cover, badge: item.rating).frame(width: 138) }
             }
         }
     }
@@ -212,52 +170,89 @@ struct HomeView: View {
     private var updateStatus: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            Text("Playlist aggiornata").foregroundStyle(.white.opacity(0.55))
-            Spacer()
+            Text("Playlist aggiornata").foregroundStyle(.white.opacity(0.55)); Spacer()
             Text(session.lastRefresh?.formatted(date: .omitted, time: .shortened) ?? "—").foregroundStyle(.white.opacity(0.45))
-        }
-        .font(.caption)
-        .padding(.horizontal, 22)
+        }.font(.caption).padding(.horizontal, 22)
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title).font(.title3.bold()).foregroundStyle(.white).padding(.horizontal, 20)
+    private func sectionTitle(_ title: String) -> some View { Text(title).font(.title3.bold()).foregroundStyle(.white).padding(.horizontal, 20) }
+    private var loadingOverlay: some View {
+        Color.black.opacity(0.48).ignoresSafeArea().overlay(
+            VStack(spacing: 14) { ProgressView().scaleEffect(1.25).tint(.white); Text("Aggiornamento playlist…").font(.headline).foregroundStyle(.white) }
+                .padding(26).background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 24))
+        )
+    }
+}
+
+private enum FeaturedContent {
+    case movie(VODStream), series(SeriesItem)
+    var title: String { switch self { case .movie(let x): return x.name; case .series(let x): return x.name } }
+    var imageURL: String? { switch self { case .movie(let x): return x.streamIcon; case .series(let x): return x.cover } }
+    var subtitle: String { switch self { case .movie(let x): return x.plot ?? "Guarda questo film"; case .series(let x): return x.plot ?? "Scopri questa serie TV" } }
+    var kind: String { switch self { case .movie: return "FILM IN EVIDENZA"; case .series: return "SERIE IN EVIDENZA" } }
+    @ViewBuilder func destination(session: AppSession) -> some View { switch self { case .movie(let x): MovieDetailView(item: x); case .series(let x): SeriesDetailView(item: x) } }
+}
+
+struct MediaRail<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+    init(title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Text(title).font(.title3.bold()).foregroundStyle(.white).padding(.horizontal, 20)
+            ScrollView(.horizontal, showsIndicators: false) { LazyHStack(spacing: 14) { content }.padding(.horizontal, 20) }
+        }
     }
 }
 
 struct ContentBrowser: View {
     @EnvironmentObject var session: AppSession
     let type: ContentType
+    @State private var search = ""
     var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
     var title: String { type == .live ? "TV in diretta" : type == .movies ? "Film" : "Serie TV" }
+    var filtered: [Category] { search.isEmpty ? categories : categories.filter { $0.categoryName.localizedCaseInsensitiveContains(search) } }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                NavigationLink { ItemGrid(type: type, category: nil) } label: { categoryRow("Tutti i contenuti", "square.grid.2x2.fill") }
-                ForEach(categories) { category in
-                    NavigationLink { ItemGrid(type: type, category: category) } label: { categoryRow(category.categoryName, icon) }
-                }
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    headerCard
+                    NavigationLink { ItemGrid(type: type, category: nil) } label: { categoryRow("Tutti i contenuti", "square.grid.2x2.fill", totalCount) }
+                    ForEach(filtered) { category in
+                        NavigationLink { ItemGrid(type: type, category: category) } label: { categoryRow(category.categoryName, icon, count(for: category)) }
+                    }
+                }.padding(18).padding(.bottom, 90)
             }
-            .padding()
         }
-        .navigationTitle(title)
+        .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $search, prompt: "Cerca categoria")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { Task { await session.refreshSafely() } } label: { Image(systemName: "arrow.clockwise") }
-            }
+            ToolbarItem(placement: .topBarTrailing) { Button { Task { await session.refreshSafely() } } label: { Image(systemName: "arrow.clockwise") } }
         }
     }
 
+    private var headerCard: some View {
+        HStack(spacing: 16) {
+            ZStack { RoundedRectangle(cornerRadius: 20).fill(brandGradient); Image(systemName: icon).font(.title).foregroundStyle(.white) }.frame(width: 70, height: 70)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.title2.bold()).foregroundStyle(.white)
+                Text("\(totalCount.formatted()) contenuti disponibili").font(.subheadline).foregroundStyle(.white.opacity(0.58))
+            }; Spacer()
+        }.padding(18).background(.white.opacity(0.075)).clipShape(RoundedRectangle(cornerRadius: 24))
+    }
     private var icon: String { type == .live ? "tv.fill" : type == .movies ? "film.fill" : "rectangle.stack.fill" }
-    private func categoryRow(_ title: String, _ icon: String) -> some View {
+    private var totalCount: Int { type == .live ? session.allLive.count : type == .movies ? session.allMovies.count : session.allSeries.count }
+    private func count(for category: Category) -> Int {
+        switch type { case .live: return session.allLive.filter { $0.categoryID == category.categoryID }.count; case .movies: return session.allMovies.filter { $0.categoryID == category.categoryID }.count; case .series: return session.allSeries.filter { $0.categoryID == category.categoryID }.count }
+    }
+    private func categoryRow(_ title: String, _ icon: String, _ count: Int) -> some View {
         HStack(spacing: 14) {
-            ZStack { RoundedRectangle(cornerRadius: 15).fill(brandGradient); Image(systemName: icon).foregroundStyle(.white) }.frame(width: 52, height: 52)
-            Text(title).font(.headline).foregroundStyle(.primary).lineLimit(2)
-            Spacer()
-            Image(systemName: "chevron.right").foregroundStyle(.secondary)
-        }
-        .padding(14).background(.thinMaterial).clipShape(RoundedRectangle(cornerRadius: 21))
+            ZStack { RoundedRectangle(cornerRadius: 15).fill(brandGradient); Image(systemName: icon).foregroundStyle(.white) }.frame(width: 54, height: 54)
+            VStack(alignment: .leading, spacing: 3) { Text(title).font(.headline).foregroundStyle(.white).lineLimit(2); Text("\(count.formatted()) contenuti").font(.caption).foregroundStyle(.white.opacity(0.48)) }
+            Spacer(); Image(systemName: "chevron.right").foregroundStyle(.purple)
+        }.padding(15).background(.white.opacity(0.07)).overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.06))).clipShape(RoundedRectangle(cornerRadius: 22))
     }
 }
 
@@ -274,36 +269,48 @@ struct ItemGrid: View {
     let columns = [GridItem(.adaptive(minimum: 145), spacing: 14)]
 
     var body: some View {
-        Group {
-            if loading { ProgressView("Caricamento…") }
-            else if let error { EmptyStateView(title: "Errore", icon: "wifi.exclamationmark", message: error) }
-            else { ScrollView { LazyVGrid(columns: columns, spacing: 16) { contentCards }.padding() } }
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            Group {
+                if loading { ProgressView("Caricamento…").tint(.white).foregroundStyle(.white) }
+                else if let error { EmptyStateView(title: "Errore", icon: "wifi.exclamationmark", message: error) }
+                else if resultCount == 0 { EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Prova con un altro termine di ricerca.") }
+                else { ScrollView { LazyVGrid(columns: columns, spacing: 18) { contentCards }.padding(18).padding(.bottom, 90) } }
+            }
         }
-        .navigationTitle(category?.categoryName ?? "Tutti")
-        .searchable(text: $search, prompt: "Cerca")
-        .task { await load() }
-        .refreshable { await load() }
+        .navigationTitle(category?.categoryName ?? "Tutti i contenuti").navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $search, prompt: "Cerca in questa categoria")
+        .task { await load() }.refreshable { await load() }
+    }
+
+    private var resultCount: Int {
+        if type == .live { return live.filter(matchLive).count }
+        if type == .movies { return vod.filter(matchMovie).count }
+        return series.filter(matchSeries).count
     }
 
     @ViewBuilder var contentCards: some View {
         if type == .live {
-            ForEach(live.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }) { item in
-                NavigationLink { PlayerScreen(title: item.name, url: session.streamURL(type: .live, id: item.streamID)) } label: { PosterCard(title: item.name, imageURL: item.streamIcon, badge: "LIVE", landscape: true) }
+            ForEach(live.filter(matchLive)) { item in
+                NavigationLink { LiveDetailView(item: item) } label: { PosterCard(title: item.name, imageURL: item.streamIcon, badge: "LIVE", landscape: true) }
             }
         } else if type == .movies {
-            ForEach(vod.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }) { item in
-                NavigationLink { PlayerScreen(title: item.name, url: session.streamURL(type: .movies, id: item.streamID, ext: item.containerExtension)) } label: { PosterCard(title: item.name, imageURL: item.streamIcon, badge: item.rating) }
+            ForEach(vod.filter(matchMovie)) { item in
+                NavigationLink { MovieDetailView(item: item) } label: { PosterCard(title: item.name, imageURL: item.streamIcon, badge: item.rating) }
             }
         } else {
-            ForEach(series.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }) { item in
-                NavigationLink { SeriesPlaceholderView(item: item) } label: { PosterCard(title: item.name, imageURL: item.cover, badge: item.rating) }
+            ForEach(series.filter(matchSeries)) { item in
+                NavigationLink { SeriesDetailView(item: item) } label: { PosterCard(title: item.name, imageURL: item.cover, badge: item.rating) }
             }
         }
     }
 
+    private func matchLive(_ x: LiveStream) -> Bool { search.isEmpty || x.name.localizedCaseInsensitiveContains(search) }
+    private func matchMovie(_ x: VODStream) -> Bool { search.isEmpty || x.name.localizedCaseInsensitiveContains(search) || (x.genre ?? "").localizedCaseInsensitiveContains(search) }
+    private func matchSeries(_ x: SeriesItem) -> Bool { search.isEmpty || x.name.localizedCaseInsensitiveContains(search) || (x.genre ?? "").localizedCaseInsensitiveContains(search) }
+
     func load() async {
-        loading = true
-        error = nil
+        loading = true; error = nil
         do {
             switch type {
             case .live: live = category == nil ? session.allLive : try await APIClient.shared.liveStreams(baseURL: session.baseURL, username: session.username, password: session.password, categoryID: category?.categoryID)
@@ -320,154 +327,246 @@ struct PosterCard: View {
     let imageURL: String?
     let badge: String?
     var landscape = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .topTrailing) {
                 AsyncImage(url: URL(string: imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
-                    else {
-                        ZStack {
-                            LinearGradient(colors: [.purple.opacity(0.65), .indigo, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            Image(systemName: landscape ? "tv.fill" : "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.7))
-                        }
-                    }
-                }
-                .frame(height: landscape ? 108 : 202)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .clipped()
-                if let badge, !badge.isEmpty {
-                    Text(badge).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 5).background(.black.opacity(0.75)).foregroundStyle(.white).clipShape(Capsule()).padding(8)
-                }
+                    else { ZStack { brandGradient; Image(systemName: landscape ? "tv.fill" : "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.75)) } }
+                }.frame(height: landscape ? 112 : 205).clipShape(RoundedRectangle(cornerRadius: 18)).clipped()
+                if let badge, !badge.isEmpty { Text(badge).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 5).background(.black.opacity(0.78)).foregroundStyle(.white).clipShape(Capsule()).padding(8) }
             }
-            Text(title).font(.subheadline.weight(.semibold)).lineLimit(2).multilineTextAlignment(.leading).foregroundStyle(.primary)
+            Text(title).font(.subheadline.weight(.semibold)).lineLimit(2).multilineTextAlignment(.leading).foregroundStyle(.white)
         }
     }
 }
 
-struct PlayerScreen: View {
+struct MovieDetailView: View {
     @EnvironmentObject var session: AppSession
+    let item: VODStream
+    var body: some View {
+        MediaDetailLayout(title: item.name, imageURL: item.streamIcon, plot: item.plot, metadata: [item.genre, item.releaseDate, item.duration, item.rating.map { "★ \($0)" }].compactMap { $0 }) {
+            NavigationLink { PlayerScreen(title: item.name, url: session.streamURL(type: .movies, id: item.streamID, ext: item.containerExtension), isLive: false) } label: { playButton("Guarda film") }
+        }
+    }
+}
+
+struct LiveDetailView: View {
+    @EnvironmentObject var session: AppSession
+    let item: LiveStream
+    @State private var epg: [EPGListing] = []
+    var body: some View {
+        MediaDetailLayout(title: item.name, imageURL: item.streamIcon, plot: epg.first?.description, metadata: ["Canale in diretta", epg.first?.title].compactMap { $0 }) {
+            NavigationLink { PlayerScreen(title: item.name, url: directURL, isLive: true) } label: { playButton("Guarda in diretta") }
+        }
+        .task { epg = (try? await APIClient.shared.shortEPG(baseURL: session.baseURL, username: session.username, password: session.password, streamID: item.streamID)) ?? [] }
+    }
+    private var directURL: URL? { if let source = item.directSource, !source.isEmpty { return URL(string: source) }; return session.streamURL(type: .live, id: item.streamID) }
+}
+
+struct SeriesDetailView: View {
+    @EnvironmentObject var session: AppSession
+    let item: SeriesItem
+    @State private var info: SeriesInfoResponse?
+    @State private var selectedSeason = ""
+    @State private var loading = true
+    @State private var error: String?
+
+    private var seasons: [String] { (info?.episodes.keys.map { $0 } ?? []).sorted { (Int($0) ?? 0) < (Int($1) ?? 0) } }
+    private var episodes: [Episode] { info?.episodes[selectedSeason] ?? [] }
+
+    var body: some View {
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    SeriesHeader(item: item, details: info?.info)
+                    if loading { ProgressView("Caricamento stagioni…").tint(.white).frame(maxWidth: .infinity).padding(30) }
+                    else if let error { EmptyStateView(title: "Episodi non disponibili", icon: "rectangle.stack.badge.exclamationmark", message: error) }
+                    else if seasons.isEmpty { EmptyStateView(title: "Nessun episodio", icon: "rectangle.stack", message: "Il server non ha restituito stagioni o episodi per questa serie.") }
+                    else {
+                        Picker("Stagione", selection: $selectedSeason) { ForEach(seasons, id: \.self) { Text("Stagione \($0)").tag($0) } }.pickerStyle(.segmented).padding(.horizontal)
+                        Text("Episodi").font(.title2.bold()).foregroundStyle(.white).padding(.horizontal)
+                        LazyVStack(spacing: 14) {
+                            ForEach(episodes) { episode in
+                                NavigationLink { PlayerScreen(title: episode.title, url: session.streamURL(type: .series, id: episode.id, ext: episode.containerExtension), isLive: false) } label: { EpisodeRow(episode: episode, fallbackImage: item.cover) }
+                            }
+                        }.padding(.horizontal)
+                    }
+                }.padding(.bottom, 100)
+            }
+        }
+        .navigationTitle(item.name).navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private func load() async {
+        loading = true; error = nil
+        do {
+            info = try await APIClient.shared.seriesInfo(baseURL: session.baseURL, username: session.username, password: session.password, seriesID: item.seriesID)
+            selectedSeason = seasons.first ?? ""
+        } catch { self.error = error.localizedDescription }
+        loading = false
+    }
+}
+
+struct SeriesHeader: View {
+    let item: SeriesItem
+    let details: SeriesDetails?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AsyncImage(url: URL(string: details?.cover ?? item.cover ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFit() } else { ZStack { brandGradient; Image(systemName: "rectangle.stack.fill").font(.largeTitle).foregroundStyle(.white) } }
+            }.frame(maxWidth: .infinity).frame(maxHeight: 430).clipShape(RoundedRectangle(cornerRadius: 24))
+            Text(details?.name ?? item.name).font(.title.bold()).foregroundStyle(.white)
+            if let genre = details?.genre ?? item.genre { Text(genre).font(.subheadline).foregroundStyle(.purple) }
+            if let plot = details?.plot ?? item.plot { Text(plot).foregroundStyle(.white.opacity(0.7)) }
+        }.padding(.horizontal)
+    }
+}
+
+struct EpisodeRow: View {
+    let episode: Episode
+    let fallbackImage: String?
+    var body: some View {
+        HStack(spacing: 14) {
+            AsyncImage(url: URL(string: episode.info?.movieImage ?? fallbackImage ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() } else { ZStack { brandGradient; Image(systemName: "play.fill").foregroundStyle(.white) } }
+            }.frame(width: 126, height: 76).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Episodio \(episode.episodeNum)").font(.caption.bold()).foregroundStyle(.purple)
+                Text(episode.title).font(.headline).foregroundStyle(.white).lineLimit(2)
+                if let duration = episode.info?.duration { Text(duration).font(.caption).foregroundStyle(.white.opacity(0.5)) }
+            }; Spacer(); Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(.white)
+        }.padding(12).background(.white.opacity(0.07)).clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+}
+
+struct MediaDetailLayout<Action: View>: View {
+    let title: String
+    let imageURL: String?
+    let plot: String?
+    let metadata: [String]
+    @ViewBuilder let action: Action
+    init(title: String, imageURL: String?, plot: String?, metadata: [String], @ViewBuilder action: () -> Action) { self.title = title; self.imageURL = imageURL; self.plot = plot; self.metadata = metadata; self.action = action() }
+    var body: some View {
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    AsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                        if let image = phase.image { image.resizable().scaledToFit() } else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.system(size: 70)).foregroundStyle(.white.opacity(0.8)) } }
+                    }.frame(maxWidth: .infinity).frame(maxHeight: 460).clipShape(RoundedRectangle(cornerRadius: 26))
+                    Text(title).font(.title.bold()).foregroundStyle(.white)
+                    if !metadata.isEmpty { Text(metadata.joined(separator: "  •  ")).font(.subheadline).foregroundStyle(.purple) }
+                    action
+                    if let plot, !plot.isEmpty { Text("Trama").font(.title3.bold()).foregroundStyle(.white); Text(plot).foregroundStyle(.white.opacity(0.7)) }
+                }.padding(18).padding(.bottom, 90)
+            }
+        }.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private func playButton(_ title: String) -> some View {
+    Label(title, systemImage: "play.fill").font(.headline.bold()).foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 16).background(brandGradient).clipShape(RoundedRectangle(cornerRadius: 18))
+}
+
+struct PlayerScreen: View {
     let title: String
     let url: URL?
+    let isLive: Bool
     @State private var player: AVPlayer?
+    @State private var failed = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             if let player {
-                VideoPlayer(player: player)
-                    .onAppear { if session.autoplay { player.play() } }
-                    .onDisappear { player.pause() }
-            } else {
-                EmptyStateView(title: "Flusso non disponibile", icon: "play.slash", message: "Controlla il collegamento o riprova più tardi.")
-                    .foregroundStyle(.white)
-            }
+                VideoPlayer(player: player).ignoresSafeArea(edges: .bottom)
+            } else if failed || url == nil {
+                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.white)
+            } else { ProgressView("Apertura player…").tint(.white).foregroundStyle(.white) }
         }
         .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
-        .task { if let url { player = AVPlayer(url: url) } }
+        .task {
+            guard let url else { failed = true; return }
+            let p = AVPlayer(url: url); player = p; p.play()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if p.currentItem?.status == .failed { failed = true; player = nil }
+        }
+        .onDisappear { player?.pause(); player = nil }
     }
 }
 
-struct SeriesPlaceholderView: View {
-    let item: SeriesItem
+struct GlobalSearchView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) var dismiss
+    @State private var search = ""
+    private var movies: [VODStream] { search.isEmpty ? [] : Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
+    private var series: [SeriesItem] { search.isEmpty ? [] : Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
+    private var live: [LiveStream] { search.isEmpty ? [] : Array(session.allLive.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
     var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                AsyncImage(url: URL(string: item.cover ?? "")) { phase in
-                    if let image = phase.image { image.resizable().scaledToFit() } else { ProgressView() }
-                }
-                .frame(maxHeight: 420).clipShape(RoundedRectangle(cornerRadius: 24))
-                Text(item.name).font(.title.bold())
-                if let plot = item.plot { Text(plot).foregroundStyle(.secondary) }
-                EmptyStateView(title: "Episodi", icon: "rectangle.stack", message: "La playlist ha fornito la serie. Il dettaglio di stagioni ed episodi verrà completato nel prossimo aggiornamento.")
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 22) {
+                    if search.isEmpty { EmptyStateView(title: "Ricerca globale", icon: "magnifyingglass", message: "Cerca contemporaneamente tra canali, film e serie TV.") }
+                    if !movies.isEmpty { resultSection("Film", movies) { MovieDetailView(item: $0) } }
+                    if !series.isEmpty { resultSection("Serie TV", series) { SeriesDetailView(item: $0) } }
+                    if !live.isEmpty { resultSection("Canali", live) { LiveDetailView(item: $0) } }
+                    if !search.isEmpty && movies.isEmpty && series.isEmpty && live.isEmpty { EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Non abbiamo trovato contenuti con questo nome.") }
+                }.padding(.bottom, 40)
             }
-            .padding()
         }
-        .navigationTitle(item.name).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Cerca").navigationBarTitleDisplayMode(.inline).searchable(text: $search, prompt: "Film, serie o canale")
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Chiudi") { dismiss() } } }
+    }
+    private func resultSection<T: Identifiable, Destination: View>(_ title: String, _ items: [T], @ViewBuilder destination: @escaping (T) -> Destination) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.title2.bold()).foregroundStyle(.white).padding(.horizontal)
+            ForEach(items) { item in
+                NavigationLink { destination(item) } label: { SearchResultRow(title: titleFor(item), subtitle: title, imageURL: imageFor(item)) }
+            }
+        }
+    }
+    private func titleFor<T>(_ item: T) -> String { if let x = item as? VODStream { return x.name }; if let x = item as? SeriesItem { return x.name }; if let x = item as? LiveStream { return x.name }; return "Contenuto" }
+    private func imageFor<T>(_ item: T) -> String? { if let x = item as? VODStream { return x.streamIcon }; if let x = item as? SeriesItem { return x.cover }; if let x = item as? LiveStream { return x.streamIcon }; return nil }
+}
+
+struct SearchResultRow: View {
+    let title: String; let subtitle: String; let imageURL: String?
+    var body: some View {
+        HStack(spacing: 14) {
+            AsyncImage(url: URL(string: imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }
+                .frame(width: 70, height: 70).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
+            VStack(alignment: .leading) { Text(title).font(.headline).foregroundStyle(.white).lineLimit(2); Text(subtitle).font(.caption).foregroundStyle(.purple) }
+            Spacer(); Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.4))
+        }.padding(.horizontal)
     }
 }
 
 struct SettingsView: View {
     @EnvironmentObject var session: AppSession
     @State private var showLogout = false
-
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 14) {
-                    BrandMark(size: 58)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(session.username).font(.headline)
-                        Label(session.userInfo?.status ?? "—", systemImage: "checkmark.seal.fill").font(.caption).foregroundStyle(.green)
-                        Text("Scadenza: \(expiry)").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Button { Task { await session.refreshSafely() } } label: {
-                    Label(session.isRefreshing ? "Aggiornamento…" : "Aggiorna playlist", systemImage: "arrow.clockwise")
-                }
-                .disabled(session.isRefreshing)
+                HStack(spacing: 14) { BrandMark(size: 58); VStack(alignment: .leading, spacing: 4) { Text(session.username).font(.headline); Label(session.userInfo?.status ?? "—", systemImage: "checkmark.seal.fill").font(.caption).foregroundStyle(.green); Text("Scadenza: \(expiry)").font(.caption).foregroundStyle(.secondary) } }
+                Button { Task { await session.refreshSafely() } } label: { Label(session.isRefreshing ? "Aggiornamento…" : "Aggiorna playlist", systemImage: "arrow.clockwise") }.disabled(session.isRefreshing)
                 LabeledContent("Ultimo aggiornamento", value: session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "—")
             } header: { Text("Account") }
-
-            Section("Riproduzione") {
-                Toggle("Riproduzione automatica", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) }))
-                Toggle("Aggiorna all'apertura", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) }))
-                Label("Picture in Picture", systemImage: "pip.fill")
-                Label("AirPlay", systemImage: "airplayvideo")
-            }
-
-            Section("Aspetto") {
-                Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) {
-                    Text("Automatico").tag("system")
-                    Text("Chiaro").tag("light")
-                    Text("Scuro").tag("dark")
-                }
-            }
-
-            Section("Sicurezza") {
-                Toggle("Controllo genitori", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) }))
-                Toggle("Accesso automatico", isOn: Binding(get: { session.autoLogin }, set: { session.setAutoLogin($0) }))
-            }
-
-            Section("Archivio") {
-                Button { URLCache.shared.removeAllCachedResponses() } label: { Label("Svuota cache immagini", systemImage: "trash") }
-                LabeledContent("Canali", value: session.allLive.count.formatted())
-                LabeledContent("Film", value: session.allMovies.count.formatted())
-                LabeledContent("Serie", value: session.allSeries.count.formatted())
-            }
-
-            Section("Informazioni") {
-                LabeledContent("Versione", value: "1.0 (Build 5)")
-                Text("AtlantiX è un player multimediale e non include né vende contenuti.").font(.footnote).foregroundStyle(.secondary)
-            }
-
-            Section {
-                Button("Esci dall'account", role: .destructive) { showLogout = true }
-            }
+            Section("Riproduzione") { Toggle("Riproduzione automatica", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })); Toggle("Aggiorna all'apertura", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })); Label("Picture in Picture", systemImage: "pip.fill"); Label("AirPlay", systemImage: "airplayvideo") }
+            Section("Aspetto") { Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Automatico").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") } }
+            Section("Sicurezza") { Toggle("Controllo genitori", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) })) }
+            Section { Button("Esci dall'account", role: .destructive) { showLogout = true } }
         }
         .navigationTitle("Impostazioni")
-        .confirmationDialog("Vuoi uscire dall'account?", isPresented: $showLogout) {
-            Button("Esci", role: .destructive) { session.signOut() }
-            Button("Annulla", role: .cancel) { }
-        }
+        .confirmationDialog("Vuoi uscire dall'account?", isPresented: $showLogout) { Button("Esci", role: .destructive) { session.signOut() }; Button("Annulla", role: .cancel) {} }
     }
-
-    var expiry: String {
-        guard let value = session.userInfo?.expDate, let seconds = TimeInterval(value) else { return "Illimitata" }
-        return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted)
-    }
+    private var expiry: String { guard let timestamp = session.userInfo?.expDate, let seconds = TimeInterval(timestamp) else { return "—" }; return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted) }
 }
 
 struct EmptyStateView: View {
-    let title: String
-    let icon: String
-    let message: String
-    var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: icon).font(.system(size: 44)).foregroundStyle(.secondary)
-            Text(title).font(.title3.bold())
-            Text(message).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        }
-        .padding(30)
-    }
+    let title: String; let icon: String; let message: String
+    var body: some View { VStack(spacing: 14) { Image(systemName: icon).font(.system(size: 46)).foregroundStyle(.secondary); Text(title).font(.title3.bold()); Text(message).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center) }.frame(maxWidth: .infinity).padding(32) }
 }
