@@ -146,11 +146,11 @@ struct VODStream: Codable, Identifiable, Hashable {
 }
 
 struct SeriesItem: Codable, Identifiable, Hashable {
-    let num: Int?, name: String, seriesID: Int, cover: String?, plot: String?, cast: String?, director: String?, genre: String?, releaseDate: String?, rating: String?, categoryID: String?
+    let num: Int?, name: String, seriesID: Int, cover: String?, plot: String?, cast: String?, director: String?, genre: String?, releaseDate: String?, rating: String?, categoryID: String?, added: String?, lastModified: String?
     var id: Int { seriesID }
     enum CodingKeys: String, CodingKey {
         case num, name, cover, plot, cast, director, genre, rating
-        case seriesID = "series_id", releaseDate = "releaseDate", categoryID = "category_id"
+        case seriesID = "series_id", releaseDate = "releaseDate", categoryID = "category_id", added, lastModified = "last_modified"
     }
 
     init(from decoder: Decoder) throws {
@@ -166,6 +166,46 @@ struct SeriesItem: Codable, Identifiable, Hashable {
         releaseDate = c.flexibleString(forKey: .releaseDate)
         rating = c.flexibleString(forKey: .rating)
         categoryID = c.flexibleString(forKey: .categoryID)
+        added = c.flexibleString(forKey: .added)
+        lastModified = c.flexibleString(forKey: .lastModified)
+    }
+}
+
+struct VODInfoResponse: Decodable {
+    let info: VODDetails?
+    let movieData: VODMovieData?
+    enum CodingKeys: String, CodingKey { case info; case movieData = "movie_data" }
+}
+
+struct VODDetails: Decodable {
+    let name: String?, movieImage: String?, plot: String?, cast: String?, director: String?, genre: String?, releaseDate: String?, duration: String?, rating: String?, youtubeTrailer: String?
+    enum CodingKeys: String, CodingKey {
+        case name, plot, cast, director, genre, duration, rating
+        case movieImage = "movie_image", releaseDate = "releasedate", youtubeTrailer = "youtube_trailer"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = c.flexibleString(forKey: .name)
+        movieImage = c.flexibleString(forKey: .movieImage)
+        plot = c.flexibleString(forKey: .plot)
+        cast = c.flexibleString(forKey: .cast)
+        director = c.flexibleString(forKey: .director)
+        genre = c.flexibleString(forKey: .genre)
+        releaseDate = c.flexibleString(forKey: .releaseDate)
+        duration = c.flexibleString(forKey: .duration)
+        rating = c.flexibleString(forKey: .rating)
+        youtubeTrailer = c.flexibleString(forKey: .youtubeTrailer)
+    }
+}
+
+struct VODMovieData: Decodable {
+    let name: String?, streamID: Int?, containerExtension: String?
+    enum CodingKeys: String, CodingKey { case name; case streamID = "stream_id", containerExtension = "container_extension" }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = c.flexibleString(forKey: .name)
+        streamID = c.flexibleInt(forKey: .streamID)
+        containerExtension = c.flexibleString(forKey: .containerExtension)
     }
 }
 

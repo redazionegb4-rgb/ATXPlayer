@@ -1,6 +1,16 @@
 import SwiftUI
 import Foundation
 
+private struct PlaylistCache: Codable {
+    let liveCategories: [Category]
+    let movieCategories: [Category]
+    let seriesCategories: [Category]
+    let allLive: [LiveStream]
+    let allMovies: [VODStream]
+    let allSeries: [SeriesItem]
+    let lastRefresh: Date?
+}
+
 @MainActor
 final class AppSession: ObservableObject {
     @Published var isAuthenticated = false
@@ -20,7 +30,7 @@ final class AppSession: ObservableObject {
     @Published var lastRefresh: Date?
     @Published var appearance = UserDefaults.standard.string(forKey: "appearance") ?? "dark"
     @Published var autoLogin = UserDefaults.standard.object(forKey: "autoLogin") as? Bool ?? true
-    @Published var refreshOnLaunch = UserDefaults.standard.object(forKey: "refreshOnLaunch") as? Bool ?? true
+    @Published var refreshOnLaunch = UserDefaults.standard.object(forKey: "refreshOnLaunch") as? Bool ?? false
     @Published var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
 
@@ -28,9 +38,11 @@ final class AppSession: ObservableObject {
 
     init() {
         let hasSession = UserDefaults.standard.bool(forKey: "hasSavedSession")
+        loadPlaylistCache()
         if hasSession, let u = KeychainStore.read("username"), let p = KeychainStore.read("password") {
             username = u
             password = p
+            baseURL = UserDefaults.standard.string(forKey: "baseURL") ?? ""
             isAuthenticated = true
             Task { await restoreSession() }
         }
@@ -41,12 +53,13 @@ final class AppSession: ObservableObject {
             let config = try await APIClient.shared.fetchConfig()
             guard config.enabled else { throw APIError.disabled(config.message) }
             baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            UserDefaults.standard.set(baseURL, forKey: "baseURL")
             let login = try await APIClient.shared.login(baseURL: baseURL, username: username, password: password)
             guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else {
                 throw APIError.invalidCredentials
             }
             userInfo = login.userInfo
-            if refreshOnLaunch { await reloadPlaylist() }
+            if refreshOnLaunch || (allLive.isEmpty && allMovies.isEmpty && allSeries.isEmpty) { await reloadPlaylist() }
         } catch {
             isAuthenticated = false
             errorMessage = error.localizedDescription
@@ -67,6 +80,7 @@ final class AppSession: ObservableObject {
             let login = try await APIClient.shared.login(baseURL: config.dns, username: username, password: password)
             guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else { throw APIError.invalidCredentials }
             baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            UserDefaults.standard.set(baseURL, forKey: "baseURL")
             userInfo = login.userInfo
             KeychainStore.save(username, for: "username")
             KeychainStore.save(password, for: "password")
@@ -96,6 +110,7 @@ final class AppSession: ObservableObject {
 
         if loadedSections > 0 {
             lastRefresh = Date()
+            savePlaylistCache()
             errorMessage = nil
         } else {
             errorMessage = "Playlist non caricata. Tocca Aggiorna playlist e riprova."
@@ -111,9 +126,33 @@ final class AppSession: ObservableObject {
         allLive = []; allMovies = []; allSeries = []
         baseURL = ""
         UserDefaults.standard.set(false, forKey: "hasSavedSession")
+        UserDefaults.standard.removeObject(forKey: "baseURL")
+        try? FileManager.default.removeItem(at: cacheURL)
         KeychainStore.delete("username")
         KeychainStore.delete("password")
         username = ""; password = ""
+    }
+
+    private var cacheURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("atlantix-playlist-cache.json")
+    }
+
+    private func savePlaylistCache() {
+        let cache = PlaylistCache(liveCategories: liveCategories, movieCategories: movieCategories, seriesCategories: seriesCategories, allLive: allLive, allMovies: allMovies, allSeries: allSeries, lastRefresh: lastRefresh)
+        if let data = try? JSONEncoder().encode(cache) { try? data.write(to: cacheURL, options: .atomic) }
+    }
+
+    private func loadPlaylistCache() {
+        guard let data = try? Data(contentsOf: cacheURL), let cache = try? JSONDecoder().decode(PlaylistCache.self, from: data) else { return }
+        liveCategories = cache.liveCategories
+        movieCategories = cache.movieCategories
+        seriesCategories = cache.seriesCategories
+        allLive = cache.allLive
+        allMovies = cache.allMovies
+        allSeries = cache.allSeries
+        lastRefresh = cache.lastRefresh
     }
 
     func setAppearance(_ value: String) { appearance = value; UserDefaults.standard.set(value, forKey: "appearance") }
