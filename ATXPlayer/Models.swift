@@ -3,24 +3,24 @@ import Foundation
 private extension KeyedDecodingContainer {
     func flexibleString(forKey key: Key) -> String? {
         if let value = try? decodeIfPresent(String.self, forKey: key) { return value }
-        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value.map(String.init) }
-        if let value = try? decodeIfPresent(Double.self, forKey: key) { return value.map { String($0) } }
-        if let value = try? decodeIfPresent(Bool.self, forKey: key) { return value.map(String.init) }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return String(value) }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) { return String(value) }
+        if let value = try? decodeIfPresent(Bool.self, forKey: key) { return String(value) }
         return nil
     }
 
     func flexibleInt(forKey key: Key) -> Int? {
         if let value = try? decodeIfPresent(Int.self, forKey: key) { return value }
-        if let value = try? decodeIfPresent(String.self, forKey: key) { return value.flatMap(Int.init) }
-        if let value = try? decodeIfPresent(Double.self, forKey: key) { return value.map(Int.init) }
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return Int(value) }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) { return Int(value) }
         return nil
     }
 
     func flexibleDouble(forKey key: Key) -> Double? {
         if let value = try? decodeIfPresent(Double.self, forKey: key) { return value }
-        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value.map(Double.init) }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return Double(value) }
         if let value = try? decodeIfPresent(String.self, forKey: key) {
-            return value.flatMap { Double($0.replacingOccurrences(of: ",", with: ".")) }
+            return Double(value.replacingOccurrences(of: ",", with: "."))
         }
         return nil
     }
