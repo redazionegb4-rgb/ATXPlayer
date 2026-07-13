@@ -18,6 +18,7 @@ final class AppSession: ObservableObject {
     @Published var isRefreshing = false
     @Published var errorMessage: String?
     @Published var baseURL = ""
+    @Published var accessCode = ""
     @Published var username = ""
     @Published var password = ""
     @Published var userInfo: UserInfo?
@@ -39,9 +40,8 @@ final class AppSession: ObservableObject {
     init() {
         let hasSession = UserDefaults.standard.bool(forKey: "hasSavedSession")
         loadPlaylistCache()
-        if hasSession, let u = KeychainStore.read("username"), let p = KeychainStore.read("password") {
-            username = u
-            password = p
+        if hasSession, let code = KeychainStore.read("accessCode") {
+            accessCode = code
             baseURL = UserDefaults.standard.string(forKey: "baseURL") ?? ""
             isAuthenticated = true
             Task { await restoreSession() }
@@ -50,6 +50,12 @@ final class AppSession: ObservableObject {
 
     private func restoreSession() async {
         do {
+            let activation = try await APIClient.shared.activate(code: accessCode)
+            guard let activatedUsername = activation.username, let activatedPassword = activation.password else {
+                throw APIError.activation("Codice non valido.")
+            }
+            username = activatedUsername
+            password = activatedPassword
             let config = try await APIClient.shared.fetchConfig()
             guard config.enabled else { throw APIError.disabled(config.message) }
             baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -68,13 +74,21 @@ final class AppSession: ObservableObject {
     }
 
     func signIn() async {
-        guard !username.trimmingCharacters(in: .whitespaces).isEmpty, !password.isEmpty else {
-            errorMessage = "Inserisci username e password."
+        let code = accessCode.filter(\.isNumber)
+        guard code.count == 6 else {
+            errorMessage = "Inserisci il codice di accesso di 6 cifre."
             return
         }
+        accessCode = code
         isLoading = true
         errorMessage = nil
         do {
+            let activation = try await APIClient.shared.activate(code: code)
+            guard let activatedUsername = activation.username, let activatedPassword = activation.password else {
+                throw APIError.activation("Codice non valido.")
+            }
+            username = activatedUsername
+            password = activatedPassword
             let config = try await APIClient.shared.fetchConfig()
             guard config.enabled else { throw APIError.disabled(config.message) }
             let login = try await APIClient.shared.login(baseURL: config.dns, username: username, password: password)
@@ -82,13 +96,12 @@ final class AppSession: ObservableObject {
             baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             UserDefaults.standard.set(baseURL, forKey: "baseURL")
             userInfo = login.userInfo
-            KeychainStore.save(username, for: "username")
-            KeychainStore.save(password, for: "password")
+            KeychainStore.save(code, for: "accessCode")
             UserDefaults.standard.set(true, forKey: "hasSavedSession")
             UserDefaults.standard.set(true, forKey: "autoLogin")
             autoLogin = true
             isAuthenticated = true
-            await reloadPlaylist()
+            if allLive.isEmpty && allMovies.isEmpty && allSeries.isEmpty { await reloadPlaylist() }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -128,9 +141,10 @@ final class AppSession: ObservableObject {
         UserDefaults.standard.set(false, forKey: "hasSavedSession")
         UserDefaults.standard.removeObject(forKey: "baseURL")
         try? FileManager.default.removeItem(at: cacheURL)
+        KeychainStore.delete("accessCode")
         KeychainStore.delete("username")
         KeychainStore.delete("password")
-        username = ""; password = ""
+        accessCode = ""; username = ""; password = ""
     }
 
     private var cacheURL: URL {

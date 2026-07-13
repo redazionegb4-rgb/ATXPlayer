@@ -26,9 +26,7 @@ struct BrandMark: View {
 
 struct LoginView: View {
     @EnvironmentObject var session: AppSession
-    @FocusState private var focused: Field?
-    @State private var showPassword = false
-    enum Field { case username, password }
+    @FocusState private var codeFocused: Bool
 
     var body: some View {
         ZStack {
@@ -39,49 +37,50 @@ struct LoginView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    Spacer(minLength: 72)
+                    Spacer(minLength: 76)
                     BrandMark(size: 92)
                     Text("ATLANTIX")
                         .font(.system(size: 34, weight: .black, design: .rounded))
                         .tracking(3)
                         .foregroundStyle(LinearGradient(colors: [.cyan, .white, .purple], startPoint: .leading, endPoint: .trailing))
                         .padding(.top, 22)
-                    Text("Il tuo mondo. Tutto in streaming.")
+                    Text("Inserisci il codice fornito dal tuo rivenditore")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.white.opacity(0.65))
-                        .padding(.top, 7)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                        .padding(.top, 8)
 
-                    VStack(spacing: 16) {
-                        fieldContainer(icon: "person.fill") {
-                            TextField("Username", text: $session.username)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .focused($focused, equals: .username)
-                        }
-                        fieldContainer(icon: "lock.fill") {
-                            Group {
-                                if showPassword {
-                                    TextField("Password", text: $session.password)
-                                } else {
-                                    SecureField("Password", text: $session.password)
+                    VStack(spacing: 18) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "number.square.fill")
+                                .foregroundStyle(.white.opacity(0.55))
+                            TextField("000000", text: $session.accessCode)
+                                .keyboardType(.numberPad)
+                                .textContentType(.oneTimeCode)
+                                .multilineTextAlignment(.center)
+                                .font(.system(size: 26, weight: .bold, design: .monospaced))
+                                .tracking(8)
+                                .foregroundStyle(.white)
+                                .focused($codeFocused)
+                                .onChange(of: session.accessCode) { value in
+                                    let cleaned = String(value.filter(\.isNumber).prefix(6))
+                                    if cleaned != value { session.accessCode = cleaned }
                                 }
-                            }
-                            .textInputAutocapitalization(.never)
-                            .focused($focused, equals: .password)
-                            Button { showPassword.toggle() } label: {
-                                Image(systemName: showPassword ? "eye.slash.fill" : "eye.fill")
-                                    .foregroundStyle(.white.opacity(0.5))
-                            }
                         }
+                        .padding(18)
+                        .background(.black.opacity(0.24))
+                        .overlay(RoundedRectangle(cornerRadius: 17).stroke(.white.opacity(0.11)))
+                        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
 
                         Button {
-                            focused = nil
+                            codeFocused = false
                             Task { await session.signIn() }
                         } label: {
                             HStack(spacing: 11) {
                                 if session.isLoading { ProgressView().tint(.white) }
                                 else { Image(systemName: "play.fill") }
-                                Text(session.isLoading ? "Connessione in corso…" : "ENTRA")
+                                Text(session.isLoading ? "Verifica in corso…" : "ENTRA")
                             }
                             .font(.headline.weight(.bold))
                             .tracking(1)
@@ -92,7 +91,7 @@ struct LoginView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                             .shadow(color: .purple.opacity(0.38), radius: 20, y: 9)
                         }
-                        .disabled(session.isLoading)
+                        .disabled(session.isLoading || session.accessCode.count != 6)
                     }
                     .padding(22)
                     .background(.white.opacity(0.055))
@@ -118,17 +117,6 @@ struct LoginView: View {
                 }
             }
         }
-    }
-
-    private func fieldContainer<Content: View>(icon: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 13) {
-            Image(systemName: icon).foregroundStyle(.white.opacity(0.55)).frame(width: 22)
-            content()
-        }
-        .foregroundStyle(.white)
-        .padding(17)
-        .background(.black.opacity(0.24))
-        .overlay(RoundedRectangle(cornerRadius: 17).stroke(.white.opacity(0.11)))
-        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .onAppear { codeFocused = session.accessCode.isEmpty }
     }
 }

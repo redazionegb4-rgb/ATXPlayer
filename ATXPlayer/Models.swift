@@ -32,6 +32,15 @@ struct RemoteConfig: Codable {
     let message: String
 }
 
+
+struct ActivationResponse: Codable {
+    let success: Bool
+    let username: String?
+    let password: String?
+    let info: String?
+    let message: String?
+}
+
 struct LoginResponse: Codable {
     let userInfo: UserInfo?
     let serverInfo: ServerInfo?
