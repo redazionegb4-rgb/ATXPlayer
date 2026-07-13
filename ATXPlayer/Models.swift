@@ -247,7 +247,9 @@ struct EPGListing: Codable, Identifiable {
         if let data = Data(base64Encoded: padded, options: [.ignoreUnknownCharacters]),
            let decoded = String(data: data, encoding: .utf8),
            !decoded.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           decoded.unicodeScalars.allSatisfy({ !$0.properties.isControl || $0 == "\n" || $0 == "\t" }) {
+           decoded.unicodeScalars.allSatisfy({ scalar in
+               !CharacterSet.controlCharacters.contains(scalar) || scalar.value == 10 || scalar.value == 9
+           }) {
             return decoded.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return raw
