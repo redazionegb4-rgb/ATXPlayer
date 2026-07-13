@@ -60,9 +60,14 @@ final class AppSession: ObservableObject {
             guard config.enabled else { throw APIError.disabled(config.message) }
             baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             UserDefaults.standard.set(baseURL, forKey: "baseURL")
-            let login = try await APIClient.shared.login(baseURL: baseURL, username: username, password: password)
+            let login: LoginResponse
+            do {
+                login = try await APIClient.shared.login(baseURL: baseURL, username: username, password: password)
+            } catch {
+                throw APIError.activation("Playlist non valida.")
+            }
             guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else {
-                throw APIError.invalidCredentials
+                throw APIError.activation("Playlist non valida.")
             }
             userInfo = login.userInfo
             if refreshOnLaunch || (allLive.isEmpty && allMovies.isEmpty && allSeries.isEmpty) { await reloadPlaylist() }
@@ -91,8 +96,17 @@ final class AppSession: ObservableObject {
             password = activatedPassword
             let config = try await APIClient.shared.fetchConfig()
             guard config.enabled else { throw APIError.disabled(config.message) }
-            let login = try await APIClient.shared.login(baseURL: config.dns, username: username, password: password)
-            guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else { throw APIError.invalidCredentials }
+            let login: LoginResponse
+            do {
+                login = try await APIClient.shared.login(baseURL: config.dns, username: username, password: password)
+            } catch {
+                // Il codice esiste nel pannello, ma le credenziali associate non
+                // producono una playlist valida/raggiungibile dal dispositivo.
+                throw APIError.activation("Playlist non valida.")
+            }
+            guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else {
+                throw APIError.activation("Playlist non valida.")
+            }
             baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             UserDefaults.standard.set(baseURL, forKey: "baseURL")
             userInfo = login.userInfo
