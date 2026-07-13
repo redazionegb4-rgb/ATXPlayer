@@ -50,31 +50,65 @@ final class AppSession: ObservableObject {
             userInfo = login.userInfo
             KeychainStore.save(username, for: "username")
             KeychainStore.save(password, for: "password")
-            try await reloadPlaylist()
+            // L'accesso dipende soltanto dalla risposta di autenticazione.
+            // Il catalogo viene caricato dopo: un singolo endpoint non compatibile
+            // non deve impedire all'utente di entrare nell'app.
             isAuthenticated = true
+            await reloadPlaylist()
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
     }
 
-    func reloadPlaylist() async throws {
+    func reloadPlaylist() async {
+        guard !baseURL.isEmpty else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        async let a = APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .live)
-        async let b = APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .movies)
-        async let c = APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .series)
-        async let d = APIClient.shared.liveStreams(baseURL: baseURL, username: username, password: password)
-        async let e = APIClient.shared.vodStreams(baseURL: baseURL, username: username, password: password)
-        async let f = APIClient.shared.series(baseURL: baseURL, username: username, password: password)
-        (liveCategories, movieCategories, seriesCategories, allLive, allMovies, allSeries) = try await (a, b, c, d, e, f)
-        lastRefresh = Date()
+
+        var loadedSections = 0
+
+        do {
+            liveCategories = try await APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .live)
+            loadedSections += 1
+        } catch { }
+
+        do {
+            movieCategories = try await APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .movies)
+            loadedSections += 1
+        } catch { }
+
+        do {
+            seriesCategories = try await APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .series)
+            loadedSections += 1
+        } catch { }
+
+        do {
+            allLive = try await APIClient.shared.liveStreams(baseURL: baseURL, username: username, password: password)
+            loadedSections += 1
+        } catch { }
+
+        do {
+            allMovies = try await APIClient.shared.vodStreams(baseURL: baseURL, username: username, password: password)
+            loadedSections += 1
+        } catch { }
+
+        do {
+            allSeries = try await APIClient.shared.series(baseURL: baseURL, username: username, password: password)
+            loadedSections += 1
+        } catch { }
+
+        if loadedSections > 0 {
+            lastRefresh = Date()
+            errorMessage = nil
+        } else {
+            errorMessage = "Accesso riuscito, ma la playlist non è stata caricata. Tocca Aggiorna playlist."
+        }
     }
 
     func refreshSafely() async {
         errorMessage = nil
-        do { try await reloadPlaylist() }
-        catch { errorMessage = error.localizedDescription }
+        await reloadPlaylist()
     }
 
     func signOut() {
