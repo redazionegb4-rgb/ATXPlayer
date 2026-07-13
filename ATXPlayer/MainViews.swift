@@ -1253,11 +1253,9 @@ struct PlayerScreen: View {
     @State private var currentQueueIndex: Int
     @State private var displayedTitle: String
     @State private var currentDescriptor: PlaybackDescriptor?
-    @State private var showNextEpisodeOverlay = false
+    @State private var showNextEpisodeCountdown = false
     @State private var nextEpisodeCountdown = 3
     @State private var autoAdvanceCancelled = false
-    @State private var isAdvancingEpisode = false
-    @State private var lastProgressSave: Double = 0
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -1288,21 +1286,20 @@ struct PlayerScreen: View {
                 ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary)
             }
 
-            if showNextEpisodeOverlay, let next = nextQueueItem {
+            if showNextEpisodeCountdown, let next = nextQueueItem {
                 VStack {
                     Spacer()
                     HStack {
                         Spacer()
                         nextEpisodeOverlay(next)
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 74)
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 92)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
-                .zIndex(10)
+                .animation(.easeInOut(duration: 0.25), value: showNextEpisodeCountdown)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: showNextEpisodeOverlay)
         .navigationTitle(displayedTitle)
         .navigationBarTitleDisplayMode(.inline)
         .alert("Riprendere la visione?", isPresented: $showResumePrompt) {
@@ -1322,83 +1319,50 @@ struct PlayerScreen: View {
     }
 
     private var nextQueueItem: PlaybackQueueItem? {
-        let nextIndex = currentQueueIndex + 1
-        guard !episodeQueue.isEmpty, episodeQueue.indices.contains(nextIndex) else { return nil }
-        return episodeQueue[nextIndex]
+        let index = currentQueueIndex + 1
+        guard episodeQueue.indices.contains(index) else { return nil }
+        return episodeQueue[index]
     }
 
     @ViewBuilder
     private func nextEpisodeOverlay(_ next: PlaybackQueueItem) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "forward.end.fill")
-                    .font(.title3.bold())
-                    .foregroundStyle(.cyan)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Prossimo episodio")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(next.title)
-                        .font(.headline.bold())
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 10)
-
-                Text("\(nextEpisodeCountdown)")
-                    .font(.system(size: 34, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: 48, height: 48)
-                    .background(brandGradient)
-                    .clipShape(Circle())
-            }
-
-            Text("Riproduzione automatica tra \(nextEpisodeCountdown)…")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.9))
-
+        VStack(alignment: .leading, spacing: 10) {
+            Text("PROSSIMO EPISODIO")
+                .font(.caption.bold())
+                .foregroundStyle(.cyan)
+            Text(next.title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+            Text("Riproduzione tra \(nextEpisodeCountdown)")
+                .font(.title2.bold())
+                .foregroundStyle(.white)
             ProgressView(value: Double(3 - nextEpisodeCountdown), total: 3)
-                .tint(.cyan)
-
+                .tint(.purple)
             HStack(spacing: 10) {
-                Button {
-                    playNextEpisodeIfAvailable()
-                } label: {
+                Button { playNextEpisodeIfAvailable() } label: {
                     Label("Riproduci ora", systemImage: "play.fill")
                         .font(.subheadline.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .background(brandGradient)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.purple, in: Capsule())
                 }
-
-                Button {
+                Button("Annulla") {
                     autoAdvanceCancelled = true
-                    showNextEpisodeOverlay = false
-                } label: {
-                    Text("Annulla")
-                        .font(.subheadline.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .background(Color.white.opacity(0.12))
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    showNextEpisodeCountdown = false
                 }
+                .font(.subheadline.bold())
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.13), in: Capsule())
             }
+            .foregroundStyle(.white)
         }
-        .padding(16)
-        .frame(maxWidth: 390)
-        .background(.ultraThinMaterial)
-        .background(Color.black.opacity(0.58))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(brandGradient, lineWidth: 1.4)
-        }
-        .shadow(color: .black.opacity(0.45), radius: 24, y: 10)
+        .padding(18)
+        .frame(maxWidth: 350, alignment: .leading)
+        .background(.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.purple.opacity(0.8), lineWidth: 1))
+        .shadow(color: .black.opacity(0.5), radius: 18)
     }
 
     private func configurePlayer() {
@@ -1445,62 +1409,39 @@ struct PlayerScreen: View {
     private func installObservers(on player: AVPlayer, item: AVPlayerItem) {
         removeObservers(from: player)
         guard !isLive, let currentDescriptor else { return }
-        lastProgressSave = 0
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { time in
-            let position = time.seconds
             let duration = item.duration.seconds
+            session.recordProgress(for: currentDescriptor, position: time.seconds, duration: duration)
 
-            if position.isFinite, position - lastProgressSave >= 5 {
-                lastProgressSave = position
-                session.recordProgress(for: currentDescriptor, position: position, duration: duration)
+            guard nextQueueItem != nil, duration.isFinite, duration > 0, !autoAdvanceCancelled else { return }
+            let remaining = duration - time.seconds
+            if remaining <= 3.2, remaining > 0 {
+                let value = max(1, min(3, Int(ceil(remaining))))
+                nextEpisodeCountdown = value
+                showNextEpisodeCountdown = true
+            } else if remaining > 3.2 {
+                showNextEpisodeCountdown = false
+                nextEpisodeCountdown = 3
             }
-
-            updateNextEpisodeCountdown(position: position, duration: duration)
         }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { _ in
             session.removeProgress(for: currentDescriptor)
-            showNextEpisodeOverlay = false
             if !autoAdvanceCancelled {
                 playNextEpisodeIfAvailable()
+            } else {
+                showNextEpisodeCountdown = false
             }
-        }
-    }
-
-    private func updateNextEpisodeCountdown(position: Double, duration: Double) {
-        guard nextQueueItem != nil, !autoAdvanceCancelled, !isAdvancingEpisode, duration.isFinite, duration > 0, position.isFinite else {
-            if nextQueueItem == nil { showNextEpisodeOverlay = false }
-            return
-        }
-
-        let remaining = duration - position
-        if remaining <= 3.25, remaining > 0.05 {
-            let value = max(1, min(3, Int(ceil(remaining))))
-            if nextEpisodeCountdown != value { nextEpisodeCountdown = value }
-            if !showNextEpisodeOverlay { showNextEpisodeOverlay = true }
-        } else if remaining > 4.5, showNextEpisodeOverlay {
-            showNextEpisodeOverlay = false
-            nextEpisodeCountdown = 3
-        }
-
-        if remaining <= 0.12, showNextEpisodeOverlay {
-            playNextEpisodeIfAvailable()
         }
     }
 
     private func playNextEpisodeIfAvailable() {
-        guard !isAdvancingEpisode else { return }
         let nextIndex = currentQueueIndex + 1
-        guard !episodeQueue.isEmpty, episodeQueue.indices.contains(nextIndex), let nextURL = episodeQueue[nextIndex].url, let player else {
-            showNextEpisodeOverlay = false
-            return
-        }
-
-        isAdvancingEpisode = true
-        showNextEpisodeOverlay = false
-        autoAdvanceCancelled = false
-        nextEpisodeCountdown = 3
+        guard !episodeQueue.isEmpty, episodeQueue.indices.contains(nextIndex), let nextURL = episodeQueue[nextIndex].url, let player else { return }
 
         removeObservers(from: player)
+        showNextEpisodeCountdown = false
+        nextEpisodeCountdown = 3
+        autoAdvanceCancelled = false
         currentQueueIndex = nextIndex
         let next = episodeQueue[nextIndex]
         displayedTitle = next.title
@@ -1512,10 +1453,6 @@ struct PlayerScreen: View {
         installObservers(on: player, item: nextItem)
         player.play()
         validate(item: nextItem, player: player)
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            isAdvancingEpisode = false
-        }
     }
 
     private func removeObservers(from player: AVPlayer?) {
