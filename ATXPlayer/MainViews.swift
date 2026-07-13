@@ -875,7 +875,7 @@ struct SeriesDetailView: View {
                                         fileExtension: queuedEpisode.containerExtension
                                     )
                                     return PlaybackQueueItem(
-                                        id: queuedEpisode.id,
+                                        id: String(queuedEpisode.id),
                                         title: queuedEpisode.title,
                                         url: session.streamURL(type: .series, id: queuedEpisode.id, ext: queuedEpisode.containerExtension),
                                         descriptor: queuedDescriptor
