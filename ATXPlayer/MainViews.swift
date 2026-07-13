@@ -553,13 +553,164 @@ struct LiveDetailView: View {
     @EnvironmentObject var session: AppSession
     let item: LiveStream
     @State private var epg: [EPGListing] = []
-    var body: some View {
-        MediaDetailLayout(title: item.name, imageURL: item.streamIcon, plot: epg.first?.description, metadata: ["Canale in diretta", epg.first?.title].compactMap { $0 }) {
-            NavigationLink { PlayerScreen(title: item.name, url: directURL, isLive: true) } label: { playButton("Guarda in diretta") }
-        }
-        .task { epg = (try? await APIClient.shared.shortEPG(baseURL: session.baseURL, username: session.username, password: session.password, streamID: item.streamID)) ?? [] }
+    @State private var loadingEPG = true
+    @State private var epgError: String?
+
+    private var currentProgram: EPGListing? {
+        let now = Date().timeIntervalSince1970
+        return epg.first { listing in
+            guard let start = listing.startTimestamp.flatMap(TimeInterval.init),
+                  let stop = listing.stopTimestamp.flatMap(TimeInterval.init) else { return false }
+            return start <= now && now < stop
+        } ?? epg.first
     }
-    private var directURL: URL? { if let source = item.directSource, !source.isEmpty { return URL(string: source) }; return session.streamURL(type: .live, id: item.streamID) }
+
+    var body: some View {
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
+                    liveHero
+                    NavigationLink {
+                        PlayerScreen(title: item.name, url: directURL, isLive: true)
+                    } label: {
+                        playButton("Guarda in diretta")
+                    }
+
+                    Text("Guida TV").font(.title2.bold()).foregroundStyle(.primary)
+                    epgSection
+                }
+                .padding(18)
+                .padding(.bottom, 110)
+            }
+        }
+        .navigationTitle(item.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await loadEPG() }
+    }
+
+    private var liveHero: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFit().padding(22)
+                } else {
+                    ZStack { brandGradient; Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 54)).foregroundStyle(.white) }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 220)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+
+            Text(item.name).font(.title.bold()).foregroundStyle(.primary)
+            if let program = currentProgram {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("IN ONDA", systemImage: "livephoto").font(.caption.bold()).foregroundStyle(.purple)
+                    Text(program.title ?? "Programma in corso").font(.title3.bold()).foregroundStyle(.primary)
+                    Text(timeRange(program)).font(.subheadline).foregroundStyle(.secondary)
+                    if let description = program.description, !description.isEmpty {
+                        Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(4)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var epgSection: some View {
+        if loadingEPG {
+            HStack { Spacer(); ProgressView("Caricamento programmazione…"); Spacer() }.padding(.vertical, 28)
+        } else if let epgError {
+            EmptyStateView(title: "EPG non disponibile", icon: "calendar.badge.exclamationmark", message: epgError)
+        } else if epg.isEmpty {
+            EmptyStateView(title: "Nessuna programmazione", icon: "calendar", message: "Il server non ha fornito la guida TV per questo canale.")
+        } else {
+            LazyVStack(spacing: 12) {
+                ForEach(epg, id: \.listID) { program in
+                    EPGProgramRow(program: program, isCurrent: program.listID == currentProgram?.listID)
+                }
+            }
+        }
+    }
+
+    private func loadEPG() async {
+        loadingEPG = true
+        epgError = nil
+        do {
+            epg = try await APIClient.shared.shortEPG(
+                baseURL: session.baseURL,
+                username: session.username,
+                password: session.password,
+                streamID: item.streamID,
+                limit: 12
+            )
+        } catch {
+            epgError = error.localizedDescription
+        }
+        loadingEPG = false
+    }
+
+    private func timeRange(_ program: EPGListing) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        if let start = program.startTimestamp.flatMap(TimeInterval.init),
+           let stop = program.stopTimestamp.flatMap(TimeInterval.init) {
+            return "\(formatter.string(from: Date(timeIntervalSince1970: start))) – \(formatter.string(from: Date(timeIntervalSince1970: stop)))"
+        }
+        return [program.start, program.end].compactMap { $0 }.joined(separator: " – ")
+    }
+
+    private var directURL: URL? {
+        if let source = item.directSource, !source.isEmpty { return URL(string: source) }
+        return session.streamURL(type: .live, id: item.streamID)
+    }
+}
+
+struct EPGProgramRow: View {
+    let program: EPGListing
+    let isCurrent: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(spacing: 3) {
+                Text(startTime).font(.headline.monospacedDigit()).foregroundStyle(isCurrent ? .purple : .primary)
+                Text(endTime).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            .frame(width: 54, alignment: .leading)
+
+            RoundedRectangle(cornerRadius: 2)
+                .fill(isCurrent ? Color.purple : Color.secondary.opacity(0.25))
+                .frame(width: 4)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text(program.title ?? "Programma").font(.headline).foregroundStyle(.primary).lineLimit(2)
+                    Spacer()
+                    if isCurrent { Text("ORA").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 4).background(Color.purple).clipShape(Capsule()) }
+                }
+                if let description = program.description, !description.isEmpty {
+                    Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
+                }
+            }
+        }
+        .padding(14)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(isCurrent ? Color.purple.opacity(0.45) : Color.primary.opacity(0.05)))
+    }
+
+    private var startTime: String { format(program.startTimestamp, fallback: program.start) }
+    private var endTime: String { format(program.stopTimestamp, fallback: program.end) }
+
+    private func format(_ timestamp: String?, fallback: String?) -> String {
+        if let timestamp, let seconds = TimeInterval(timestamp) {
+            let formatter = DateFormatter(); formatter.dateFormat = "HH:mm"
+            return formatter.string(from: Date(timeIntervalSince1970: seconds))
+        }
+        guard let fallback else { return "--:--" }
+        if fallback.count >= 16 { return String(fallback.dropFirst(11).prefix(5)) }
+        return fallback
+    }
 }
 
 struct SeriesDetailView: View {

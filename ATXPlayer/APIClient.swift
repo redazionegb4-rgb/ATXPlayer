@@ -33,8 +33,15 @@ actor APIClient {
         try await request(baseURL: baseURL, username: username, password: password, action: "get_series", categoryID: categoryID)
     }
 
-    func shortEPG(baseURL: String, username: String, password: String, streamID: Int) async throws -> [EPGListing] {
-        let response: ShortEPGResponse = try await request(baseURL: baseURL, username: username, password: password, action: "get_short_epg", streamID: streamID)
+    func shortEPG(baseURL: String, username: String, password: String, streamID: Int, limit: Int = 12) async throws -> [EPGListing] {
+        let response: ShortEPGResponse = try await request(
+            baseURL: baseURL,
+            username: username,
+            password: password,
+            action: "get_short_epg",
+            streamID: streamID,
+            limit: limit
+        )
         return response.epgListings ?? []
     }
 
@@ -46,7 +53,7 @@ actor APIClient {
         try await request(baseURL: baseURL, username: username, password: password, action: "get_vod_info", vodID: vodID)
     }
 
-    private func request<T: Decodable>(baseURL: String, username: String, password: String, action: String?, categoryID: String? = nil, streamID: Int? = nil, seriesID: Int? = nil, vodID: Int? = nil) async throws -> T {
+    private func request<T: Decodable>(baseURL: String, username: String, password: String, action: String?, categoryID: String? = nil, streamID: Int? = nil, seriesID: Int? = nil, vodID: Int? = nil, limit: Int? = nil) async throws -> T {
         guard var components = URLComponents(string: baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/player_api.php") else { throw APIError.invalidURL }
         var query = [URLQueryItem(name: "username", value: username), URLQueryItem(name: "password", value: password)]
         if let action { query.append(URLQueryItem(name: "action", value: action)) }
@@ -54,6 +61,7 @@ actor APIClient {
         if let streamID { query.append(URLQueryItem(name: "stream_id", value: String(streamID))) }
         if let seriesID { query.append(URLQueryItem(name: "series_id", value: String(seriesID))) }
         if let vodID { query.append(URLQueryItem(name: "vod_id", value: String(vodID))) }
+        if let limit { query.append(URLQueryItem(name: "limit", value: String(limit))) }
         components.queryItems = query
         guard let url = components.url else { throw APIError.invalidURL }
         var request = URLRequest(url: url)

@@ -210,9 +210,48 @@ struct VODMovieData: Decodable {
 }
 
 struct EPGListing: Codable, Identifiable {
-    let id: String?, epgID: String?, title: String?, lang: String?, start: String?, end: String?, description: String?, startTimestamp: String?, stopTimestamp: String?
-    var listID: String { id ?? UUID().uuidString }
-    enum CodingKeys: String, CodingKey { case id, title, lang, start, end, description; case epgID = "epg_id", startTimestamp = "start_timestamp", stopTimestamp = "stop_timestamp" }
+    let id: String?
+    let epgID: String?
+    let title: String?
+    let lang: String?
+    let start: String?
+    let end: String?
+    let description: String?
+    let startTimestamp: String?
+    let stopTimestamp: String?
+
+    var listID: String { id ?? "\(epgID ?? "epg")-\(startTimestamp ?? start ?? UUID().uuidString)" }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, lang, start, end, description
+        case epgID = "epg_id", startTimestamp = "start_timestamp", stopTimestamp = "stop_timestamp"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.flexibleString(forKey: .id)
+        epgID = c.flexibleString(forKey: .epgID)
+        title = Self.decodeEPGText(c.flexibleString(forKey: .title))
+        lang = c.flexibleString(forKey: .lang)
+        start = c.flexibleString(forKey: .start)
+        end = c.flexibleString(forKey: .end)
+        description = Self.decodeEPGText(c.flexibleString(forKey: .description))
+        startTimestamp = c.flexibleString(forKey: .startTimestamp)
+        stopTimestamp = c.flexibleString(forKey: .stopTimestamp)
+    }
+
+    private static func decodeEPGText(_ value: String?) -> String? {
+        guard let raw = value?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        // I pannelli Xtream/NXT spesso restituiscono titolo e descrizione EPG in Base64.
+        let padded = raw.padding(toLength: ((raw.count + 3) / 4) * 4, withPad: "=", startingAt: 0)
+        if let data = Data(base64Encoded: padded, options: [.ignoreUnknownCharacters]),
+           let decoded = String(data: data, encoding: .utf8),
+           !decoded.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           decoded.unicodeScalars.allSatisfy({ !$0.properties.isControl || $0 == "\n" || $0 == "\t" }) {
+            return decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return raw
+    }
 }
 
 struct ShortEPGResponse: Codable {
