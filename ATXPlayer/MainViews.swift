@@ -917,7 +917,12 @@ struct SettingsView: View {
             Section { Button("Esci dall'account", role: .destructive) { showLogout = true } }
         }
         .navigationTitle("Impostazioni")
-        .confirmationDialog("Vuoi uscire dall'account?", isPresented: $showLogout) { Button("Esci", role: .destructive) { session.signOut() }; Button("Annulla", role: .cancel) {} }
+        .alert("Vuoi uscire dall'account?", isPresented: $showLogout) {
+            Button("Annulla", role: .cancel) { }
+            Button("Esci", role: .destructive) { session.signOut() }
+        } message: {
+            Text("Dovrai inserire nuovamente il codice di accesso per entrare.")
+        }
     }
     private var expiry: String { guard let timestamp = session.userInfo?.expDate, let seconds = TimeInterval(timestamp) else { return "—" }; return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted) }
 }

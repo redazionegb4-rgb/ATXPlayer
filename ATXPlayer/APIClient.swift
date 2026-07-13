@@ -25,10 +25,13 @@ actor APIClient {
         guard let http = response as? HTTPURLResponse else { throw APIError.serverUnavailable }
         let decoded = try? JSONDecoder().decode(ActivationResponse.self, from: data)
         guard 200..<300 ~= http.statusCode else {
-            throw APIError.activation(decoded?.message ?? "Codice non valido.")
+            if (400..<500).contains(http.statusCode) {
+                throw APIError.activation("Playlist non valida.")
+            }
+            throw APIError.serverUnavailable
         }
         guard let decoded, decoded.success, decoded.username != nil, decoded.password != nil else {
-            throw APIError.activation(decoded?.message ?? "Risposta di attivazione non valida.")
+            throw APIError.activation("Playlist non valida.")
         }
         return decoded
     }

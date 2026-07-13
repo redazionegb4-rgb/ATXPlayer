@@ -52,7 +52,7 @@ final class AppSession: ObservableObject {
         do {
             let activation = try await APIClient.shared.activate(code: accessCode)
             guard let activatedUsername = activation.username, let activatedPassword = activation.password else {
-                throw APIError.activation("Codice non valido.")
+                throw APIError.activation("Playlist non valida.")
             }
             username = activatedUsername
             password = activatedPassword
@@ -85,7 +85,7 @@ final class AppSession: ObservableObject {
         do {
             let activation = try await APIClient.shared.activate(code: code)
             guard let activatedUsername = activation.username, let activatedPassword = activation.password else {
-                throw APIError.activation("Codice non valido.")
+                throw APIError.activation("Playlist non valida.")
             }
             username = activatedUsername
             password = activatedPassword

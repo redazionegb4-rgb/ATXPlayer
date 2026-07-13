@@ -117,6 +117,6 @@ struct LoginView: View {
                 }
             }
         }
-        .onAppear { codeFocused = session.accessCode.isEmpty }
+        .onAppear { codeFocused = false }
     }
 }
