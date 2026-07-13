@@ -856,7 +856,7 @@ struct SeriesDetailView: View {
                         }
                         .padding(.horizontal)
                         LazyVStack(spacing: 14) {
-                            ForEach(episodes) { episode in
+                            ForEach(Array(episodes.enumerated()), id: \.element.id) { index, episode in
                                 let descriptor = PlaybackDescriptor(
                                     kind: .series,
                                     streamID: episode.id,
@@ -865,12 +865,30 @@ struct SeriesDetailView: View {
                                     imageURL: episode.info?.movieImage ?? item.cover,
                                     fileExtension: episode.containerExtension
                                 )
+                                let queue = episodes.map { queuedEpisode in
+                                    let queuedDescriptor = PlaybackDescriptor(
+                                        kind: .series,
+                                        streamID: queuedEpisode.id,
+                                        title: queuedEpisode.title,
+                                        subtitle: "\(item.name) • S\(selectedSeason) E\(queuedEpisode.episodeNum)",
+                                        imageURL: queuedEpisode.info?.movieImage ?? item.cover,
+                                        fileExtension: queuedEpisode.containerExtension
+                                    )
+                                    return PlaybackQueueItem(
+                                        id: queuedEpisode.id,
+                                        title: queuedEpisode.title,
+                                        url: session.streamURL(type: .series, id: queuedEpisode.id, ext: queuedEpisode.containerExtension),
+                                        descriptor: queuedDescriptor
+                                    )
+                                }
                                 NavigationLink {
                                     PlayerScreen(
                                         title: episode.title,
                                         url: session.streamURL(type: .series, id: episode.id, ext: episode.containerExtension),
                                         isLive: false,
-                                        resume: descriptor
+                                        resume: descriptor,
+                                        episodeQueue: queue,
+                                        startIndex: index
                                     )
                                 } label: {
                                     EpisodeRow(episode: episode, fallbackImage: item.cover, progress: session.savedProgress(for: descriptor))
@@ -1209,12 +1227,21 @@ struct NativePlayerController: UIViewControllerRepresentable {
     }
 }
 
+struct PlaybackQueueItem: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let url: URL?
+    let descriptor: PlaybackDescriptor
+}
+
 struct PlayerScreen: View {
     @EnvironmentObject var session: AppSession
     let title: String
     let url: URL?
     let isLive: Bool
     var resume: PlaybackDescriptor? = nil
+    var episodeQueue: [PlaybackQueueItem] = []
+    var startIndex: Int = 0
 
     @State private var player: AVPlayer?
     @State private var failed = false
@@ -1223,6 +1250,31 @@ struct PlayerScreen: View {
     @State private var pendingResumePosition: Double = 0
     @State private var timeObserver: Any?
     @State private var endObserver: NSObjectProtocol?
+    @State private var currentQueueIndex: Int
+    @State private var displayedTitle: String
+    @State private var currentDescriptor: PlaybackDescriptor?
+    @State private var showNextEpisodeOverlay = false
+    @State private var nextEpisodeCountdown = 3
+    @State private var autoAdvanceCancelled = false
+    @State private var isAdvancingEpisode = false
+    @State private var lastProgressSave: Double = 0
+
+    init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
+        self.title = title
+        self.url = url
+        self.isLive = isLive
+        self.resume = resume
+        self.episodeQueue = episodeQueue
+        self.startIndex = startIndex
+        _currentQueueIndex = State(initialValue: startIndex)
+        _displayedTitle = State(initialValue: title)
+        _currentDescriptor = State(initialValue: resume)
+    }
+
+    private var currentURL: URL? {
+        guard !episodeQueue.isEmpty, episodeQueue.indices.contains(currentQueueIndex) else { return url }
+        return episodeQueue[currentQueueIndex].url
+    }
 
     var body: some View {
         ZStack {
@@ -1230,13 +1282,28 @@ struct PlayerScreen: View {
             if let player {
                 NativePlayerController(player: player, pictureInPictureActive: $pictureInPictureActive)
                     .ignoresSafeArea(edges: .bottom)
-            } else if failed || url == nil {
+            } else if failed || currentURL == nil {
                 EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.primary)
             } else {
                 ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary)
             }
+
+            if showNextEpisodeOverlay, let next = nextQueueItem {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        nextEpisodeOverlay(next)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 92)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .zIndex(10)
+            }
         }
-        .navigationTitle(title)
+        .animation(.easeInOut(duration: 0.25), value: showNextEpisodeOverlay)
+        .navigationTitle(displayedTitle)
         .navigationBarTitleDisplayMode(.inline)
         .alert("Riprendere la visione?", isPresented: $showResumePrompt) {
             Button("Ricomincia") {
@@ -1254,9 +1321,89 @@ struct PlayerScreen: View {
         .onDisappear { closePlayerIfNeeded() }
     }
 
+    private var nextQueueItem: PlaybackQueueItem? {
+        let nextIndex = currentQueueIndex + 1
+        guard !episodeQueue.isEmpty, episodeQueue.indices.contains(nextIndex) else { return nil }
+        return episodeQueue[nextIndex]
+    }
+
+    @ViewBuilder
+    private func nextEpisodeOverlay(_ next: PlaybackQueueItem) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "forward.end.fill")
+                    .font(.title3.bold())
+                    .foregroundStyle(.cyan)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Prossimo episodio")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(next.title)
+                        .font(.headline.bold())
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 10)
+
+                Text("\(nextEpisodeCountdown)")
+                    .font(.system(size: 34, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 48, height: 48)
+                    .background(brandGradient)
+                    .clipShape(Circle())
+            }
+
+            Text("Riproduzione automatica tra \(nextEpisodeCountdown)…")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.9))
+
+            ProgressView(value: Double(3 - nextEpisodeCountdown), total: 3)
+                .tint(.cyan)
+
+            HStack(spacing: 10) {
+                Button {
+                    playNextEpisodeIfAvailable()
+                } label: {
+                    Label("Riproduci ora", systemImage: "play.fill")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(brandGradient)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
+                Button {
+                    autoAdvanceCancelled = true
+                    showNextEpisodeOverlay = false
+                } label: {
+                    Text("Annulla")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Color.white.opacity(0.12))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: 390)
+        .background(.ultraThinMaterial)
+        .background(Color.black.opacity(0.58))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(brandGradient, lineWidth: 1.4)
+        }
+        .shadow(color: .black.opacity(0.45), radius: 24, y: 10)
+    }
+
     private func configurePlayer() {
         guard player == nil else { return }
-        guard let url else { failed = true; return }
+        guard let currentURL else { failed = true; return }
 
         do {
             let audioSession = AVAudioSession.sharedInstance()
@@ -1264,49 +1411,126 @@ struct PlayerScreen: View {
             try audioSession.setActive(true)
         } catch { }
 
-        let item = AVPlayerItem(url: url)
+        if !episodeQueue.isEmpty, episodeQueue.indices.contains(currentQueueIndex) {
+            displayedTitle = episodeQueue[currentQueueIndex].title
+            currentDescriptor = episodeQueue[currentQueueIndex].descriptor
+        }
+
+        let item = AVPlayerItem(url: currentURL)
         let newPlayer = AVPlayer(playerItem: item)
         player = newPlayer
         installObservers(on: newPlayer, item: item)
 
-        if !isLive, let resume, let saved = session.savedProgress(for: resume), saved.position >= 20 {
+        if !isLive, let currentDescriptor, let saved = session.savedProgress(for: currentDescriptor), saved.position >= 20 {
             pendingResumePosition = saved.position
             showResumePrompt = true
         } else {
             newPlayer.play()
         }
 
+        validate(item: item, player: newPlayer)
+    }
+
+    private func validate(item: AVPlayerItem, player: AVPlayer) {
         Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             if item.status == .failed {
                 failed = true
-                newPlayer.pause()
-                player = nil
+                player.pause()
+                self.player = nil
             }
         }
     }
 
     private func installObservers(on player: AVPlayer, item: AVPlayerItem) {
-        guard !isLive, let resume else { return }
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 5, preferredTimescale: 600), queue: .main) { time in
+        removeObservers(from: player)
+        guard !isLive, let currentDescriptor else { return }
+        lastProgressSave = 0
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { time in
             let position = time.seconds
             let duration = item.duration.seconds
-            session.recordProgress(for: resume, position: position, duration: duration)
+
+            if position.isFinite, position - lastProgressSave >= 5 {
+                lastProgressSave = position
+                session.recordProgress(for: currentDescriptor, position: position, duration: duration)
+            }
+
+            updateNextEpisodeCountdown(position: position, duration: duration)
         }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { _ in
-            session.removeProgress(for: resume)
+            session.removeProgress(for: currentDescriptor)
+            showNextEpisodeOverlay = false
+            if !autoAdvanceCancelled {
+                playNextEpisodeIfAvailable()
+            }
         }
     }
 
-    private func closePlayerIfNeeded() {
-        guard !pictureInPictureActive else { return }
-        if let resume, let player {
-            session.recordProgress(for: resume, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
+    private func updateNextEpisodeCountdown(position: Double, duration: Double) {
+        guard nextQueueItem != nil, !autoAdvanceCancelled, !isAdvancingEpisode, duration.isFinite, duration > 0, position.isFinite else {
+            if nextQueueItem == nil { showNextEpisodeOverlay = false }
+            return
         }
+
+        let remaining = duration - position
+        if remaining <= 3.25, remaining > 0.05 {
+            let value = max(1, min(3, Int(ceil(remaining))))
+            if nextEpisodeCountdown != value { nextEpisodeCountdown = value }
+            if !showNextEpisodeOverlay { showNextEpisodeOverlay = true }
+        } else if remaining > 4.5, showNextEpisodeOverlay {
+            showNextEpisodeOverlay = false
+            nextEpisodeCountdown = 3
+        }
+
+        if remaining <= 0.12, showNextEpisodeOverlay {
+            playNextEpisodeIfAvailable()
+        }
+    }
+
+    private func playNextEpisodeIfAvailable() {
+        guard !isAdvancingEpisode else { return }
+        let nextIndex = currentQueueIndex + 1
+        guard !episodeQueue.isEmpty, episodeQueue.indices.contains(nextIndex), let nextURL = episodeQueue[nextIndex].url, let player else {
+            showNextEpisodeOverlay = false
+            return
+        }
+
+        isAdvancingEpisode = true
+        showNextEpisodeOverlay = false
+        autoAdvanceCancelled = false
+        nextEpisodeCountdown = 3
+
+        removeObservers(from: player)
+        currentQueueIndex = nextIndex
+        let next = episodeQueue[nextIndex]
+        displayedTitle = next.title
+        currentDescriptor = next.descriptor
+        failed = false
+
+        let nextItem = AVPlayerItem(url: nextURL)
+        player.replaceCurrentItem(with: nextItem)
+        installObservers(on: player, item: nextItem)
+        player.play()
+        validate(item: nextItem, player: player)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            isAdvancingEpisode = false
+        }
+    }
+
+    private func removeObservers(from player: AVPlayer?) {
         if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         timeObserver = nil
         endObserver = nil
+    }
+
+    private func closePlayerIfNeeded() {
+        guard !pictureInPictureActive else { return }
+        if let currentDescriptor, let player {
+            session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
+        }
+        removeObservers(from: player)
         player?.pause()
         player = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
