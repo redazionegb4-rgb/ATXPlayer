@@ -1,240 +1,33 @@
 // !$*UTF8*$!
 {
-	archiveVersion = 1;
-	classes = {
-	};
-	objectVersion = 56;
-	objects = {
-
-/* Begin PBXBuildFile section */
-		A101 /* ATXPlayerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A021 /* ATXPlayerApp.swift */; };
-		A102 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A022 /* Models.swift */; };
-		A103 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A023 /* APIClient.swift */; };
-		A104 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A024 /* AppSession.swift */; };
-		A105 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A025 /* KeychainStore.swift */; };
-		A106 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A026 /* RootView.swift */; };
-		A107 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A028 /* Assets.xcassets */; };
-		A108 /* MainViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A027 /* MainViews.swift */; };
-/* End PBXBuildFile section */
-
-/* Begin PBXFileReference section */
-		A005 /* ATXPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ATXPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A021 /* ATXPlayerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ATXPlayerApp.swift; sourceTree = "<group>"; };
-		A022 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		A023 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
-		A024 /* AppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>"; };
-		A025 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		A026 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		A027 /* MainViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViews.swift; sourceTree = "<group>"; };
-		A028 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-/* End PBXFileReference section */
-
-/* Begin PBXFrameworksBuildPhase section */
-		A007 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXFrameworksBuildPhase section */
-
-/* Begin PBXGroup section */
-		A002 = {
-			isa = PBXGroup;
-			children = (
-				A020 /* ATXPlayer */,
-				A003 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		A003 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				A005 /* ATXPlayer.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		A020 /* ATXPlayer */ = {
-			isa = PBXGroup;
-			children = (
-				A021 /* ATXPlayerApp.swift */,
-				A022 /* Models.swift */,
-				A023 /* APIClient.swift */,
-				A024 /* AppSession.swift */,
-				A025 /* KeychainStore.swift */,
-				A026 /* RootView.swift */,
-				A027 /* MainViews.swift */,
-				A028 /* Assets.xcassets */,
-			);
-			path = ATXPlayer;
-			sourceTree = "<group>";
-		};
-/* End PBXGroup section */
-
-/* Begin PBXNativeTarget section */
-		A004 /* ATXPlayer */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A011 /* Build configuration list for PBXNativeTarget "ATXPlayer" */;
-			buildPhases = (
-				A006 /* Sources */,
-				A007 /* Frameworks */,
-				A008 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = ATXPlayer;
-			productName = ATXPlayer;
-			productReference = A005 /* ATXPlayer.app */;
-			productType = "com.apple.product-type.application";
-		};
-/* End PBXNativeTarget section */
-
-/* Begin PBXProject section */
-		A001 /* Project object */ = {
-			isa = PBXProject;
-			attributes = {
-				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
-			};
-			buildConfigurationList = A010 /* Build configuration list for PBXProject "ATXPlayer" */;
-			compatibilityVersion = "Xcode 14.0";
-			developmentRegion = it;
-			hasScannedForEncodings = 0;
-			knownRegions = (
-				it,
-				en,
-				Base,
-			);
-			mainGroup = A002;
-			productRefGroup = A003 /* Products */;
-			projectDirPath = "";
-			projectRoot = "";
-			targets = (
-				A004 /* ATXPlayer */,
-			);
-		};
-/* End PBXProject section */
-
-/* Begin PBXResourcesBuildPhase section */
-		A008 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				A107 /* Assets.xcassets in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXResourcesBuildPhase section */
-
-/* Begin PBXSourcesBuildPhase section */
-		A006 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				A101 /* ATXPlayerApp.swift in Sources */,
-				A102 /* Models.swift in Sources */,
-				A103 /* APIClient.swift in Sources */,
-				A104 /* AppSession.swift in Sources */,
-				A105 /* KeychainStore.swift in Sources */,
-				A106 /* RootView.swift in Sources */,
-				A108 /* MainViews.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXSourcesBuildPhase section */
-
-/* Begin XCBuildConfiguration section */
-		A012 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ENABLE_MODULES = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = Debug;
-		};
-		A013 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ENABLE_MODULES = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = Release;
-		};
-		A014 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = B8SC92LPR5;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = ATXPlayer/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dmb.atxplayer;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		A015 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = B8SC92LPR5;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = ATXPlayer/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dmb.atxplayer;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-/* End XCBuildConfiguration section */
-
-/* Begin XCConfigurationList section */
-		A010 /* Build configuration list for PBXProject "ATXPlayer" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A012 /* Debug */,
-				A013 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		A011 /* Build configuration list for PBXNativeTarget "ATXPlayer" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A014 /* Debug */,
-				A015 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-/* End XCConfigurationList section */
-	};
-	rootObject = A001 /* Project object */;
+ archiveVersion = 1;
+ classes = {};
+ objectVersion = 56;
+ objects = {
+  A001 = {isa = PBXProject; attributes = {LastSwiftUpdateCheck = 1500; LastUpgradeCheck = 1500;}; buildConfigurationList = A010; compatibilityVersion = "Xcode 14.0"; developmentRegion = it; hasScannedForEncodings = 0; knownRegions = (it, en, Base); mainGroup = A002; productRefGroup = A003; projectDirPath = ""; projectRoot = ""; targets = (A004,);};
+  A002 = {isa = PBXGroup; children = (A020, A003); sourceTree = "<group>";};
+  A003 = {isa = PBXGroup; children = (A005,); name = Products; sourceTree = "<group>";};
+  A004 = {isa = PBXNativeTarget; buildConfigurationList = A011; buildPhases = (A006,A007,A008); buildRules = (); dependencies = (); name = ATXPlayer; productName = ATXPlayer; productReference = A005; productType = "com.apple.product-type.application";};
+  A005 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ATXPlayer.app; sourceTree = BUILT_PRODUCTS_DIR;};
+  A006 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A101,A102,A103,A104,A105,A106,A108); runOnlyForDeploymentPostprocessing = 0;};
+  A007 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+  A008 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A107,); runOnlyForDeploymentPostprocessing = 0;};
+  A010 = {isa = XCConfigurationList; buildConfigurations = (A012,A013); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+  A011 = {isa = XCConfigurationList; buildConfigurations = (A014,A015); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+  A012 = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0;}; name = Debug;};
+  A013 = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0;}; name = Release;};
+  A014 = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 2; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = ATXPlayer/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 16.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.dmb.atxplayer; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; SUPPORTS_MACCATALYST = NO; TARGETED_DEVICE_FAMILY = "1,2";}; name = Debug;};
+  A015 = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 2; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = ATXPlayer/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 16.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.dmb.atxplayer; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_VERSION = 5.0; SUPPORTS_MACCATALYST = NO; TARGETED_DEVICE_FAMILY = "1,2"; VALIDATE_PRODUCT = YES;}; name = Release;};
+  A020 = {isa = PBXGroup; children = (A021,A022,A023,A024,A025,A026,A027,A028); path = ATXPlayer; sourceTree = "<group>";};
+  A021 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ATXPlayerApp.swift; sourceTree = "<group>";};
+  A022 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>";};
+  A023 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>";};
+  A024 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSession.swift; sourceTree = "<group>";};
+  A025 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>";};
+  A026 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>";};
+  A027 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViews.swift; sourceTree = "<group>";};
+  A028 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>";};
+  A101 = {isa = PBXBuildFile; fileRef = A021;}; A102 = {isa = PBXBuildFile; fileRef = A022;}; A103 = {isa = PBXBuildFile; fileRef = A023;}; A104 = {isa = PBXBuildFile; fileRef = A024;}; A105 = {isa = PBXBuildFile; fileRef = A025;}; A106 = {isa = PBXBuildFile; fileRef = A026;}; A108 = {isa = PBXBuildFile; fileRef = A027;}; A107 = {isa = PBXBuildFile; fileRef = A028;};
+ };
+ rootObject = A001;
 }
