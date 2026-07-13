@@ -100,7 +100,7 @@ actor APIClient {
     }
 }
 
-enum ContentType: String, CaseIterable {
+enum ContentType: String, CaseIterable, Hashable {
     case live, movies, series
     var categoryAction: String {
         switch self { case .live: return "get_live_categories"; case .movies: return "get_vod_categories"; case .series: return "get_series_categories" }

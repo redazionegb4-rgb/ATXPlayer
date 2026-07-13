@@ -1,6 +1,38 @@
 import SwiftUI
 import Foundation
 
+
+
+struct PlaybackProgress: Codable, Identifiable, Hashable {
+    let id: String
+    let ownerCode: String
+    let kind: String
+    let streamID: Int
+    let title: String
+    let subtitle: String?
+    let imageURL: String?
+    let fileExtension: String?
+    var position: Double
+    var duration: Double
+    var updatedAt: Date
+
+    var fraction: Double {
+        guard duration > 0 else { return 0 }
+        return min(max(position / duration, 0), 1)
+    }
+}
+
+struct PlaybackDescriptor: Hashable {
+    let kind: ContentType
+    let streamID: Int
+    let title: String
+    let subtitle: String?
+    let imageURL: String?
+    let fileExtension: String?
+
+    var keyPart: String { "\(kind.rawValue):\(streamID)" }
+}
+
 private struct PlaylistCache: Codable {
     let liveCategories: [Category]
     let movieCategories: [Category]
@@ -34,12 +66,14 @@ final class AppSession: ObservableObject {
     @Published var refreshOnLaunch = UserDefaults.standard.object(forKey: "refreshOnLaunch") as? Bool ?? false
     @Published var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
+    @Published private(set) var playbackProgress: [PlaybackProgress] = []
 
     var colorScheme: ColorScheme? { appearance == "light" ? .light : appearance == "dark" ? .dark : nil }
 
     init() {
         let hasSession = UserDefaults.standard.bool(forKey: "hasSavedSession")
         loadPlaylistCache()
+        loadPlaybackProgress()
         if hasSession, let code = KeychainStore.read("accessCode") {
             accessCode = code
             baseURL = UserDefaults.standard.string(forKey: "baseURL") ?? ""
@@ -181,6 +215,75 @@ final class AppSession: ObservableObject {
         allMovies = cache.allMovies
         allSeries = cache.allSeries
         lastRefresh = cache.lastRefresh
+    }
+
+    var continueWatching: [PlaybackProgress] {
+        playbackProgress
+            .filter { $0.ownerCode == accessCode && $0.position >= 20 && $0.duration > 0 && $0.fraction < 0.94 }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    func savedProgress(for descriptor: PlaybackDescriptor) -> PlaybackProgress? {
+        let key = playbackKey(for: descriptor)
+        return playbackProgress.first { $0.id == key }
+    }
+
+    func recordProgress(for descriptor: PlaybackDescriptor, position: Double, duration: Double) {
+        guard descriptor.kind != .live, position.isFinite, duration.isFinite, duration > 0 else { return }
+        let key = playbackKey(for: descriptor)
+        if position < 15 || position / duration >= 0.94 || duration - position < 75 {
+            playbackProgress.removeAll { $0.id == key }
+        } else if let index = playbackProgress.firstIndex(where: { $0.id == key }) {
+            playbackProgress[index].position = position
+            playbackProgress[index].duration = duration
+            playbackProgress[index].updatedAt = Date()
+        } else {
+            playbackProgress.append(PlaybackProgress(
+                id: key,
+                ownerCode: accessCode,
+                kind: descriptor.kind.rawValue,
+                streamID: descriptor.streamID,
+                title: descriptor.title,
+                subtitle: descriptor.subtitle,
+                imageURL: descriptor.imageURL,
+                fileExtension: descriptor.fileExtension,
+                position: position,
+                duration: duration,
+                updatedAt: Date()
+            ))
+        }
+        savePlaybackProgress()
+    }
+
+    func removeProgress(for descriptor: PlaybackDescriptor) {
+        playbackProgress.removeAll { $0.id == playbackKey(for: descriptor) }
+        savePlaybackProgress()
+    }
+
+    func descriptor(from progress: PlaybackProgress) -> PlaybackDescriptor? {
+        guard let kind = ContentType(rawValue: progress.kind) else { return nil }
+        return PlaybackDescriptor(kind: kind, streamID: progress.streamID, title: progress.title, subtitle: progress.subtitle, imageURL: progress.imageURL, fileExtension: progress.fileExtension)
+    }
+
+    private func playbackKey(for descriptor: PlaybackDescriptor) -> String {
+        "\(accessCode):\(descriptor.keyPart)"
+    }
+
+    private var playbackProgressURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("atlantix-playback-progress.json")
+    }
+
+    private func loadPlaybackProgress() {
+        guard let data = try? Data(contentsOf: playbackProgressURL),
+              let values = try? JSONDecoder().decode([PlaybackProgress].self, from: data) else { return }
+        playbackProgress = values
+    }
+
+    private func savePlaybackProgress() {
+        guard let data = try? JSONEncoder().encode(playbackProgress) else { return }
+        try? data.write(to: playbackProgressURL, options: .atomic)
     }
 
     func setAppearance(_ value: String) { appearance = value; UserDefaults.standard.set(value, forKey: "appearance") }

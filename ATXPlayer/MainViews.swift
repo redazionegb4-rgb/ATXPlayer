@@ -61,6 +61,7 @@ struct HomeView: View {
                             .zIndex(0)
                         counters
                         quickActions
+                        if !session.continueWatching.isEmpty { continueWatchingRail }
                         if !recentSeries.isEmpty { seriesRail }
                         if !recentMovies.isEmpty { movieRail }
                         updateStatus
@@ -183,6 +184,27 @@ struct HomeView: View {
                 .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 19)
                 .background(brandGradient).clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
         }.buttonStyle(.plain)
+    }
+
+    private var continueWatchingRail: some View {
+        MediaRail(title: "Continua a guardare") {
+            ForEach(session.continueWatching.prefix(12)) { progress in
+                if let descriptor = session.descriptor(from: progress) {
+                    NavigationLink {
+                        PlayerScreen(
+                            title: descriptor.title,
+                            url: session.streamURL(type: descriptor.kind, id: descriptor.streamID, ext: descriptor.fileExtension),
+                            isLive: false,
+                            resume: descriptor
+                        )
+                    } label: {
+                        ContinueWatchingCard(progress: progress)
+                            .frame(width: 230)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     private var movieRail: some View {
@@ -538,6 +560,50 @@ struct PosterCard: View {
     }
 }
 
+struct ContinueWatchingCard: View {
+    let progress: PlaybackProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack(alignment: .bottom) {
+                AsyncImage(url: URL(string: progress.imageURL ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.8)) } }
+                }
+                .frame(width: 230, height: 130)
+                .clipped()
+
+                VStack(spacing: 0) {
+                    Spacer()
+                    ProgressView(value: progress.fraction)
+                        .tint(.purple)
+                        .background(Color.white.opacity(0.25))
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            Text(progress.title).font(.subheadline.bold()).lineLimit(1).foregroundStyle(.primary)
+            HStack {
+                Text(progress.subtitle ?? "Riprendi la visione").lineLimit(1)
+                Spacer()
+                Text(formatTime(progress.position))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        let total = max(Int(seconds), 0)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)
+    }
+}
+
 struct MovieDetailView: View {
     @EnvironmentObject var session: AppSession
     let item: VODStream
@@ -562,9 +628,26 @@ struct MovieDetailView: View {
                 ("Cast", info?.cast ?? item.cast)
             ]
         ) {
+            let movieID = details?.movieData?.streamID ?? item.streamID
+            let movieExt = details?.movieData?.containerExtension ?? item.containerExtension
+            let descriptor = PlaybackDescriptor(
+                kind: .movies,
+                streamID: movieID,
+                title: info?.name ?? item.name,
+                subtitle: "Film",
+                imageURL: info?.movieImage ?? item.streamIcon,
+                fileExtension: movieExt
+            )
             NavigationLink {
-                PlayerScreen(title: info?.name ?? item.name, url: session.streamURL(type: .movies, id: details?.movieData?.streamID ?? item.streamID, ext: details?.movieData?.containerExtension ?? item.containerExtension), isLive: false)
-            } label: { playButton("Guarda film") }
+                PlayerScreen(
+                    title: info?.name ?? item.name,
+                    url: session.streamURL(type: .movies, id: movieID, ext: movieExt),
+                    isLive: false,
+                    resume: descriptor
+                )
+            } label: {
+                playButton(session.savedProgress(for: descriptor) == nil ? "Guarda film" : "Riprendi film")
+            }
         }
         .overlay(alignment: .topTrailing) {
             if loadingInfo { ProgressView().tint(.white).padding(22) }
@@ -765,7 +848,24 @@ struct SeriesDetailView: View {
                         Text("Episodi").font(.title2.bold()).foregroundStyle(.primary).padding(.horizontal)
                         LazyVStack(spacing: 14) {
                             ForEach(episodes) { episode in
-                                NavigationLink { PlayerScreen(title: episode.title, url: session.streamURL(type: .series, id: episode.id, ext: episode.containerExtension), isLive: false) } label: { EpisodeRow(episode: episode, fallbackImage: item.cover) }
+                                let descriptor = PlaybackDescriptor(
+                                    kind: .series,
+                                    streamID: episode.id,
+                                    title: episode.title,
+                                    subtitle: "\(item.name) • S\(selectedSeason) E\(episode.episodeNum)",
+                                    imageURL: episode.info?.movieImage ?? item.cover,
+                                    fileExtension: episode.containerExtension
+                                )
+                                NavigationLink {
+                                    PlayerScreen(
+                                        title: episode.title,
+                                        url: session.streamURL(type: .series, id: episode.id, ext: episode.containerExtension),
+                                        isLive: false,
+                                        resume: descriptor
+                                    )
+                                } label: {
+                                    EpisodeRow(episode: episode, fallbackImage: item.cover, progress: session.savedProgress(for: descriptor))
+                                }
                             }
                         }.padding(.horizontal)
                     }
@@ -804,6 +904,7 @@ struct SeriesHeader: View {
 struct EpisodeRow: View {
     let episode: Episode
     let fallbackImage: String?
+    let progress: PlaybackProgress?
     var body: some View {
         HStack(spacing: 14) {
             AsyncImage(url: URL(string: episode.info?.movieImage ?? fallbackImage ?? "")) { phase in
@@ -813,8 +914,17 @@ struct EpisodeRow: View {
                 Text("Episodio \(episode.episodeNum)").font(.caption.bold()).foregroundStyle(.purple)
                 Text(episode.title).font(.headline).foregroundStyle(.primary).lineLimit(2)
                 if let duration = episode.info?.duration { Text(duration).font(.caption).foregroundStyle(.secondary) }
-            }; Spacer(); Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(.primary)
+                if let progress {
+                    ProgressView(value: progress.fraction).tint(.purple)
+                    Text("Riprendi da \(formatTime(progress.position))").font(.caption2).foregroundStyle(.purple)
+                }
+            }; Spacer(); Image(systemName: progress == nil ? "play.circle.fill" : "arrow.clockwise.circle.fill").font(.title2).foregroundStyle(.primary)
         }.padding(12).background(Color(uiColor: .secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        let total = max(Int(seconds), 0)
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 }
 
@@ -908,12 +1018,19 @@ struct NativePlayerController: UIViewControllerRepresentable {
 }
 
 struct PlayerScreen: View {
+    @EnvironmentObject var session: AppSession
     let title: String
     let url: URL?
     let isLive: Bool
+    var resume: PlaybackDescriptor? = nil
+
     @State private var player: AVPlayer?
     @State private var failed = false
     @State private var pictureInPictureActive = false
+    @State private var showResumePrompt = false
+    @State private var pendingResumePosition: Double = 0
+    @State private var timeObserver: Any?
+    @State private var endObserver: NSObjectProtocol?
 
     var body: some View {
         ZStack {
@@ -929,23 +1046,45 @@ struct PlayerScreen: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            guard player == nil else { return }
-            guard let url else { failed = true; return }
-
-            do {
-                let audioSession = AVAudioSession.sharedInstance()
-                try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])
-                try audioSession.setActive(true)
-            } catch {
-                // La riproduzione può continuare anche se la sessione audio non viene configurata.
+        .alert("Riprendere la visione?", isPresented: $showResumePrompt) {
+            Button("Ricomincia") {
+                player?.seek(to: .zero)
+                player?.play()
             }
+            Button("Riprendi da \(formatTime(pendingResumePosition))") {
+                let target = CMTime(seconds: pendingResumePosition, preferredTimescale: 600)
+                player?.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { _ in player?.play() }
+            }
+        } message: {
+            Text("Hai già iniziato questo contenuto.")
+        }
+        .task { configurePlayer() }
+        .onDisappear { closePlayerIfNeeded() }
+    }
 
-            let item = AVPlayerItem(url: url)
-            let newPlayer = AVPlayer(playerItem: item)
-            player = newPlayer
+    private func configurePlayer() {
+        guard player == nil else { return }
+        guard let url else { failed = true; return }
+
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])
+            try audioSession.setActive(true)
+        } catch { }
+
+        let item = AVPlayerItem(url: url)
+        let newPlayer = AVPlayer(playerItem: item)
+        player = newPlayer
+        installObservers(on: newPlayer, item: item)
+
+        if !isLive, let resume, let saved = session.savedProgress(for: resume), saved.position >= 20 {
+            pendingResumePosition = saved.position
+            showResumePrompt = true
+        } else {
             newPlayer.play()
+        }
 
+        Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             if item.status == .failed {
                 failed = true
@@ -953,12 +1092,40 @@ struct PlayerScreen: View {
                 player = nil
             }
         }
-        .onDisappear {
-            guard !pictureInPictureActive else { return }
-            player?.pause()
-            player = nil
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func installObservers(on player: AVPlayer, item: AVPlayerItem) {
+        guard !isLive, let resume else { return }
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 5, preferredTimescale: 600), queue: .main) { time in
+            let position = time.seconds
+            let duration = item.duration.seconds
+            session.recordProgress(for: resume, position: position, duration: duration)
         }
+        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { _ in
+            session.removeProgress(for: resume)
+        }
+    }
+
+    private func closePlayerIfNeeded() {
+        guard !pictureInPictureActive else { return }
+        if let resume, let player {
+            session.recordProgress(for: resume, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
+        }
+        if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        timeObserver = nil
+        endObserver = nil
+        player?.pause()
+        player = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        let total = max(Int(seconds), 0)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+        return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, secs) : String(format: "%d:%02d", minutes, secs)
     }
 }
 
