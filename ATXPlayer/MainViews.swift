@@ -346,6 +346,7 @@ struct ItemGrid: View {
     @State private var loading = true
     @State private var error: String?
     @State private var search = ""
+    @State private var newestFirst = true
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
     var body: some View {
@@ -354,6 +355,7 @@ struct ItemGrid: View {
             VStack(spacing: 0) {
                 itemHeader
                 inlineSearch
+                if type != .live { sortControl }
                 Group {
                     if loading { Spacer(); ProgressView("Caricamento…"); Spacer() }
                     else if let error { Spacer(); EmptyStateView(title: "Errore", icon: "wifi.exclamationmark", message: error); Spacer() }
@@ -401,6 +403,29 @@ struct ItemGrid: View {
         .padding(.horizontal, 16)
     }
 
+    private var sortControl: some View {
+        HStack {
+            Label("Ordina per aggiunta", systemImage: "arrow.up.arrow.down")
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            Menu {
+                Button { newestFirst = true } label: {
+                    Label("Ultimi aggiunti", systemImage: newestFirst ? "checkmark" : "clock.arrow.circlepath")
+                }
+                Button { newestFirst = false } label: {
+                    Label("Meno recenti", systemImage: !newestFirst ? "checkmark" : "clock")
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(newestFirst ? "Ultimi aggiunti" : "Meno recenti")
+                    Image(systemName: "chevron.up.chevron.down")
+                }
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.purple)
+            }
+        }
+        .padding(.horizontal, 18).padding(.top, 12)
+    }
+
     private var resultCount: Int {
         if type == .live { return live.filter(matchLive).count }
         if type == .movies { return vod.filter(matchMovie).count }
@@ -413,11 +438,11 @@ struct ItemGrid: View {
                 NavigationLink { LiveDetailView(item: item) } label: { LiveChannelCard(item: item) }.buttonStyle(.plain)
             }
         } else if type == .movies {
-            ForEach(vod.filter(matchMovie)) { item in
+            ForEach(vod.filter(matchMovie).sorted { newestFirst ? numericDateValue($0.added) > numericDateValue($1.added) : numericDateValue($0.added) < numericDateValue($1.added) }) { item in
                 NavigationLink { MovieDetailView(item: item) } label: { ModernPosterCard(title: item.name, imageURL: item.streamIcon, badge: item.rating, typeLabel: "FILM") }.buttonStyle(.plain)
             }
         } else {
-            ForEach(series.filter(matchSeries)) { item in
+            ForEach(series.filter(matchSeries).sorted { newestFirst ? seriesSortValue($0) > seriesSortValue($1) : seriesSortValue($0) < seriesSortValue($1) }) { item in
                 NavigationLink { SeriesDetailView(item: item) } label: { ModernPosterCard(title: item.name, imageURL: item.cover, badge: item.rating, typeLabel: "SERIE") }.buttonStyle(.plain)
             }
         }
