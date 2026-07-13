@@ -178,6 +178,33 @@ final class AppSession: ObservableObject {
         }
     }
 
+    func reloadSection(_ type: ContentType) async {
+        guard !baseURL.isEmpty else { return }
+        isRefreshing = true
+        errorMessage = nil
+        defer { isRefreshing = false }
+
+        var loaded = false
+        switch type {
+        case .live:
+            do { liveCategories = try await APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .live); loaded = true } catch { }
+            do { allLive = try await APIClient.shared.liveStreams(baseURL: baseURL, username: username, password: password); loaded = true } catch { }
+        case .movies:
+            do { movieCategories = try await APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .movies); loaded = true } catch { }
+            do { allMovies = try await APIClient.shared.vodStreams(baseURL: baseURL, username: username, password: password); loaded = true } catch { }
+        case .series:
+            do { seriesCategories = try await APIClient.shared.categories(baseURL: baseURL, username: username, password: password, type: .series); loaded = true } catch { }
+            do { allSeries = try await APIClient.shared.series(baseURL: baseURL, username: username, password: password); loaded = true } catch { }
+        }
+
+        if loaded {
+            lastRefresh = Date()
+            savePlaylistCache()
+        } else {
+            errorMessage = "Impossibile aggiornare questa sezione. Riprova tra poco."
+        }
+    }
+
     func refreshSafely() async { errorMessage = nil; await reloadPlaylist() }
 
     func signOut() {

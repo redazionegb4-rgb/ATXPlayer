@@ -310,10 +310,24 @@ struct ContentBrowser: View {
                 Text("\(totalCount.formatted()) contenuti").font(.caption.bold()).foregroundStyle(.purple)
             }
             Spacer()
-            Button { Task { await session.refreshSafely() } } label: {
-                Image(systemName: "arrow.clockwise").font(.headline.bold()).frame(width: 46, height: 46)
-                    .background(Color(uiColor: .secondarySystemBackground)).clipShape(Circle())
-            }.buttonStyle(.plain)
+            Button {
+                Task { await session.reloadSection(type) }
+            } label: {
+                ZStack {
+                    Circle().fill(Color(uiColor: .secondarySystemBackground))
+                    if session.isRefreshing {
+                        ProgressView().tint(.primary)
+                    } else {
+                        Image(systemName: "arrow.clockwise").font(.headline.bold())
+                    }
+                }
+                .frame(width: 50, height: 50)
+                .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(session.isRefreshing)
+            .zIndex(20)
         }
         .padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 14)
     }
