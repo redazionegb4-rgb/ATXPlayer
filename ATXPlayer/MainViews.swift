@@ -889,15 +889,77 @@ struct SeriesDetailView: View {
 struct SeriesHeader: View {
     let item: SeriesItem
     let details: SeriesDetails?
+
+    private var title: String { details?.name ?? item.name }
+    private var cover: String? { details?.cover ?? item.cover }
+    private var genre: String? { details?.genre ?? item.genre }
+    private var plot: String? { details?.plot ?? item.plot }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            AsyncImage(url: URL(string: details?.cover ?? item.cover ?? "")) { phase in
-                if let image = phase.image { image.resizable().scaledToFit() } else { ZStack { brandGradient; Image(systemName: "rectangle.stack.fill").font(.largeTitle).foregroundStyle(.primary) } }
-            }.frame(maxWidth: .infinity).frame(maxHeight: 430).clipShape(RoundedRectangle(cornerRadius: 24))
-            Text(details?.name ?? item.name).font(.title.bold()).foregroundStyle(.primary)
-            if let genre = details?.genre ?? item.genre { Text(genre).font(.subheadline).foregroundStyle(.purple) }
-            if let plot = details?.plot ?? item.plot { Text(plot).foregroundStyle(.secondary) }
-        }.padding(.horizontal)
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                AsyncImage(url: URL(string: cover ?? "")) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        ZStack {
+                            brandGradient
+                            Image(systemName: "rectangle.stack.fill")
+                                .font(.system(size: 38, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.9))
+                        }
+                    }
+                }
+                .frame(width: 142, height: 214)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .clipped()
+                .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
+
+                VStack(alignment: .leading, spacing: 11) {
+                    Text(title)
+                        .font(.title2.bold())
+                        .foregroundStyle(.primary)
+                        .lineLimit(4)
+                        .minimumScaleFactor(0.78)
+
+                    if let genre, !genre.isEmpty {
+                        Label(genre, systemImage: "theatermasks.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.purple)
+                            .lineLimit(3)
+                    }
+
+                    if let releaseDate = details?.releaseDate ?? item.releaseDate, !releaseDate.isEmpty {
+                        Label(releaseDate, systemImage: "calendar")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let rating = details?.rating ?? item.rating, !rating.isEmpty {
+                        Label("★ \(rating)", systemImage: "star.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: 214, alignment: .topLeading)
+            }
+
+            if let plot, !plot.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Trama")
+                        .font(.title3.bold())
+                        .foregroundStyle(.primary)
+                    Text(plot)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(4)
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 12)
     }
 }
 
@@ -935,28 +997,89 @@ struct MediaDetailLayout<Action: View>: View {
     let metadata: [String]
     let extraInfo: [(String, String?)]
     @ViewBuilder let action: Action
-    init(title: String, imageURL: String?, plot: String?, metadata: [String], extraInfo: [(String, String?)] = [], @ViewBuilder action: () -> Action) { self.title = title; self.imageURL = imageURL; self.plot = plot; self.metadata = metadata; self.extraInfo = extraInfo; self.action = action() }
+
+    init(title: String, imageURL: String?, plot: String?, metadata: [String], extraInfo: [(String, String?)] = [], @ViewBuilder action: () -> Action) {
+        self.title = title
+        self.imageURL = imageURL
+        self.plot = plot
+        self.metadata = metadata
+        self.extraInfo = extraInfo
+        self.action = action()
+    }
+
     var body: some View {
         ZStack {
             pageBackground.ignoresSafeArea()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    AsyncImage(url: URL(string: imageURL ?? "")) { phase in
-                        if let image = phase.image { image.resizable().scaledToFit() } else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.system(size: 70)).foregroundStyle(.white.opacity(0.8)) } }
-                    }.frame(maxWidth: .infinity).frame(maxHeight: 460).clipShape(RoundedRectangle(cornerRadius: 26))
-                    Text(title).font(.title.bold()).foregroundStyle(.primary)
-                    if !metadata.isEmpty { Text(metadata.joined(separator: "  •  ")).font(.subheadline).foregroundStyle(.purple) }
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(alignment: .top, spacing: 16) {
+                        AsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                            if let image = phase.image {
+                                image.resizable().scaledToFill()
+                            } else {
+                                ZStack {
+                                    brandGradient
+                                    Image(systemName: "play.rectangle.fill")
+                                        .font(.system(size: 44, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.9))
+                                }
+                            }
+                        }
+                        .frame(width: 142, height: 214)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .clipped()
+                        .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
+
+                        VStack(alignment: .leading, spacing: 11) {
+                            Text(title)
+                                .font(.title2.bold())
+                                .foregroundStyle(.primary)
+                                .lineLimit(4)
+                                .minimumScaleFactor(0.78)
+
+                            ForEach(Array(metadata.enumerated()), id: \.offset) { _, value in
+                                Text(value)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.purple)
+                                    .lineLimit(3)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 214, alignment: .topLeading)
+                    }
+
                     action
-                    if let plot, !plot.isEmpty { Text("Trama").font(.title3.bold()).foregroundStyle(.primary); Text(plot).foregroundStyle(.secondary).lineSpacing(4) }
-                    ForEach(extraInfo.filter { !($0.1 ?? "").isEmpty }, id: \.0) { entry in
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(entry.0).font(.headline).foregroundStyle(.primary)
-                            Text(entry.1 ?? "").font(.subheadline).foregroundStyle(.secondary)
+
+                    if let plot, !plot.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Trama")
+                                .font(.title3.bold())
+                                .foregroundStyle(.primary)
+                            Text(plot)
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(4)
                         }
                     }
-                }.padding(18).padding(.bottom, 90)
+
+                    ForEach(extraInfo.filter { !($0.1 ?? "").isEmpty }, id: \.0) { entry in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(entry.0)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Text(entry.1 ?? "")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(3)
+                        }
+                    }
+                }
+                .padding(18)
+                .padding(.bottom, 120)
             }
-        }.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
