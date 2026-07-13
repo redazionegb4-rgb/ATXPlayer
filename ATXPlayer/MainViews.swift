@@ -844,8 +844,17 @@ struct SeriesDetailView: View {
                     else if let error { EmptyStateView(title: "Episodi non disponibili", icon: "rectangle.stack.badge.exclamationmark", message: error) }
                     else if seasons.isEmpty { EmptyStateView(title: "Nessun episodio", icon: "rectangle.stack", message: "Il server non ha restituito stagioni o episodi per questa serie.") }
                     else {
-                        Picker("Stagione", selection: $selectedSeason) { ForEach(seasons, id: \.self) { Text("Stagione \($0)").tag($0) } }.pickerStyle(.segmented).padding(.horizontal)
-                        Text("Episodi").font(.title2.bold()).foregroundStyle(.primary).padding(.horizontal)
+                        seasonSelector
+                        HStack {
+                            Text("Episodi")
+                                .font(.title2.bold())
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text("\(episodes.count) disponibili")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal)
                         LazyVStack(spacing: 14) {
                             ForEach(episodes) { episode in
                                 let descriptor = PlaybackDescriptor(
@@ -874,6 +883,66 @@ struct SeriesDetailView: View {
         }
         .navigationTitle(item.name).navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+    }
+
+
+    private var seasonSelector: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("STAGIONE SELEZIONATA")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .tracking(1.1)
+                Text("Stagione \(selectedSeason)")
+                    .font(.title3.bold())
+                    .foregroundStyle(.primary)
+            }
+
+            Spacer()
+
+            Menu {
+                ForEach(seasons, id: \.self) { season in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedSeason = season
+                        }
+                    } label: {
+                        if season == selectedSeason {
+                            Label("Stagione \(season)", systemImage: "checkmark")
+                        } else {
+                            Text("Stagione \(season)")
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "rectangle.stack.fill")
+                    Text("Cambia")
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2.bold())
+                }
+                .font(.subheadline.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 15)
+                .frame(height: 44)
+                .background(
+                    LinearGradient(
+                        colors: [Color.cyan, Color.purple, Color.indigo],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(Capsule())
+            }
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .padding(.horizontal)
     }
 
     private func load() async {
