@@ -1,5 +1,7 @@
 import SwiftUI
 import AVKit
+import AVFoundation
+import UIKit
 
 private let brandGradient = LinearGradient(colors: [.cyan, .purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
 private let pageBackground = Color(uiColor: .systemBackground)
@@ -827,30 +829,111 @@ private func playButton(_ title: String) -> some View {
     Label(title, systemImage: "play.fill").font(.headline.bold()).foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 16).background(brandGradient).clipShape(RoundedRectangle(cornerRadius: 18))
 }
 
+struct NativePlayerController: UIViewControllerRepresentable {
+    let player: AVPlayer
+    @Binding var pictureInPictureActive: Bool
+
+    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+        @Binding var pictureInPictureActive: Bool
+
+        init(pictureInPictureActive: Binding<Bool>) {
+            _pictureInPictureActive = pictureInPictureActive
+        }
+
+        func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
+            pictureInPictureActive = true
+        }
+
+        func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
+            pictureInPictureActive = false
+        }
+
+        func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+        ) {
+            completionHandler(true)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(pictureInPictureActive: $pictureInPictureActive)
+    }
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.player = player
+        controller.delegate = context.coordinator
+        controller.showsPlaybackControls = true
+        controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
+        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        controller.entersFullScreenWhenPlaybackBegins = false
+        controller.exitsFullScreenWhenPlaybackEnds = false
+        controller.updatesNowPlayingInfoCenter = true
+        return controller
+    }
+
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        if controller.player !== player {
+            controller.player = player
+        }
+        controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
+        controller.canStartPictureInPictureAutomaticallyFromInline = true
+    }
+}
+
 struct PlayerScreen: View {
     let title: String
     let url: URL?
     let isLive: Bool
     @State private var player: AVPlayer?
     @State private var failed = false
+    @State private var pictureInPictureActive = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             if let player {
-                VideoPlayer(player: player).ignoresSafeArea(edges: .bottom)
+                NativePlayerController(player: player, pictureInPictureActive: $pictureInPictureActive)
+                    .ignoresSafeArea(edges: .bottom)
             } else if failed || url == nil {
                 EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.primary)
-            } else { ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary) }
+            } else {
+                ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary)
+            }
         }
-        .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
         .task {
+            guard player == nil else { return }
             guard let url else { failed = true; return }
-            let p = AVPlayer(url: url); player = p; p.play()
+
+            do {
+                let audioSession = AVAudioSession.sharedInstance()
+                try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])
+                try audioSession.setActive(true)
+            } catch {
+                // La riproduzione può continuare anche se la sessione audio non viene configurata.
+            }
+
+            let item = AVPlayerItem(url: url)
+            let newPlayer = AVPlayer(playerItem: item)
+            player = newPlayer
+            newPlayer.play()
+
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            if p.currentItem?.status == .failed { failed = true; player = nil }
+            if item.status == .failed {
+                failed = true
+                newPlayer.pause()
+                player = nil
+            }
         }
-        .onDisappear { player?.pause(); player = nil }
+        .onDisappear {
+            guard !pictureInPictureActive else { return }
+            player?.pause()
+            player = nil
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }
 
