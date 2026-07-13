@@ -1,5 +1,31 @@
 import Foundation
 
+private extension KeyedDecodingContainer {
+    func flexibleString(forKey key: Key) -> String? {
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value.map(String.init) }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) { return value.map { String($0) } }
+        if let value = try? decodeIfPresent(Bool.self, forKey: key) { return value.map(String.init) }
+        return nil
+    }
+
+    func flexibleInt(forKey key: Key) -> Int? {
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return value.flatMap(Int.init) }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) { return value.map(Int.init) }
+        return nil
+    }
+
+    func flexibleDouble(forKey key: Key) -> Double? {
+        if let value = try? decodeIfPresent(Double.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value.map(Double.init) }
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            return value.flatMap { Double($0.replacingOccurrences(of: ",", with: ".")) }
+        }
+        return nil
+    }
+}
+
 struct RemoteConfig: Codable {
     let enabled: Bool
     let dns: String
@@ -9,11 +35,7 @@ struct RemoteConfig: Codable {
 struct LoginResponse: Codable {
     let userInfo: UserInfo?
     let serverInfo: ServerInfo?
-
-    enum CodingKeys: String, CodingKey {
-        case userInfo = "user_info"
-        case serverInfo = "server_info"
-    }
+    enum CodingKeys: String, CodingKey { case userInfo = "user_info", serverInfo = "server_info" }
 }
 
 struct UserInfo: Codable {
@@ -29,26 +51,29 @@ struct UserInfo: Codable {
 
     enum CodingKeys: String, CodingKey {
         case username, password, message, auth, status
-        case expDate = "exp_date"
-        case activeCons = "active_cons"
-        case maxConnections = "max_connections"
+        case expDate = "exp_date", activeCons = "active_cons", maxConnections = "max_connections"
         case allowedOutputFormats = "allowed_output_formats"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        username = c.flexibleString(forKey: .username)
+        password = c.flexibleString(forKey: .password)
+        message = c.flexibleString(forKey: .message)
+        auth = c.flexibleInt(forKey: .auth)
+        status = c.flexibleString(forKey: .status)
+        expDate = c.flexibleString(forKey: .expDate)
+        activeCons = c.flexibleString(forKey: .activeCons)
+        maxConnections = c.flexibleString(forKey: .maxConnections)
+        allowedOutputFormats = try? c.decodeIfPresent([String].self, forKey: .allowedOutputFormats)
     }
 }
 
 struct ServerInfo: Codable {
-    let url: String?
-    let port: String?
-    let httpsPort: String?
-    let serverProtocol: String?
-    let timezone: String?
-    let timestampNow: Int?
-
+    let url: String?, port: String?, httpsPort: String?, serverProtocol: String?, timezone: String?, timestampNow: Int?
     enum CodingKeys: String, CodingKey {
         case url, port, timezone
-        case httpsPort = "https_port"
-        case serverProtocol = "server_protocol"
-        case timestampNow = "timestamp_now"
+        case httpsPort = "https_port", serverProtocol = "server_protocol", timestampNow = "timestamp_now"
     }
 }
 
@@ -57,112 +82,97 @@ struct Category: Codable, Identifiable, Hashable {
     let categoryName: String
     let parentID: Int?
     var id: String { categoryID }
+    enum CodingKeys: String, CodingKey { case categoryID = "category_id", categoryName = "category_name", parentID = "parent_id" }
 
-    enum CodingKeys: String, CodingKey {
-        case categoryID = "category_id"
-        case categoryName = "category_name"
-        case parentID = "parent_id"
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        categoryID = c.flexibleString(forKey: .categoryID) ?? UUID().uuidString
+        categoryName = c.flexibleString(forKey: .categoryName) ?? "Senza nome"
+        parentID = c.flexibleInt(forKey: .parentID)
     }
 }
 
 struct LiveStream: Codable, Identifiable, Hashable {
-    let num: Int?
-    let name: String
-    let streamType: String?
-    let streamID: Int
-    let streamIcon: String?
-    let epgChannelID: String?
-    let added: String?
-    let categoryID: String?
-    let customSID: String?
-    let tvArchive: Int?
-    let directSource: String?
+    let num: Int?, name: String, streamType: String?, streamID: Int, streamIcon: String?, epgChannelID: String?, added: String?, categoryID: String?, customSID: String?, tvArchive: Int?, directSource: String?
     var id: Int { streamID }
-
     enum CodingKeys: String, CodingKey {
         case num, name, added
-        case streamType = "stream_type"
-        case streamID = "stream_id"
-        case streamIcon = "stream_icon"
-        case epgChannelID = "epg_channel_id"
-        case categoryID = "category_id"
-        case customSID = "custom_sid"
-        case tvArchive = "tv_archive"
-        case directSource = "direct_source"
+        case streamType = "stream_type", streamID = "stream_id", streamIcon = "stream_icon", epgChannelID = "epg_channel_id", categoryID = "category_id", customSID = "custom_sid", tvArchive = "tv_archive", directSource = "direct_source"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        num = c.flexibleInt(forKey: .num)
+        name = c.flexibleString(forKey: .name) ?? "Canale"
+        streamType = c.flexibleString(forKey: .streamType)
+        streamID = c.flexibleInt(forKey: .streamID) ?? abs(name.hashValue)
+        streamIcon = c.flexibleString(forKey: .streamIcon)
+        epgChannelID = c.flexibleString(forKey: .epgChannelID)
+        added = c.flexibleString(forKey: .added)
+        categoryID = c.flexibleString(forKey: .categoryID)
+        customSID = c.flexibleString(forKey: .customSID)
+        tvArchive = c.flexibleInt(forKey: .tvArchive)
+        directSource = c.flexibleString(forKey: .directSource)
     }
 }
 
 struct VODStream: Codable, Identifiable, Hashable {
-    let num: Int?
-    let name: String
-    let streamType: String?
-    let streamID: Int
-    let streamIcon: String?
-    let rating: String?
-    let rating5Based: Double?
-    let added: String?
-    let categoryID: String?
-    let containerExtension: String?
-    let plot: String?
-    let cast: String?
-    let director: String?
-    let genre: String?
-    let releaseDate: String?
-    let duration: String?
+    let num: Int?, name: String, streamType: String?, streamID: Int, streamIcon: String?, rating: String?, rating5Based: Double?, added: String?, categoryID: String?, containerExtension: String?, plot: String?, cast: String?, director: String?, genre: String?, releaseDate: String?, duration: String?
     var id: Int { streamID }
-
     enum CodingKeys: String, CodingKey {
         case num, name, rating, added, plot, cast, director, genre, duration
-        case streamType = "stream_type"
-        case streamID = "stream_id"
-        case streamIcon = "stream_icon"
-        case rating5Based = "rating_5based"
-        case categoryID = "category_id"
-        case containerExtension = "container_extension"
-        case releaseDate = "release_date"
+        case streamType = "stream_type", streamID = "stream_id", streamIcon = "stream_icon", rating5Based = "rating_5based", categoryID = "category_id", containerExtension = "container_extension", releaseDate = "release_date"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        num = c.flexibleInt(forKey: .num)
+        name = c.flexibleString(forKey: .name) ?? "Film"
+        streamType = c.flexibleString(forKey: .streamType)
+        streamID = c.flexibleInt(forKey: .streamID) ?? abs(name.hashValue)
+        streamIcon = c.flexibleString(forKey: .streamIcon)
+        rating = c.flexibleString(forKey: .rating)
+        rating5Based = c.flexibleDouble(forKey: .rating5Based)
+        added = c.flexibleString(forKey: .added)
+        categoryID = c.flexibleString(forKey: .categoryID)
+        containerExtension = c.flexibleString(forKey: .containerExtension)
+        plot = c.flexibleString(forKey: .plot)
+        cast = c.flexibleString(forKey: .cast)
+        director = c.flexibleString(forKey: .director)
+        genre = c.flexibleString(forKey: .genre)
+        releaseDate = c.flexibleString(forKey: .releaseDate)
+        duration = c.flexibleString(forKey: .duration)
     }
 }
 
 struct SeriesItem: Codable, Identifiable, Hashable {
-    let num: Int?
-    let name: String
-    let seriesID: Int
-    let cover: String?
-    let plot: String?
-    let cast: String?
-    let director: String?
-    let genre: String?
-    let releaseDate: String?
-    let rating: String?
-    let categoryID: String?
+    let num: Int?, name: String, seriesID: Int, cover: String?, plot: String?, cast: String?, director: String?, genre: String?, releaseDate: String?, rating: String?, categoryID: String?
     var id: Int { seriesID }
-
     enum CodingKeys: String, CodingKey {
         case num, name, cover, plot, cast, director, genre, rating
-        case seriesID = "series_id"
-        case releaseDate = "releaseDate"
-        case categoryID = "category_id"
+        case seriesID = "series_id", releaseDate = "releaseDate", categoryID = "category_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        num = c.flexibleInt(forKey: .num)
+        name = c.flexibleString(forKey: .name) ?? "Serie"
+        seriesID = c.flexibleInt(forKey: .seriesID) ?? abs(name.hashValue)
+        cover = c.flexibleString(forKey: .cover)
+        plot = c.flexibleString(forKey: .plot)
+        cast = c.flexibleString(forKey: .cast)
+        director = c.flexibleString(forKey: .director)
+        genre = c.flexibleString(forKey: .genre)
+        releaseDate = c.flexibleString(forKey: .releaseDate)
+        rating = c.flexibleString(forKey: .rating)
+        categoryID = c.flexibleString(forKey: .categoryID)
     }
 }
 
 struct EPGListing: Codable, Identifiable {
-    let id: String?
-    let epgID: String?
-    let title: String?
-    let lang: String?
-    let start: String?
-    let end: String?
-    let description: String?
-    let startTimestamp: String?
-    let stopTimestamp: String?
+    let id: String?, epgID: String?, title: String?, lang: String?, start: String?, end: String?, description: String?, startTimestamp: String?, stopTimestamp: String?
     var listID: String { id ?? UUID().uuidString }
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, lang, start, end, description
-        case epgID = "epg_id"
-        case startTimestamp = "start_timestamp"
-        case stopTimestamp = "stop_timestamp"
-    }
+    enum CodingKeys: String, CodingKey { case id, title, lang, start, end, description; case epgID = "epg_id", startTimestamp = "start_timestamp", stopTimestamp = "stop_timestamp" }
 }
 
 struct ShortEPGResponse: Codable {
