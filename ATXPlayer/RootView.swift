@@ -26,7 +26,9 @@ struct BrandMark: View {
 
 struct LoginView: View {
     @EnvironmentObject var session: AppSession
-    @FocusState private var codeFocused: Bool
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case username, password }
 
     var body: some View {
         ZStack {
@@ -37,50 +39,50 @@ struct LoginView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    Spacer(minLength: 76)
+                    Spacer(minLength: 62)
                     BrandMark(size: 92)
                     Text("ATLANTIX")
                         .font(.system(size: 34, weight: .black, design: .rounded))
                         .tracking(3)
                         .foregroundStyle(LinearGradient(colors: [.cyan, .white, .purple], startPoint: .leading, endPoint: .trailing))
                         .padding(.top, 22)
-                    Text("Inserisci il codice fornito dal tuo rivenditore")
+                    Text("Accedi con le credenziali del tuo account esistente")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.white.opacity(0.65))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 30)
                         .padding(.top, 8)
 
-                    VStack(spacing: 18) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "number.square.fill")
-                                .foregroundStyle(.white.opacity(0.55))
-                            TextField("000000", text: $session.accessCode)
-                                .keyboardType(.numberPad)
-                                .textContentType(.oneTimeCode)
-                                .multilineTextAlignment(.center)
-                                .font(.system(size: 26, weight: .bold, design: .monospaced))
-                                .tracking(8)
-                                .foregroundStyle(.white)
-                                .focused($codeFocused)
-                                .onChange(of: session.accessCode) { value in
-                                    let cleaned = String(value.filter(\.isNumber).prefix(6))
-                                    if cleaned != value { session.accessCode = cleaned }
+                    VStack(spacing: 15) {
+                        loginField(icon: "person.fill", title: "Nome utente") {
+                            TextField("Nome utente", text: $session.username)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .textContentType(.username)
+                                .focused($focusedField, equals: .username)
+                                .submitLabel(.next)
+                                .onSubmit { focusedField = .password }
+                        }
+
+                        loginField(icon: "lock.fill", title: "Password") {
+                            SecureField("Password", text: $session.password)
+                                .textContentType(.password)
+                                .focused($focusedField, equals: .password)
+                                .submitLabel(.go)
+                                .onSubmit {
+                                    focusedField = nil
+                                    Task { await session.signIn() }
                                 }
                         }
-                        .padding(18)
-                        .background(.black.opacity(0.24))
-                        .overlay(RoundedRectangle(cornerRadius: 17).stroke(.white.opacity(0.11)))
-                        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
 
                         Button {
-                            codeFocused = false
+                            focusedField = nil
                             Task { await session.signIn() }
                         } label: {
                             HStack(spacing: 11) {
                                 if session.isLoading { ProgressView().tint(.white) }
                                 else { Image(systemName: "play.fill") }
-                                Text(session.isLoading ? "Verifica in corso…" : "ENTRA")
+                                Text(session.isLoading ? "Accesso in corso…" : "ACCEDI")
                             }
                             .font(.headline.weight(.bold))
                             .tracking(1)
@@ -91,14 +93,14 @@ struct LoginView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                             .shadow(color: .purple.opacity(0.38), radius: 20, y: 9)
                         }
-                        .disabled(session.isLoading || session.accessCode.count != 6)
+                        .disabled(session.isLoading || session.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.password.isEmpty)
                     }
                     .padding(22)
                     .background(.white.opacity(0.055))
                     .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.1)))
                     .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                     .padding(.horizontal, 24)
-                    .padding(.top, 38)
+                    .padding(.top, 34)
 
                     if let error = session.errorMessage {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -117,6 +119,21 @@ struct LoginView: View {
                 }
             }
         }
-        .onAppear { codeFocused = false }
+        .onAppear { focusedField = nil }
+    }
+
+    private func loginField<Content: View>(icon: String, title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .frame(width: 22)
+                .foregroundStyle(.white.opacity(0.55))
+            content()
+                .foregroundStyle(.white)
+        }
+        .padding(18)
+        .background(.black.opacity(0.24))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(.white.opacity(0.11)))
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .accessibilityLabel(title)
     }
 }

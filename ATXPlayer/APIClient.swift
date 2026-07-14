@@ -3,7 +3,6 @@ import Foundation
 actor APIClient {
     static let shared = APIClient()
     private let configURL = URL(string: "https://3-cuo.icu/atxios/config.json")!
-    private let activationURL = URL(string: "https://3-cuo.icu/atxios/panel/api/activate.php")!
 
     func fetchConfig() async throws -> RemoteConfig {
         var request = URLRequest(url: configURL)
@@ -12,28 +11,6 @@ actor APIClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response)
         return try JSONDecoder().decode(RemoteConfig.self, from: data)
-    }
-
-    func activate(code: String) async throws -> ActivationResponse {
-        var request = URLRequest(url: activationURL)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["code": code])
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.serverUnavailable }
-        let decoded = try? JSONDecoder().decode(ActivationResponse.self, from: data)
-        guard 200..<300 ~= http.statusCode else {
-            if (400..<500).contains(http.statusCode) {
-                throw APIError.activation("Playlist non valida.")
-            }
-            throw APIError.serverUnavailable
-        }
-        guard let decoded, decoded.success, decoded.username != nil, decoded.password != nil else {
-            throw APIError.activation("Playlist non valida.")
-        }
-        return decoded
     }
 
     func login(baseURL: String, username: String, password: String) async throws -> LoginResponse {

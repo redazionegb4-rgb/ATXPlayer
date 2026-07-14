@@ -74,8 +74,12 @@ final class AppSession: ObservableObject {
         let hasSession = UserDefaults.standard.bool(forKey: "hasSavedSession")
         loadPlaylistCache()
         loadPlaybackProgress()
-        if hasSession, let code = KeychainStore.read("accessCode") {
-            accessCode = code
+        if hasSession,
+           let savedUsername = KeychainStore.read("username"),
+           let savedPassword = KeychainStore.read("password") {
+            username = savedUsername
+            password = savedPassword
+            accessCode = savedUsername
             baseURL = UserDefaults.standard.string(forKey: "baseURL") ?? ""
             isAuthenticated = true
             Task { await restoreSession() }
@@ -84,26 +88,16 @@ final class AppSession: ObservableObject {
 
     private func restoreSession() async {
         do {
-            let activation = try await APIClient.shared.activate(code: accessCode)
-            guard let activatedUsername = activation.username, let activatedPassword = activation.password else {
-                throw APIError.activation("Playlist non valida.")
-            }
-            username = activatedUsername
-            password = activatedPassword
             let config = try await APIClient.shared.fetchConfig()
             guard config.enabled else { throw APIError.disabled(config.message) }
             baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             UserDefaults.standard.set(baseURL, forKey: "baseURL")
-            let login: LoginResponse
-            do {
-                login = try await APIClient.shared.login(baseURL: baseURL, username: username, password: password)
-            } catch {
-                throw APIError.activation("Playlist non valida.")
-            }
+            let login = try await APIClient.shared.login(baseURL: baseURL, username: username, password: password)
             guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else {
-                throw APIError.activation("Playlist non valida.")
+                throw APIError.invalidCredentials
             }
             userInfo = login.userInfo
+            accessCode = username
             if refreshOnLaunch || (allLive.isEmpty && allMovies.isEmpty && allSeries.isEmpty) { await reloadPlaylist() }
         } catch {
             isAuthenticated = false
@@ -113,38 +107,41 @@ final class AppSession: ObservableObject {
     }
 
     func signIn() async {
-        let code = accessCode.filter(\.isNumber)
-        guard code.count == 6 else {
-            errorMessage = "Inserisci il codice di accesso di 6 cifre."
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanUsername.isEmpty, !password.isEmpty else {
+            errorMessage = "Inserisci nome utente e password."
             return
         }
-        accessCode = code
+        username = cleanUsername
         isLoading = true
         errorMessage = nil
         do {
-            let activation = try await APIClient.shared.activate(code: code)
-            guard let activatedUsername = activation.username, let activatedPassword = activation.password else {
-                throw APIError.activation("Playlist non valida.")
-            }
-            username = activatedUsername
-            password = activatedPassword
             let config = try await APIClient.shared.fetchConfig()
             guard config.enabled else { throw APIError.disabled(config.message) }
+            let cleanBaseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             let login: LoginResponse
             do {
-                login = try await APIClient.shared.login(baseURL: config.dns, username: username, password: password)
+                login = try await APIClient.shared.login(baseURL: cleanBaseURL, username: username, password: password)
+            } catch let apiError as APIError {
+                switch apiError {
+                case .serverUnavailable:
+                    throw apiError
+                default:
+                    throw APIError.invalidCredentials
+                }
             } catch {
-                // Il codice esiste nel pannello, ma le credenziali associate non
-                // producono una playlist valida/raggiungibile dal dispositivo.
-                throw APIError.activation("Playlist non valida.")
+                throw APIError.invalidCredentials
             }
             guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else {
-                throw APIError.activation("Playlist non valida.")
+                throw APIError.invalidCredentials
             }
-            baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            baseURL = cleanBaseURL
+            accessCode = username
             UserDefaults.standard.set(baseURL, forKey: "baseURL")
             userInfo = login.userInfo
-            KeychainStore.save(code, for: "accessCode")
+            KeychainStore.save(username, for: "username")
+            KeychainStore.save(password, for: "password")
+            KeychainStore.delete("accessCode")
             UserDefaults.standard.set(true, forKey: "hasSavedSession")
             UserDefaults.standard.set(true, forKey: "autoLogin")
             autoLogin = true
