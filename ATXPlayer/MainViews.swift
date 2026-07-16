@@ -59,6 +59,7 @@ struct HomeView: View {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         hero
                             .zIndex(0)
+                        homeTools
                         counters
                         quickActions
                         if !session.accountFavorites.isEmpty { favoritesRail }
@@ -88,53 +89,84 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack(spacing: 12) {
-            BrandMark(size: 46)
+            BrandMark(size: 44)
             VStack(alignment: .leading, spacing: 2) {
-                Text("ATLANTIX").font(.headline.weight(.black)).tracking(1.7)
-                Text("Ciao, \(session.username)").font(.caption).foregroundStyle(.secondary)
+                Text("ATLANTIX")
+                    .font(.headline.weight(.black))
+                    .tracking(1.7)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text("Ciao, \(session.username)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            Spacer()
-            NavigationLink { FavoritesView() } label: {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: session.accountFavorites.isEmpty ? "heart" : "heart.fill")
-                        .font(.headline.bold())
-                        .foregroundStyle(session.accountFavorites.isEmpty ? Color.primary : Color.pink)
-                        .frame(width: 48, height: 48)
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.primary.opacity(0.08)))
-                    if !session.accountFavorites.isEmpty {
-                        Text("\(min(session.accountFavorites.count, 99))")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(5)
-                            .background(Color.pink)
-                            .clipShape(Circle())
-                            .offset(x: 4, y: -4)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("La mia lista")
-            NavigationLink { WatchHistoryView() } label: {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.headline.bold())
-                    .foregroundStyle(.primary)
-                    .frame(width: 48, height: 48)
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.primary.opacity(0.08)))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Cronologia")
-            circleButton("magnifyingglass") { showSearch = true }
-            circleButton("arrow.clockwise") { Task { await session.refreshSafely() } }
+            Spacer(minLength: 12)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) { Divider().opacity(0.35) }
         .contentShape(Rectangle())
+    }
+
+    private var homeTools: some View {
+        HStack(spacing: 12) {
+            toolButton(title: "Ricerca", icon: "magnifyingglass") { showSearch = true }
+            NavigationLink { FavoritesView() } label: {
+                toolLabel(
+                    title: "La mia lista",
+                    icon: session.accountFavorites.isEmpty ? "heart" : "heart.fill",
+                    badge: session.accountFavorites.count
+                )
+            }
+            .buttonStyle(.plain)
+            NavigationLink { WatchHistoryView() } label: {
+                toolLabel(title: "Cronologia", icon: "clock.arrow.circlepath", badge: 0)
+            }
+            .buttonStyle(.plain)
+            toolButton(title: "Aggiorna", icon: session.isRefreshing ? "hourglass" : "arrow.clockwise") {
+                Task { await session.refreshSafely() }
+            }
+            .disabled(session.isRefreshing)
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private func toolButton(title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            toolLabel(title: title, icon: icon, badge: 0)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toolLabel(title: String, icon: String, badge: Int) -> some View {
+        VStack(spacing: 8) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: icon)
+                    .font(.headline.bold())
+                    .foregroundStyle(icon == "heart.fill" ? Color.pink : Color.primary)
+                    .frame(width: 48, height: 48)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                if badge > 0 {
+                    Text("\(min(badge, 99))")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(4)
+                        .background(Color.pink)
+                        .clipShape(Circle())
+                        .offset(x: 4, y: -4)
+                }
+            }
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func circleButton(_ icon: String, action: @escaping () -> Void) -> some View {
