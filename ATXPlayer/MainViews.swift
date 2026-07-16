@@ -670,6 +670,16 @@ struct MovieDetailView: View {
             details = try? await APIClient.shared.vodInfo(baseURL: session.baseURL, username: session.username, password: session.password, vodID: item.streamID)
             loadingInfo = false
         }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    session.toggleFavorite(kind: .movies, streamID: item.streamID, title: item.name, imageURL: item.streamIcon, fileExtension: item.containerExtension)
+                } label: {
+                    Image(systemName: session.isFavorite(kind: .movies, streamID: item.streamID) ? "heart.fill" : "heart")
+                }
+                .accessibilityLabel("Preferito")
+            }
+        }
     }
 }
 
@@ -710,6 +720,16 @@ struct LiveDetailView: View {
         }
         .navigationTitle(item.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    session.toggleFavorite(kind: .live, streamID: item.streamID, title: item.name, imageURL: item.streamIcon)
+                } label: {
+                    Image(systemName: session.isFavorite(kind: .live, streamID: item.streamID) ? "heart.fill" : "heart")
+                }
+                .accessibilityLabel("Preferito")
+            }
+        }
         .task { await loadEPG() }
     }
 
@@ -914,6 +934,16 @@ struct SeriesDetailView: View {
             }
         }
         .navigationTitle(item.name).navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    session.toggleFavorite(kind: .series, streamID: item.seriesID, title: item.name, imageURL: item.cover)
+                } label: {
+                    Image(systemName: session.isFavorite(kind: .series, streamID: item.seriesID) ? "heart.fill" : "heart")
+                }
+                .accessibilityLabel("Preferito")
+            }
+        }
         .task { await load() }
     }
 
@@ -1543,6 +1573,99 @@ struct SearchResultRow: View {
     }
 }
 
+struct FavoritesView: View {
+    @EnvironmentObject var session: AppSession
+
+    private var liveItems: [FavoriteItem] { session.accountFavorites.filter { $0.kind == ContentType.live.rawValue } }
+    private var movieItems: [FavoriteItem] { session.accountFavorites.filter { $0.kind == ContentType.movies.rawValue } }
+    private var seriesItems: [FavoriteItem] { session.accountFavorites.filter { $0.kind == ContentType.series.rawValue } }
+
+    var body: some View {
+        Group {
+            if session.accountFavorites.isEmpty {
+                EmptyStateView(title: "Nessun preferito", icon: "heart", message: "Aggiungi film, serie e canali alla tua lista usando il cuore nelle pagine dettaglio.")
+            } else {
+                List {
+                    if !liveItems.isEmpty {
+                        Section("Diretta") {
+                            ForEach(liveItems) { favorite in
+                                favoriteRow(favorite)
+                            }
+                        }
+                    }
+                    if !movieItems.isEmpty {
+                        Section("Film") {
+                            ForEach(movieItems) { favorite in
+                                favoriteRow(favorite)
+                            }
+                        }
+                    }
+                    if !seriesItems.isEmpty {
+                        Section("Serie TV") {
+                            ForEach(seriesItems) { favorite in
+                                favoriteRow(favorite)
+                            }
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+        }
+        .navigationTitle("La mia lista")
+    }
+
+    @ViewBuilder
+    private func favoriteRow(_ favorite: FavoriteItem) -> some View {
+        if favorite.kind == ContentType.live.rawValue,
+           let item = session.allLive.first(where: { $0.streamID == favorite.streamID }) {
+            NavigationLink { LiveDetailView(item: item) } label: {
+                FavoriteRowContent(favorite: favorite, icon: "dot.radiowaves.left.and.right")
+            }
+        } else if favorite.kind == ContentType.movies.rawValue,
+                  let item = session.allMovies.first(where: { $0.streamID == favorite.streamID }) {
+            NavigationLink { MovieDetailView(item: item) } label: {
+                FavoriteRowContent(favorite: favorite, icon: "film.fill")
+            }
+        } else if favorite.kind == ContentType.series.rawValue,
+                  let item = session.allSeries.first(where: { $0.seriesID == favorite.streamID }) {
+            NavigationLink { SeriesDetailView(item: item) } label: {
+                FavoriteRowContent(favorite: favorite, icon: "rectangle.stack.fill")
+            }
+        } else {
+            FavoriteRowContent(favorite: favorite, icon: "heart.fill")
+        }
+    }
+}
+
+struct FavoriteRowContent: View {
+    let favorite: FavoriteItem
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: URL(string: favorite.imageURL ?? "")) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFill()
+                } else {
+                    ZStack {
+                        Color(uiColor: .secondarySystemBackground)
+                        Image(systemName: icon).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(width: 58, height: 58)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Text(favorite.title)
+                .font(.headline)
+                .lineLimit(2)
+
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var session: AppSession
     @State private var showLogout = false
@@ -1555,6 +1678,11 @@ struct SettingsView: View {
             } header: { Text("Account") }
             Section("Riproduzione") { Toggle("Riproduzione automatica", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })); Toggle("Aggiorna all'apertura", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })); Label("Picture in Picture", systemImage: "pip.fill"); Label("AirPlay", systemImage: "airplayvideo") }
             Section("Aspetto") { Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Automatico").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") } }
+            Section("Raccolta") {
+                NavigationLink { FavoritesView() } label: {
+                    Label("La mia lista", systemImage: "heart.fill")
+                }
+            }
             Section("Sicurezza") { Toggle("Controllo genitori", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) })) }
             Section { Button("Esci dall'account", role: .destructive) { showLogout = true } }
         }
@@ -1563,7 +1691,7 @@ struct SettingsView: View {
             Button("Annulla", role: .cancel) { }
             Button("Esci", role: .destructive) { session.signOut() }
         } message: {
-            Text("Dovrai inserire nuovamente il codice di accesso per entrare.")
+            Text("Dovrai inserire nuovamente nome utente e password per entrare.")
         }
     }
     private var expiry: String { guard let timestamp = session.userInfo?.expDate, let seconds = TimeInterval(timestamp) else { return "—" }; return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted) }

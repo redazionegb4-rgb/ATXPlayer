@@ -22,6 +22,19 @@ struct PlaybackProgress: Codable, Identifiable, Hashable {
     }
 }
 
+
+
+struct FavoriteItem: Codable, Identifiable, Hashable {
+    let id: String
+    let ownerCode: String
+    let kind: String
+    let streamID: Int
+    let title: String
+    let imageURL: String?
+    let fileExtension: String?
+    let addedAt: Date
+}
+
 struct PlaybackDescriptor: Hashable {
     let kind: ContentType
     let streamID: Int
@@ -67,6 +80,7 @@ final class AppSession: ObservableObject {
     @Published var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
     @Published private(set) var playbackProgress: [PlaybackProgress] = []
+    @Published private(set) var favorites: [FavoriteItem] = []
 
     var colorScheme: ColorScheme? { appearance == "light" ? .light : appearance == "dark" ? .dark : nil }
 
@@ -74,6 +88,7 @@ final class AppSession: ObservableObject {
         let hasSession = UserDefaults.standard.bool(forKey: "hasSavedSession")
         loadPlaylistCache()
         loadPlaybackProgress()
+        loadFavorites()
         if hasSession,
            let savedUsername = KeychainStore.read("username"),
            let savedPassword = KeychainStore.read("password") {
@@ -287,6 +302,56 @@ final class AppSession: ObservableObject {
     func descriptor(from progress: PlaybackProgress) -> PlaybackDescriptor? {
         guard let kind = ContentType(rawValue: progress.kind) else { return nil }
         return PlaybackDescriptor(kind: kind, streamID: progress.streamID, title: progress.title, subtitle: progress.subtitle, imageURL: progress.imageURL, fileExtension: progress.fileExtension)
+    }
+
+    var accountFavorites: [FavoriteItem] {
+        favorites
+            .filter { $0.ownerCode == accessCode }
+            .sorted { $0.addedAt > $1.addedAt }
+    }
+
+    func isFavorite(kind: ContentType, streamID: Int) -> Bool {
+        favorites.contains { $0.id == favoriteKey(kind: kind, streamID: streamID) }
+    }
+
+    func toggleFavorite(kind: ContentType, streamID: Int, title: String, imageURL: String?, fileExtension: String? = nil) {
+        let key = favoriteKey(kind: kind, streamID: streamID)
+        if favorites.contains(where: { $0.id == key }) {
+            favorites.removeAll { $0.id == key }
+        } else {
+            favorites.append(FavoriteItem(
+                id: key,
+                ownerCode: accessCode,
+                kind: kind.rawValue,
+                streamID: streamID,
+                title: title,
+                imageURL: imageURL,
+                fileExtension: fileExtension,
+                addedAt: Date()
+            ))
+        }
+        saveFavorites()
+    }
+
+    private func favoriteKey(kind: ContentType, streamID: Int) -> String {
+        "\(accessCode):favorite:\(kind.rawValue):\(streamID)"
+    }
+
+    private var favoritesURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("atlantix-favorites.json")
+    }
+
+    private func loadFavorites() {
+        guard let data = try? Data(contentsOf: favoritesURL),
+              let values = try? JSONDecoder().decode([FavoriteItem].self, from: data) else { return }
+        favorites = values
+    }
+
+    private func saveFavorites() {
+        guard let data = try? JSONEncoder().encode(favorites) else { return }
+        try? data.write(to: favoritesURL, options: .atomic)
     }
 
     private func playbackKey(for descriptor: PlaybackDescriptor) -> String {
