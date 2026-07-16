@@ -38,6 +38,7 @@ struct HomeView: View {
     @EnvironmentObject var session: AppSession
     @State private var featuredIndex = 0
     @State private var showSearch = false
+    @State private var showLibrary = false
     private let timer = Timer.publish(every: 8, on: .main, in: .common).autoconnect()
 
     private var features: [FeaturedContent] {
@@ -75,6 +76,7 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { GlobalSearchView() } }
+        .sheet(isPresented: $showLibrary) { NavigationStack { MyLibraryView() } }
         .onReceive(timer) { _ in
             guard features.count > 1 else { return }
             withAnimation(.easeInOut(duration: 0.65)) { featuredIndex = (featuredIndex + 1) % features.count }
@@ -92,6 +94,7 @@ struct HomeView: View {
                 Text("Ciao, \(session.username)").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            circleButton("heart.fill") { showLibrary = true }
             circleButton("magnifyingglass") { showSearch = true }
             circleButton("arrow.clockwise") { Task { await session.refreshSafely() } }
         }
@@ -382,7 +385,7 @@ struct ItemGrid: View {
     @State private var loading = true
     @State private var error: String?
     @State private var search = ""
-    @State private var newestFirst = true
+    @State private var sortMode: CatalogSortMode = .newest
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
     var body: some View {
@@ -441,22 +444,16 @@ struct ItemGrid: View {
 
     private var sortControl: some View {
         HStack {
-            Label("Ordina per aggiunta", systemImage: "arrow.up.arrow.down")
+            Label("Ordina contenuti", systemImage: "arrow.up.arrow.down")
                 .font(.subheadline.weight(.semibold))
             Spacer()
             Menu {
-                Button { newestFirst = true } label: {
-                    Label("Ultimi aggiunti", systemImage: newestFirst ? "checkmark" : "clock.arrow.circlepath")
-                }
-                Button { newestFirst = false } label: {
-                    Label("Meno recenti", systemImage: !newestFirst ? "checkmark" : "clock")
+                ForEach(CatalogSortMode.allCases) { mode in
+                    Button { sortMode = mode } label: { Label(mode.title, systemImage: sortMode == mode ? "checkmark" : mode.icon) }
                 }
             } label: {
-                HStack(spacing: 6) {
-                    Text(newestFirst ? "Ultimi aggiunti" : "Meno recenti")
-                    Image(systemName: "chevron.up.chevron.down")
-                }
-                .font(.subheadline.weight(.semibold)).foregroundStyle(.purple)
+                HStack(spacing: 6) { Text(sortMode.title); Image(systemName: "chevron.up.chevron.down") }
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(.purple)
             }
         }
         .padding(.horizontal, 18).padding(.top, 12)
@@ -474,13 +471,34 @@ struct ItemGrid: View {
                 NavigationLink { LiveDetailView(item: item) } label: { LiveChannelCard(item: item) }.buttonStyle(.plain)
             }
         } else if type == .movies {
-            ForEach(vod.filter(matchMovie).sorted { newestFirst ? numericDateValue($0.added) > numericDateValue($1.added) : numericDateValue($0.added) < numericDateValue($1.added) }) { item in
+            ForEach(sortedMovies) { item in
                 NavigationLink { MovieDetailView(item: item) } label: { ModernPosterCard(title: item.name, imageURL: item.streamIcon, badge: item.rating, typeLabel: "FILM") }.buttonStyle(.plain)
             }
         } else {
-            ForEach(series.filter(matchSeries).sorted { newestFirst ? seriesSortValue($0) > seriesSortValue($1) : seriesSortValue($0) < seriesSortValue($1) }) { item in
+            ForEach(sortedSeries) { item in
                 NavigationLink { SeriesDetailView(item: item) } label: { ModernPosterCard(title: item.name, imageURL: item.cover, badge: item.rating, typeLabel: "SERIE") }.buttonStyle(.plain)
             }
+        }
+    }
+
+    private var sortedMovies: [VODStream] {
+        let values = vod.filter(matchMovie)
+        switch sortMode {
+        case .newest: return values.sorted { numericDateValue($0.added) > numericDateValue($1.added) }
+        case .oldest: return values.sorted { numericDateValue($0.added) < numericDateValue($1.added) }
+        case .nameAZ: return values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .nameZA: return values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedDescending }
+        case .yearNewest: return values.sorted { numericDateValue($0.releaseDate) > numericDateValue($1.releaseDate) }
+        }
+    }
+    private var sortedSeries: [SeriesItem] {
+        let values = series.filter(matchSeries)
+        switch sortMode {
+        case .newest: return values.sorted { seriesSortValue($0) > seriesSortValue($1) }
+        case .oldest: return values.sorted { seriesSortValue($0) < seriesSortValue($1) }
+        case .nameAZ: return values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .nameZA: return values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedDescending }
+        case .yearNewest: return values.sorted { numericDateValue($0.releaseDate) > numericDateValue($1.releaseDate) }
         }
     }
 
@@ -631,6 +649,10 @@ struct MovieDetailView: View {
         }
     }
 
+    private var movieDescriptor: PlaybackDescriptor {
+        PlaybackDescriptor(kind: .movies, streamID: details?.movieData?.streamID ?? item.streamID, title: info?.name ?? item.name, subtitle: "Film", imageURL: info?.movieImage ?? item.streamIcon, fileExtension: details?.movieData?.containerExtension ?? item.containerExtension)
+    }
+
     var body: some View {
         MediaDetailLayout(
             title: info?.name ?? item.name,
@@ -666,6 +688,11 @@ struct MovieDetailView: View {
         .overlay(alignment: .topTrailing) {
             if loadingInfo { ProgressView().tint(.white).padding(22) }
         }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { session.toggleFavorite(movieDescriptor) } label: { Image(systemName: session.isFavorite(movieDescriptor) ? "heart.fill" : "heart") }
+            }
+        }
         .task {
             details = try? await APIClient.shared.vodInfo(baseURL: session.baseURL, username: session.username, password: session.password, vodID: item.streamID)
             loadingInfo = false
@@ -689,6 +716,8 @@ struct LiveDetailView: View {
         } ?? epg.first
     }
 
+    private var liveDescriptor: PlaybackDescriptor { PlaybackDescriptor(kind: .live, streamID: item.streamID, title: item.name, subtitle: "Canale in diretta", imageURL: item.streamIcon, fileExtension: nil) }
+
     var body: some View {
         ZStack {
             pageBackground.ignoresSafeArea()
@@ -710,6 +739,7 @@ struct LiveDetailView: View {
         }
         .navigationTitle(item.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { session.toggleFavorite(liveDescriptor) } label: { Image(systemName: session.isFavorite(liveDescriptor) ? "heart.fill" : "heart") } } }
         .task { await loadEPG() }
     }
 
@@ -848,6 +878,8 @@ struct SeriesDetailView: View {
     private var seasons: [String] { (info?.episodes.keys.map { $0 } ?? []).sorted { (Int($0) ?? 0) < (Int($1) ?? 0) } }
     private var episodes: [Episode] { info?.episodes[selectedSeason] ?? [] }
 
+    private var seriesDescriptor: PlaybackDescriptor { PlaybackDescriptor(kind: .series, streamID: item.seriesID, title: item.name, subtitle: "Serie TV", imageURL: item.cover, fileExtension: nil) }
+
     var body: some View {
         ZStack {
             pageBackground.ignoresSafeArea()
@@ -914,6 +946,7 @@ struct SeriesDetailView: View {
             }
         }
         .navigationTitle(item.name).navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { session.toggleFavorite(seriesDescriptor) } label: { Image(systemName: session.isFavorite(seriesDescriptor) ? "heart.fill" : "heart") } } }
         .task { await load() }
     }
 
@@ -1500,9 +1533,10 @@ struct GlobalSearchView: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.dismiss) var dismiss
     @State private var search = ""
-    private var movies: [VODStream] { search.isEmpty ? [] : Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
-    private var series: [SeriesItem] { search.isEmpty ? [] : Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
-    private var live: [LiveStream] { search.isEmpty ? [] : Array(session.allLive.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
+    @State private var scope: SearchScope = .all
+    private var movies: [VODStream] { search.isEmpty || !(scope == .all || scope == .movies) ? [] : Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
+    private var series: [SeriesItem] { search.isEmpty || !(scope == .all || scope == .series) ? [] : Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
+    private var live: [LiveStream] { search.isEmpty || !(scope == .all || scope == .live) ? [] : Array(session.allLive.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
     var body: some View {
         ZStack {
             pageBackground.ignoresSafeArea()
@@ -1516,6 +1550,7 @@ struct GlobalSearchView: View {
                 }.padding(.bottom, 40)
             }
         }
+        .safeAreaInset(edge: .top) { Picker("Tipo", selection: $scope) { ForEach(SearchScope.allCases) { Text($0.title).tag($0) } }.pickerStyle(.segmented).padding(.horizontal).padding(.vertical, 6).background(.ultraThinMaterial) }
         .navigationTitle("Cerca").navigationBarTitleDisplayMode(.inline).searchable(text: $search, prompt: "Film, serie o canale")
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Chiudi") { dismiss() } } }
     }
@@ -1543,6 +1578,62 @@ struct SearchResultRow: View {
     }
 }
 
+enum CatalogSortMode: String, CaseIterable, Identifiable {
+    case newest, oldest, nameAZ, nameZA, yearNewest
+    var id: String { rawValue }
+    var title: String { switch self { case .newest: return "Ultimi aggiunti"; case .oldest: return "Meno recenti"; case .nameAZ: return "Nome A–Z"; case .nameZA: return "Nome Z–A"; case .yearNewest: return "Anno più recente" } }
+    var icon: String { switch self { case .newest: return "clock.arrow.circlepath"; case .oldest: return "clock"; case .nameAZ, .nameZA: return "textformat"; case .yearNewest: return "calendar" } }
+}
+
+enum SearchScope: String, CaseIterable, Identifiable {
+    case all, movies, series, live
+    var id: String { rawValue }
+    var title: String { switch self { case .all: return "Tutto"; case .movies: return "Film"; case .series: return "Serie"; case .live: return "Diretta" } }
+}
+
+struct MyLibraryView: View {
+    @EnvironmentObject var session: AppSession
+    @State private var selection = 0
+    var body: some View {
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            VStack(spacing: 12) {
+                Picker("Raccolta", selection: $selection) { Text("Preferiti").tag(0); Text("Cronologia").tag(1) }.pickerStyle(.segmented).padding(.horizontal)
+                if currentItems.isEmpty {
+                    Spacer(); EmptyStateView(title: selection == 0 ? "Nessun preferito" : "Cronologia vuota", icon: selection == 0 ? "heart" : "clock.arrow.circlepath", message: selection == 0 ? "Aggiungi film, serie e canali con il pulsante a forma di cuore." : "I contenuti riprodotti appariranno qui."); Spacer()
+                } else {
+                    ScrollView { LazyVStack(spacing: 12) { ForEach(currentItems) { item in libraryRow(item) } }.padding(.horizontal).padding(.bottom, 40) }
+                }
+            }.padding(.top, 8)
+        }
+        .navigationTitle("La mia lista")
+        .toolbar { if selection == 1 && !currentItems.isEmpty { ToolbarItem(placement: .topBarTrailing) { Button("Cancella") { session.clearHistory() } } } }
+    }
+    private var currentItems: [LibraryItem] { selection == 0 ? session.favoriteItems : session.historyItems }
+    @ViewBuilder private func libraryRow(_ item: LibraryItem) -> some View {
+        if let descriptor = session.descriptor(from: item) {
+            NavigationLink { destination(descriptor) } label: {
+                HStack(spacing: 14) {
+                    AsyncImage(url: URL(string: item.imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }.frame(width: 82, height: 82).clipShape(RoundedRectangle(cornerRadius: 16)).clipped()
+                    VStack(alignment: .leading, spacing: 5) { Text(item.title).font(.headline).lineLimit(2); Text(item.subtitle ?? label(for: descriptor.kind)).font(.caption).foregroundStyle(.secondary) }
+                    Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                }.padding(12).background(Color(uiColor: .secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 20))
+            }.buttonStyle(.plain)
+        }
+    }
+    @ViewBuilder private func destination(_ descriptor: PlaybackDescriptor) -> some View {
+        switch descriptor.kind {
+        case .movies:
+            if let item = session.allMovies.first(where: { $0.streamID == descriptor.streamID }) { MovieDetailView(item: item) } else { PlayerScreen(title: descriptor.title, url: session.streamURL(type: .movies, id: descriptor.streamID, ext: descriptor.fileExtension), isLive: false, resume: descriptor) }
+        case .series:
+            if let item = session.allSeries.first(where: { $0.seriesID == descriptor.streamID }) { SeriesDetailView(item: item) } else { PlayerScreen(title: descriptor.title, url: session.streamURL(type: .series, id: descriptor.streamID, ext: descriptor.fileExtension), isLive: false, resume: descriptor) }
+        case .live:
+            if let item = session.allLive.first(where: { $0.streamID == descriptor.streamID }) { LiveDetailView(item: item) } else { PlayerScreen(title: descriptor.title, url: session.streamURL(type: .live, id: descriptor.streamID), isLive: true) }
+        }
+    }
+    private func label(for type: ContentType) -> String { type == .movies ? "Film" : type == .series ? "Serie TV" : "Diretta TV" }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var session: AppSession
     @State private var showLogout = false
@@ -1556,6 +1647,7 @@ struct SettingsView: View {
             Section("Riproduzione") { Toggle("Riproduzione automatica", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })); Toggle("Aggiorna all'apertura", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })); Label("Picture in Picture", systemImage: "pip.fill"); Label("AirPlay", systemImage: "airplayvideo") }
             Section("Aspetto") { Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Automatico").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") } }
             Section("Sicurezza") { Toggle("Controllo genitori", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) })) }
+            Section("La mia raccolta") { NavigationLink { MyLibraryView() } label: { Label("Preferiti e cronologia", systemImage: "heart.text.square.fill") } }
             Section { Button("Esci dall'account", role: .destructive) { showLogout = true } }
         }
         .navigationTitle("Impostazioni")
@@ -1563,7 +1655,7 @@ struct SettingsView: View {
             Button("Annulla", role: .cancel) { }
             Button("Esci", role: .destructive) { session.signOut() }
         } message: {
-            Text("Dovrai inserire nuovamente il codice di accesso per entrare.")
+            Text("Dovrai inserire nuovamente nome utente e password per accedere.")
         }
     }
     private var expiry: String { guard let timestamp = session.userInfo?.expDate, let seconds = TimeInterval(timestamp) else { return "—" }; return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted) }

@@ -22,6 +22,20 @@ struct PlaybackProgress: Codable, Identifiable, Hashable {
     }
 }
 
+
+
+struct LibraryItem: Codable, Identifiable, Hashable {
+    let id: String
+    let ownerCode: String
+    let kind: String
+    let streamID: Int
+    let title: String
+    let subtitle: String?
+    let imageURL: String?
+    let fileExtension: String?
+    var updatedAt: Date
+}
+
 struct PlaybackDescriptor: Hashable {
     let kind: ContentType
     let streamID: Int
@@ -67,6 +81,8 @@ final class AppSession: ObservableObject {
     @Published var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
     @Published private(set) var playbackProgress: [PlaybackProgress] = []
+    @Published private(set) var favorites: [LibraryItem] = []
+    @Published private(set) var watchHistory: [LibraryItem] = []
 
     var colorScheme: ColorScheme? { appearance == "light" ? .light : appearance == "dark" ? .dark : nil }
 
@@ -74,6 +90,7 @@ final class AppSession: ObservableObject {
         let hasSession = UserDefaults.standard.bool(forKey: "hasSavedSession")
         loadPlaylistCache()
         loadPlaybackProgress()
+        loadLibrary()
         if hasSession,
            let savedUsername = KeychainStore.read("username"),
            let savedPassword = KeychainStore.read("password") {
@@ -241,6 +258,43 @@ final class AppSession: ObservableObject {
         lastRefresh = cache.lastRefresh
     }
 
+    var favoriteItems: [LibraryItem] {
+        favorites.filter { $0.ownerCode == accessCode }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    var historyItems: [LibraryItem] {
+        watchHistory.filter { $0.ownerCode == accessCode }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    func isFavorite(_ descriptor: PlaybackDescriptor) -> Bool {
+        favorites.contains { $0.id == libraryKey(for: descriptor) }
+    }
+
+    func toggleFavorite(_ descriptor: PlaybackDescriptor) {
+        let key = libraryKey(for: descriptor)
+        if let index = favorites.firstIndex(where: { $0.id == key }) {
+            favorites.remove(at: index)
+        } else {
+            favorites.append(LibraryItem(id: key, ownerCode: accessCode, kind: descriptor.kind.rawValue, streamID: descriptor.streamID, title: descriptor.title, subtitle: descriptor.subtitle, imageURL: descriptor.imageURL, fileExtension: descriptor.fileExtension, updatedAt: Date()))
+        }
+        saveLibrary()
+    }
+
+    func addToHistory(_ descriptor: PlaybackDescriptor) {
+        let key = libraryKey(for: descriptor)
+        watchHistory.removeAll { $0.id == key }
+        watchHistory.append(LibraryItem(id: key, ownerCode: accessCode, kind: descriptor.kind.rawValue, streamID: descriptor.streamID, title: descriptor.title, subtitle: descriptor.subtitle, imageURL: descriptor.imageURL, fileExtension: descriptor.fileExtension, updatedAt: Date()))
+        if watchHistory.count > 150 { watchHistory = Array(watchHistory.sorted { $0.updatedAt > $1.updatedAt }.prefix(150)) }
+        saveLibrary()
+    }
+
+    func clearHistory() { watchHistory.removeAll { $0.ownerCode == accessCode }; saveLibrary() }
+
+    func descriptor(from item: LibraryItem) -> PlaybackDescriptor? {
+        guard let kind = ContentType(rawValue: item.kind) else { return nil }
+        return PlaybackDescriptor(kind: kind, streamID: item.streamID, title: item.title, subtitle: item.subtitle, imageURL: item.imageURL, fileExtension: item.fileExtension)
+    }
+
     var continueWatching: [PlaybackProgress] {
         playbackProgress
             .filter { $0.ownerCode == accessCode && $0.position >= 20 && $0.duration > 0 && $0.fraction < 0.94 }
@@ -308,6 +362,27 @@ final class AppSession: ObservableObject {
     private func savePlaybackProgress() {
         guard let data = try? JSONEncoder().encode(playbackProgress) else { return }
         try? data.write(to: playbackProgressURL, options: .atomic)
+    }
+
+
+    private func libraryKey(for descriptor: PlaybackDescriptor) -> String { "\(accessCode):\(descriptor.keyPart)" }
+
+    private var libraryURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("atlantix-library.json")
+    }
+
+    private struct LibraryStore: Codable { let favorites: [LibraryItem]; let history: [LibraryItem] }
+
+    private func loadLibrary() {
+        guard let data = try? Data(contentsOf: libraryURL), let store = try? JSONDecoder().decode(LibraryStore.self, from: data) else { return }
+        favorites = store.favorites; watchHistory = store.history
+    }
+
+    private func saveLibrary() {
+        guard let data = try? JSONEncoder().encode(LibraryStore(favorites: favorites, history: watchHistory)) else { return }
+        try? data.write(to: libraryURL, options: .atomic)
     }
 
     func setAppearance(_ value: String) { appearance = value; UserDefaults.standard.set(value, forKey: "appearance") }
