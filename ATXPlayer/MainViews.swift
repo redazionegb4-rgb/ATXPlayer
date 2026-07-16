@@ -1586,13 +1586,32 @@ struct FavoriteToggleButton: View {
     }
 }
 
+struct FavoriteRowModel: Identifiable {
+    let id: String
+    let item: FavoriteItem
+    let descriptor: PlaybackDescriptor
+}
+
+struct HistoryRowModel: Identifiable {
+    let id: String
+    let item: WatchHistoryItem
+    let descriptor: PlaybackDescriptor
+}
+
 struct LibraryView: View {
     @EnvironmentObject private var session: AppSession
+
+    private var rows: [FavoriteRowModel] {
+        session.accountFavorites.compactMap { item in
+            guard let descriptor = session.descriptor(from: item) else { return nil }
+            return FavoriteRowModel(id: item.id, item: item, descriptor: descriptor)
+        }
+    }
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                if session.accountFavorites.isEmpty {
+                if rows.isEmpty {
                     EmptyStateView(
                         title: "Nessun preferito",
                         icon: "heart",
@@ -1600,24 +1619,20 @@ struct LibraryView: View {
                     )
                     .padding(.top, 80)
                 } else {
-                    ForEach(session.accountFavorites) { item in
-                        if let descriptor = session.descriptor(from: item) {
-                            NavigationLink {
-                                FavoriteDestination(descriptor: descriptor)
+                    ForEach(rows) { row in
+                        NavigationLink(destination: FavoriteDestination(descriptor: row.descriptor)) {
+                            SearchResultRow(
+                                title: row.item.title,
+                                subtitle: row.item.subtitle ?? "Preferito",
+                                imageURL: row.item.imageURL
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                session.toggleFavorite(row.descriptor)
                             } label: {
-                                SearchResultRow(
-                                    title: item.title,
-                                    subtitle: item.subtitle ?? "Preferito",
-                                    imageURL: item.imageURL
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    session.toggleFavorite(descriptor)
-                                } label: {
-                                    Label("Rimuovi", systemImage: "trash")
-                                }
+                                Label("Rimuovi", systemImage: "trash")
                             }
                         }
                     }
@@ -1672,10 +1687,17 @@ struct SeriesFavoritePlaceholder: View {
 struct WatchHistoryView: View {
     @EnvironmentObject private var session: AppSession
 
+    private var rows: [HistoryRowModel] {
+        session.accountHistory.compactMap { item in
+            guard let descriptor = session.descriptor(from: item) else { return nil }
+            return HistoryRowModel(id: item.id, item: item, descriptor: descriptor)
+        }
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                if session.accountHistory.isEmpty {
+                if rows.isEmpty {
                     EmptyStateView(
                         title: "Cronologia vuota",
                         icon: "clock.arrow.circlepath",
@@ -1683,19 +1705,15 @@ struct WatchHistoryView: View {
                     )
                     .padding(.top, 80)
                 } else {
-                    ForEach(session.accountHistory) { item in
-                        if let descriptor = session.descriptor(from: item) {
-                            NavigationLink {
-                                FavoriteDestination(descriptor: descriptor)
-                            } label: {
-                                SearchResultRow(
-                                    title: item.title,
-                                    subtitle: item.subtitle ?? "Riprodotto",
-                                    imageURL: item.imageURL
-                                )
-                            }
-                            .buttonStyle(.plain)
+                    ForEach(rows) { row in
+                        NavigationLink(destination: FavoriteDestination(descriptor: row.descriptor)) {
+                            SearchResultRow(
+                                title: row.item.title,
+                                subtitle: row.item.subtitle ?? "Riprodotto",
+                                imageURL: row.item.imageURL
+                            )
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -1703,8 +1721,8 @@ struct WatchHistoryView: View {
         }
         .navigationTitle("Cronologia")
         .toolbar {
-            if !session.accountHistory.isEmpty {
-                ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if !rows.isEmpty {
                     Button("Cancella", role: .destructive) {
                         session.clearWatchHistory()
                     }
