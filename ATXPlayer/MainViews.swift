@@ -1573,13 +1573,11 @@ struct FavoriteToggleButton: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 13)
             .foregroundStyle(selected ? Color.white : Color.purple)
-            .background {
-                if selected {
-                    brandGradient
-                } else {
-                    Color(uiColor: .secondarySystemBackground)
-                }
-            }
+            .background(
+                selected
+                    ? AnyShapeStyle(brandGradient)
+                    : AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
+            )
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
