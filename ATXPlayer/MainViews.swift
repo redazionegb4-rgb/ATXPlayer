@@ -38,7 +38,6 @@ struct HomeView: View {
     @EnvironmentObject var session: AppSession
     @State private var featuredIndex = 0
     @State private var showSearch = false
-    @State private var showLibrary = false
     private let timer = Timer.publish(every: 8, on: .main, in: .common).autoconnect()
 
     private var features: [FeaturedContent] {
@@ -76,7 +75,6 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { GlobalSearchView() } }
-        .sheet(isPresented: $showLibrary) { NavigationStack { LibraryView() } }
         .onReceive(timer) { _ in
             guard features.count > 1 else { return }
             withAnimation(.easeInOut(duration: 0.65)) { featuredIndex = (featuredIndex + 1) % features.count }
@@ -94,7 +92,6 @@ struct HomeView: View {
                 Text("Ciao, \(session.username)").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            circleButton("heart.fill") { showLibrary = true }
             circleButton("magnifyingglass") { showSearch = true }
             circleButton("arrow.clockwise") { Task { await session.refreshSafely() } }
         }
@@ -655,18 +652,15 @@ struct MovieDetailView: View {
                 imageURL: info?.movieImage ?? item.streamIcon,
                 fileExtension: movieExt
             )
-            VStack(spacing: 10) {
-                NavigationLink {
-                    PlayerScreen(
-                        title: info?.name ?? item.name,
-                        url: session.streamURL(type: .movies, id: movieID, ext: movieExt),
-                        isLive: false,
-                        resume: descriptor
-                    )
-                } label: {
-                    playButton(session.savedProgress(for: descriptor) == nil ? "Guarda film" : "Riprendi film")
-                }
-                favoriteButton(descriptor)
+            NavigationLink {
+                PlayerScreen(
+                    title: info?.name ?? item.name,
+                    url: session.streamURL(type: .movies, id: movieID, ext: movieExt),
+                    isLive: false,
+                    resume: descriptor
+                )
+            } label: {
+                playButton(session.savedProgress(for: descriptor) == nil ? "Guarda film" : "Riprendi film")
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -706,7 +700,6 @@ struct LiveDetailView: View {
                     } label: {
                         playButton("Guarda in diretta")
                     }
-                    favoriteButton(PlaybackDescriptor(kind: .live, streamID: item.streamID, title: item.name, subtitle: "Canale in diretta", imageURL: item.streamIcon, fileExtension: nil))
 
                     Text("Guida TV").font(.title2.bold()).foregroundStyle(.primary)
                     epgSection
@@ -861,7 +854,6 @@ struct SeriesDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     SeriesHeader(item: item, details: info?.info)
-                    favoriteButton(PlaybackDescriptor(kind: .series, streamID: item.seriesID, title: item.name, subtitle: "Serie TV", imageURL: item.cover, fileExtension: nil))
                     if loading { ProgressView("Caricamento stagioni…").tint(.white).frame(maxWidth: .infinity).padding(30) }
                     else if let error { EmptyStateView(title: "Episodi non disponibili", icon: "rectangle.stack.badge.exclamationmark", message: error) }
                     else if seasons.isEmpty { EmptyStateView(title: "Nessun episodio", icon: "rectangle.stack", message: "Il server non ha restituito stagioni o episodi per questa serie.") }
@@ -1551,185 +1543,6 @@ struct SearchResultRow: View {
     }
 }
 
-@ViewBuilder
-private func favoriteButton(_ descriptor: PlaybackDescriptor) -> some View {
-    FavoriteToggleButton(descriptor: descriptor)
-}
-
-struct FavoriteToggleButton: View {
-    @EnvironmentObject private var session: AppSession
-    let descriptor: PlaybackDescriptor
-
-    var body: some View {
-        let selected = session.isFavorite(descriptor)
-        Button {
-            session.toggleFavorite(descriptor)
-        } label: {
-            Label(
-                selected ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
-                systemImage: selected ? "heart.fill" : "heart"
-            )
-            .font(.subheadline.bold())
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
-            .foregroundStyle(selected ? Color.white : Color.purple)
-            .background(
-                selected
-                    ? AnyShapeStyle(brandGradient)
-                    : AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct FavoriteRowModel: Identifiable {
-    let id: String
-    let item: FavoriteItem
-    let descriptor: PlaybackDescriptor
-}
-
-struct HistoryRowModel: Identifiable {
-    let id: String
-    let item: WatchHistoryItem
-    let descriptor: PlaybackDescriptor
-}
-
-struct LibraryView: View {
-    @EnvironmentObject private var session: AppSession
-
-    private var rows: [FavoriteRowModel] {
-        session.accountFavorites.compactMap { item in
-            guard let descriptor = session.descriptor(from: item) else { return nil }
-            return FavoriteRowModel(id: item.id, item: item, descriptor: descriptor)
-        }
-    }
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                if rows.isEmpty {
-                    EmptyStateView(
-                        title: "Nessun preferito",
-                        icon: "heart",
-                        message: "Aggiungi film, serie e canali alla tua raccolta."
-                    )
-                    .padding(.top, 80)
-                } else {
-                    ForEach(rows) { row in
-                        NavigationLink(destination: FavoriteDestination(descriptor: row.descriptor)) {
-                            SearchResultRow(
-                                title: row.item.title,
-                                subtitle: row.item.subtitle ?? "Preferito",
-                                imageURL: row.item.imageURL
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                session.toggleFavorite(row.descriptor)
-                            } label: {
-                                Label("Rimuovi", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-            }
-            .padding()
-        }
-        .navigationTitle("Preferiti")
-    }
-}
-
-struct FavoriteDestination: View {
-    @EnvironmentObject private var session: AppSession
-    let descriptor: PlaybackDescriptor
-
-    @ViewBuilder
-    var body: some View {
-        switch descriptor.kind {
-        case .live:
-            PlayerScreen(
-                title: descriptor.title,
-                url: session.streamURL(type: .live, id: descriptor.streamID),
-                isLive: true
-            )
-        case .movies:
-            PlayerScreen(
-                title: descriptor.title,
-                url: session.streamURL(type: .movies, id: descriptor.streamID, ext: descriptor.fileExtension),
-                isLive: false,
-                resume: descriptor
-            )
-        case .series:
-            SeriesFavoritePlaceholder(descriptor: descriptor)
-        }
-    }
-}
-
-struct SeriesFavoritePlaceholder: View {
-    let descriptor: PlaybackDescriptor
-
-    var body: some View {
-        EmptyStateView(
-            title: descriptor.title,
-            icon: "rectangle.stack.fill",
-            message: "Apri la serie dalla sezione Serie per scegliere stagione ed episodio."
-        )
-        .navigationTitle(descriptor.title)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-struct WatchHistoryView: View {
-    @EnvironmentObject private var session: AppSession
-
-    private var rows: [HistoryRowModel] {
-        session.accountHistory.compactMap { item in
-            guard let descriptor = session.descriptor(from: item) else { return nil }
-            return HistoryRowModel(id: item.id, item: item, descriptor: descriptor)
-        }
-    }
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                if rows.isEmpty {
-                    EmptyStateView(
-                        title: "Cronologia vuota",
-                        icon: "clock.arrow.circlepath",
-                        message: "I contenuti riprodotti appariranno qui."
-                    )
-                    .padding(.top, 80)
-                } else {
-                    ForEach(rows) { row in
-                        NavigationLink(destination: FavoriteDestination(descriptor: row.descriptor)) {
-                            SearchResultRow(
-                                title: row.item.title,
-                                subtitle: row.item.subtitle ?? "Riprodotto",
-                                imageURL: row.item.imageURL
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .padding()
-        }
-        .navigationTitle("Cronologia")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if !rows.isEmpty {
-                    Button("Cancella", role: .destructive) {
-                        session.clearWatchHistory()
-                    }
-                }
-            }
-        }
-    }
-}
-
 struct SettingsView: View {
     @EnvironmentObject var session: AppSession
     @State private var showLogout = false
@@ -1742,10 +1555,6 @@ struct SettingsView: View {
             } header: { Text("Account") }
             Section("Riproduzione") { Toggle("Riproduzione automatica", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })); Toggle("Aggiorna all'apertura", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })); Label("Picture in Picture", systemImage: "pip.fill"); Label("AirPlay", systemImage: "airplayvideo") }
             Section("Aspetto") { Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Automatico").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") } }
-            Section("La mia raccolta") {
-                NavigationLink { LibraryView() } label: { Label("Preferiti", systemImage: "heart.fill") }
-                NavigationLink { WatchHistoryView() } label: { Label("Cronologia", systemImage: "clock.arrow.circlepath") }
-            }
             Section("Sicurezza") { Toggle("Controllo genitori", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) })) }
             Section { Button("Esci dall'account", role: .destructive) { showLogout = true } }
         }
@@ -1754,7 +1563,7 @@ struct SettingsView: View {
             Button("Annulla", role: .cancel) { }
             Button("Esci", role: .destructive) { session.signOut() }
         } message: {
-            Text("Dovrai inserire nuovamente nome utente e password per entrare.")
+            Text("Dovrai inserire nuovamente il codice di accesso per entrare.")
         }
     }
     private var expiry: String { guard let timestamp = session.userInfo?.expDate, let seconds = TimeInterval(timestamp) else { return "—" }; return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted) }
