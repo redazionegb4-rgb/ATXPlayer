@@ -1551,78 +1551,166 @@ struct SearchResultRow: View {
     }
 }
 
+@ViewBuilder
 private func favoriteButton(_ descriptor: PlaybackDescriptor) -> some View {
     FavoriteToggleButton(descriptor: descriptor)
 }
 
 struct FavoriteToggleButton: View {
-    @EnvironmentObject var session: AppSession
+    @EnvironmentObject private var session: AppSession
     let descriptor: PlaybackDescriptor
+
     var body: some View {
-        Button { session.toggleFavorite(descriptor) } label: {
-            Label(session.isFavorite(descriptor) ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti", systemImage: session.isFavorite(descriptor) ? "heart.fill" : "heart")
-                .font(.subheadline.bold()).frame(maxWidth: .infinity).padding(.vertical, 13)
-                .foregroundStyle(session.isFavorite(descriptor) ? .white : .purple)
-                .background(session.isFavorite(descriptor) ? AnyShapeStyle(brandGradient) : AnyShapeStyle(Color(uiColor: .secondarySystemBackground)))
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        }.buttonStyle(.plain)
+        let selected = session.isFavorite(descriptor)
+        Button {
+            session.toggleFavorite(descriptor)
+        } label: {
+            Label(
+                selected ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
+                systemImage: selected ? "heart.fill" : "heart"
+            )
+            .font(.subheadline.bold())
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .foregroundStyle(selected ? Color.white : Color.purple)
+            .background {
+                if selected {
+                    brandGradient
+                } else {
+                    Color(uiColor: .secondarySystemBackground)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 
 struct LibraryView: View {
-    @EnvironmentObject var session: AppSession
-    private var values: [FavoriteItem] { session.accountFavorites }
+    @EnvironmentObject private var session: AppSession
+
     var body: some View {
-        Group {
-            if values.isEmpty { EmptyStateView(title: "Nessun preferito", icon: "heart", message: "Aggiungi film, serie e canali alla tua raccolta.") }
-            else { List(values) { item in FavoriteRow(item: item) } }
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                if session.accountFavorites.isEmpty {
+                    EmptyStateView(
+                        title: "Nessun preferito",
+                        icon: "heart",
+                        message: "Aggiungi film, serie e canali alla tua raccolta."
+                    )
+                    .padding(.top, 80)
+                } else {
+                    ForEach(session.accountFavorites) { item in
+                        if let descriptor = session.descriptor(from: item) {
+                            NavigationLink {
+                                FavoriteDestination(descriptor: descriptor)
+                            } label: {
+                                SearchResultRow(
+                                    title: item.title,
+                                    subtitle: item.subtitle ?? "Preferito",
+                                    imageURL: item.imageURL
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    session.toggleFavorite(descriptor)
+                                } label: {
+                                    Label("Rimuovi", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
         }
         .navigationTitle("Preferiti")
     }
 }
 
-struct FavoriteRow: View {
-    @EnvironmentObject var session: AppSession
-    let item: FavoriteItem
+struct FavoriteDestination: View {
+    @EnvironmentObject private var session: AppSession
+    let descriptor: PlaybackDescriptor
+
+    @ViewBuilder
     var body: some View {
-        if let descriptor = session.descriptor(from: item) {
-            NavigationLink { FavoriteDestination(descriptor: descriptor) } label: { SearchResultRow(title: item.title, subtitle: item.subtitle ?? "Preferito", imageURL: item.imageURL) }
-                .swipeActions { Button(role: .destructive) { session.toggleFavorite(descriptor) } label: { Label("Rimuovi", systemImage: "trash") } }
+        switch descriptor.kind {
+        case .live:
+            PlayerScreen(
+                title: descriptor.title,
+                url: session.streamURL(type: .live, id: descriptor.streamID),
+                isLive: true
+            )
+        case .movies:
+            PlayerScreen(
+                title: descriptor.title,
+                url: session.streamURL(type: .movies, id: descriptor.streamID, ext: descriptor.fileExtension),
+                isLive: false,
+                resume: descriptor
+            )
+        case .series:
+            SeriesFavoritePlaceholder(descriptor: descriptor)
         }
     }
 }
 
-struct FavoriteDestination: View {
-    @EnvironmentObject var session: AppSession
+struct SeriesFavoritePlaceholder: View {
     let descriptor: PlaybackDescriptor
+
     var body: some View {
-        switch descriptor.kind {
-        case .live:
-            PlayerScreen(title: descriptor.title, url: session.streamURL(type: .live, id: descriptor.streamID), isLive: true)
-        case .movies:
-            PlayerScreen(title: descriptor.title, url: session.streamURL(type: .movies, id: descriptor.streamID, ext: descriptor.fileExtension), isLive: false, resume: descriptor)
-        case .series:
-            PlayerScreen(title: descriptor.title, url: session.streamURL(type: .series, id: descriptor.streamID, ext: descriptor.fileExtension), isLive: false, resume: descriptor)
-        }
+        EmptyStateView(
+            title: descriptor.title,
+            icon: "rectangle.stack.fill",
+            message: "Apri la serie dalla sezione Serie per scegliere stagione ed episodio."
+        )
+        .navigationTitle(descriptor.title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 struct WatchHistoryView: View {
-    @EnvironmentObject var session: AppSession
-    private var values: [WatchHistoryItem] { session.accountHistory }
+    @EnvironmentObject private var session: AppSession
+
     var body: some View {
-        Group {
-            if values.isEmpty { EmptyStateView(title: "Cronologia vuota", icon: "clock.arrow.circlepath", message: "I contenuti riprodotti appariranno qui.") }
-            else {
-                List(values) { item in
-                    if let descriptor = session.descriptor(from: item) {
-                        NavigationLink { FavoriteDestination(descriptor: descriptor) } label: { SearchResultRow(title: item.title, subtitle: item.subtitle ?? "Riprodotto", imageURL: item.imageURL) }
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                if session.accountHistory.isEmpty {
+                    EmptyStateView(
+                        title: "Cronologia vuota",
+                        icon: "clock.arrow.circlepath",
+                        message: "I contenuti riprodotti appariranno qui."
+                    )
+                    .padding(.top, 80)
+                } else {
+                    ForEach(session.accountHistory) { item in
+                        if let descriptor = session.descriptor(from: item) {
+                            NavigationLink {
+                                FavoriteDestination(descriptor: descriptor)
+                            } label: {
+                                SearchResultRow(
+                                    title: item.title,
+                                    subtitle: item.subtitle ?? "Riprodotto",
+                                    imageURL: item.imageURL
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("Cronologia")
+        .toolbar {
+            if !session.accountHistory.isEmpty {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancella", role: .destructive) {
+                        session.clearWatchHistory()
                     }
                 }
             }
         }
-        .navigationTitle("Cronologia")
-        .toolbar { if !values.isEmpty { ToolbarItem(placement: .topBarTrailing) { Button("Cancella", role: .destructive) { session.clearWatchHistory() } } } }
     }
 }
 
