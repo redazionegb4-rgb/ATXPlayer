@@ -333,6 +333,16 @@ final class AppSession: ObservableObject {
         saveFavorites()
     }
 
+    func removeFavorite(id: String) {
+        favorites.removeAll { $0.id == id }
+        saveFavorites()
+    }
+
+    func clearAccountFavorites() {
+        favorites.removeAll { $0.ownerCode == accessCode }
+        saveFavorites()
+    }
+
     private func favoriteKey(kind: ContentType, streamID: Int) -> String {
         "\(accessCode):favorite:\(kind.rawValue):\(streamID)"
     }

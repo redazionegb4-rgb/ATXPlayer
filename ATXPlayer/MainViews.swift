@@ -61,6 +61,7 @@ struct HomeView: View {
                             .zIndex(0)
                         counters
                         quickActions
+                        if !session.accountFavorites.isEmpty { favoritesRail }
                         if !session.continueWatching.isEmpty { continueWatchingRail }
                         if !recentSeries.isEmpty { seriesRail }
                         if !recentMovies.isEmpty { movieRail }
@@ -92,6 +93,28 @@ struct HomeView: View {
                 Text("Ciao, \(session.username)").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            NavigationLink { FavoritesView() } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: session.accountFavorites.isEmpty ? "heart" : "heart.fill")
+                        .font(.headline.bold())
+                        .foregroundStyle(session.accountFavorites.isEmpty ? Color.primary : Color.pink)
+                        .frame(width: 48, height: 48)
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                    if !session.accountFavorites.isEmpty {
+                        Text("\(min(session.accountFavorites.count, 99))")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(5)
+                            .background(Color.pink)
+                            .clipShape(Circle())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("La mia lista")
             circleButton("magnifyingglass") { showSearch = true }
             circleButton("arrow.clockwise") { Task { await session.refreshSafely() } }
         }
@@ -184,6 +207,47 @@ struct HomeView: View {
                 .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 19)
                 .background(brandGradient).clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
         }.buttonStyle(.plain)
+    }
+
+    private var favoritesRail: some View {
+        MediaRail(title: "La mia lista") {
+            ForEach(session.accountFavorites.prefix(12)) { favorite in
+                favoriteHomeLink(favorite)
+            }
+            NavigationLink { FavoritesView() } label: {
+                VStack(spacing: 10) {
+                    Image(systemName: "arrow.right.circle.fill").font(.system(size: 34))
+                    Text("Vedi tutti").font(.subheadline.bold())
+                }
+                .foregroundStyle(.purple)
+                .frame(width: 138, height: 205)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func favoriteHomeLink(_ favorite: FavoriteItem) -> some View {
+        if favorite.kind == ContentType.live.rawValue,
+           let item = session.allLive.first(where: { $0.streamID == favorite.streamID }) {
+            NavigationLink { LiveDetailView(item: item) } label: {
+                PosterCard(title: favorite.title, imageURL: favorite.imageURL, badge: "LIVE").frame(width: 138)
+            }.buttonStyle(.plain)
+        } else if favorite.kind == ContentType.movies.rawValue,
+                  let item = session.allMovies.first(where: { $0.streamID == favorite.streamID }) {
+            NavigationLink { MovieDetailView(item: item) } label: {
+                PosterCard(title: favorite.title, imageURL: favorite.imageURL, badge: nil).frame(width: 138)
+            }.buttonStyle(.plain)
+        } else if favorite.kind == ContentType.series.rawValue,
+                  let item = session.allSeries.first(where: { $0.seriesID == favorite.streamID }) {
+            NavigationLink { SeriesDetailView(item: item) } label: {
+                PosterCard(title: favorite.title, imageURL: favorite.imageURL, badge: nil).frame(width: 138)
+            }.buttonStyle(.plain)
+        } else {
+            PosterCard(title: favorite.title, imageURL: favorite.imageURL, badge: nil).frame(width: 138)
+        }
     }
 
     private var continueWatchingRail: some View {
@@ -1575,6 +1639,7 @@ struct SearchResultRow: View {
 
 struct FavoritesView: View {
     @EnvironmentObject var session: AppSession
+    @State private var showClearConfirmation = false
 
     private var liveItems: [FavoriteItem] { session.accountFavorites.filter { $0.kind == ContentType.live.rawValue } }
     private var movieItems: [FavoriteItem] { session.accountFavorites.filter { $0.kind == ContentType.movies.rawValue } }
@@ -1586,25 +1651,27 @@ struct FavoritesView: View {
                 EmptyStateView(title: "Nessun preferito", icon: "heart", message: "Aggiungi film, serie e canali alla tua lista usando il cuore nelle pagine dettaglio.")
             } else {
                 List {
+                    Section {
+                        HStack(spacing: 12) {
+                            summaryItem("Diretta", liveItems.count, "dot.radiowaves.left.and.right")
+                            summaryItem("Film", movieItems.count, "film.fill")
+                            summaryItem("Serie", seriesItems.count, "rectangle.stack.fill")
+                        }
+                        .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+                    }
                     if !liveItems.isEmpty {
                         Section("Diretta") {
-                            ForEach(liveItems) { favorite in
-                                favoriteRow(favorite)
-                            }
+                            ForEach(liveItems) { favorite in favoriteRow(favorite) }
                         }
                     }
                     if !movieItems.isEmpty {
                         Section("Film") {
-                            ForEach(movieItems) { favorite in
-                                favoriteRow(favorite)
-                            }
+                            ForEach(movieItems) { favorite in favoriteRow(favorite) }
                         }
                     }
                     if !seriesItems.isEmpty {
                         Section("Serie TV") {
-                            ForEach(seriesItems) { favorite in
-                                favoriteRow(favorite)
-                            }
+                            ForEach(seriesItems) { favorite in favoriteRow(favorite) }
                         }
                     }
                 }
@@ -1612,10 +1679,59 @@ struct FavoritesView: View {
             }
         }
         .navigationTitle("La mia lista")
+        .toolbar {
+            if !session.accountFavorites.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive) { showClearConfirmation = true } label: {
+                        Image(systemName: "trash")
+                    }
+                    .accessibilityLabel("Svuota la mia lista")
+                }
+            }
+        }
+        .alert("Svuotare La mia lista?", isPresented: $showClearConfirmation) {
+            Button("Annulla", role: .cancel) { }
+            Button("Rimuovi tutto", role: .destructive) { session.clearAccountFavorites() }
+        } message: {
+            Text("Tutti i preferiti di questo account verranno rimossi.")
+        }
+    }
+
+    private func summaryItem(_ title: String, _ count: Int, _ icon: String) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: icon).foregroundStyle(.purple)
+            Text("\(count)").font(.headline.bold())
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder
     private func favoriteRow(_ favorite: FavoriteItem) -> some View {
+        HStack(spacing: 8) {
+            favoriteNavigation(favorite)
+            Button(role: .destructive) { session.removeFavorite(id: favorite.id) } label: {
+                Image(systemName: "trash.fill")
+                    .foregroundStyle(.red)
+                    .frame(width: 38, height: 38)
+                    .background(Color.red.opacity(0.1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Rimuovi dai preferiti")
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) { session.removeFavorite(id: favorite.id) } label: {
+                Label("Rimuovi", systemImage: "trash")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func favoriteNavigation(_ favorite: FavoriteItem) -> some View {
         if favorite.kind == ContentType.live.rawValue,
            let item = session.allLive.first(where: { $0.streamID == favorite.streamID }) {
             NavigationLink { LiveDetailView(item: item) } label: {
