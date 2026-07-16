@@ -24,6 +24,19 @@ struct PlaybackProgress: Codable, Identifiable, Hashable {
 
 
 
+
+struct WatchHistoryItem: Codable, Identifiable, Hashable {
+    let id: String
+    let ownerCode: String
+    let kind: String
+    let streamID: Int
+    let title: String
+    let subtitle: String?
+    let imageURL: String?
+    let fileExtension: String?
+    var watchedAt: Date
+}
+
 struct FavoriteItem: Codable, Identifiable, Hashable {
     let id: String
     let ownerCode: String
@@ -81,6 +94,7 @@ final class AppSession: ObservableObject {
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
     @Published private(set) var playbackProgress: [PlaybackProgress] = []
     @Published private(set) var favorites: [FavoriteItem] = []
+    @Published private(set) var watchHistory: [WatchHistoryItem] = []
 
     var colorScheme: ColorScheme? { appearance == "light" ? .light : appearance == "dark" ? .dark : nil }
 
@@ -89,6 +103,7 @@ final class AppSession: ObservableObject {
         loadPlaylistCache()
         loadPlaybackProgress()
         loadFavorites()
+        loadWatchHistory()
         if hasSession,
            let savedUsername = KeychainStore.read("username"),
            let savedPassword = KeychainStore.read("password") {
@@ -346,6 +361,62 @@ final class AppSession: ObservableObject {
     private func favoriteKey(kind: ContentType, streamID: Int) -> String {
         "\(accessCode):favorite:\(kind.rawValue):\(streamID)"
     }
+
+    var accountWatchHistory: [WatchHistoryItem] {
+        watchHistory
+            .filter { $0.ownerCode == accessCode }
+            .sorted { $0.watchedAt > $1.watchedAt }
+    }
+
+    func recordHistory(for descriptor: PlaybackDescriptor) {
+        guard descriptor.kind != .live else { return }
+        let key = historyKey(for: descriptor)
+        watchHistory.removeAll { $0.id == key }
+        watchHistory.append(WatchHistoryItem(
+            id: key,
+            ownerCode: accessCode,
+            kind: descriptor.kind.rawValue,
+            streamID: descriptor.streamID,
+            title: descriptor.title,
+            subtitle: descriptor.subtitle,
+            imageURL: descriptor.imageURL,
+            fileExtension: descriptor.fileExtension,
+            watchedAt: Date()
+        ))
+        saveWatchHistory()
+    }
+
+    func removeHistory(id: String) {
+        watchHistory.removeAll { $0.id == id }
+        saveWatchHistory()
+    }
+
+    func clearAccountWatchHistory() {
+        watchHistory.removeAll { $0.ownerCode == accessCode }
+        saveWatchHistory()
+    }
+
+    private func historyKey(for descriptor: PlaybackDescriptor) -> String {
+        "\(accessCode):history:\(descriptor.kind.rawValue):\(descriptor.streamID)"
+    }
+
+    private var watchHistoryURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("atlantix-watch-history.json")
+    }
+
+    private func loadWatchHistory() {
+        guard let data = try? Data(contentsOf: watchHistoryURL),
+              let values = try? JSONDecoder().decode([WatchHistoryItem].self, from: data) else { return }
+        watchHistory = values
+    }
+
+    private func saveWatchHistory() {
+        guard let data = try? JSONEncoder().encode(watchHistory) else { return }
+        try? data.write(to: watchHistoryURL, options: .atomic)
+    }
+
 
     private var favoritesURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

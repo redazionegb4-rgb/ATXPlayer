@@ -62,6 +62,7 @@ struct HomeView: View {
                         counters
                         quickActions
                         if !session.accountFavorites.isEmpty { favoritesRail }
+                        if !session.accountWatchHistory.isEmpty { historyRail }
                         if !session.continueWatching.isEmpty { continueWatchingRail }
                         if !recentSeries.isEmpty { seriesRail }
                         if !recentMovies.isEmpty { movieRail }
@@ -115,6 +116,17 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("La mia lista")
+            NavigationLink { WatchHistoryView() } label: {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.headline.bold())
+                    .foregroundStyle(.primary)
+                    .frame(width: 48, height: 48)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cronologia")
             circleButton("magnifyingglass") { showSearch = true }
             circleButton("arrow.clockwise") { Task { await session.refreshSafely() } }
         }
@@ -247,6 +259,24 @@ struct HomeView: View {
             }.buttonStyle(.plain)
         } else {
             PosterCard(title: favorite.title, imageURL: favorite.imageURL, badge: nil).frame(width: 138)
+        }
+    }
+
+    private var historyRail: some View {
+        MediaRail(title: "Visti di recente") {
+            ForEach(Array(session.accountWatchHistory.prefix(12))) { item in
+                HistoryPosterCard(item: item)
+            }
+            NavigationLink { WatchHistoryView() } label: {
+                VStack(spacing: 10) {
+                    Image(systemName: "clock.arrow.circlepath").font(.title)
+                    Text("Vedi tutto").font(.caption.bold())
+                }
+                .foregroundStyle(.primary)
+                .frame(width: 120, height: 176)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
         }
     }
 
@@ -943,6 +973,7 @@ struct SeriesDetailView: View {
                     else if seasons.isEmpty { EmptyStateView(title: "Nessun episodio", icon: "rectangle.stack", message: "Il server non ha restituito stagioni o episodi per questa serie.") }
                     else {
                         seasonSelector
+                        seasonNavigation
                         HStack {
                             Text("Episodi")
                                 .font(.title2.bold())
@@ -1069,6 +1100,38 @@ struct SeriesDetailView: View {
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .padding(.horizontal)
+    }
+
+    private var selectedSeasonIndex: Int? { seasons.firstIndex(of: selectedSeason) }
+
+    private var seasonNavigation: some View {
+        HStack(spacing: 12) {
+            Button { selectPreviousSeason() } label: {
+                Label("Precedente", systemImage: "chevron.left")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(selectedSeasonIndex == nil || selectedSeasonIndex == 0)
+
+            Button { selectNextSeason() } label: {
+                Label("Successiva", systemImage: "chevron.right")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.purple)
+            .disabled(selectedSeasonIndex == nil || selectedSeasonIndex == seasons.count - 1)
+        }
+        .padding(.horizontal)
+    }
+
+    private func selectPreviousSeason() {
+        guard let index = selectedSeasonIndex, index > 0 else { return }
+        selectedSeason = seasons[index - 1]
+    }
+
+    private func selectNextSeason() {
+        guard let index = selectedSeasonIndex, index + 1 < seasons.count else { return }
+        selectedSeason = seasons[index + 1]
     }
 
     private func load() async {
@@ -1488,6 +1551,8 @@ struct PlayerScreen: View {
             currentDescriptor = episodeQueue[currentQueueIndex].descriptor
         }
 
+        if let currentDescriptor { session.recordHistory(for: currentDescriptor) }
+
         let item = AVPlayerItem(url: currentURL)
         let newPlayer = AVPlayer(playerItem: item)
         player = newPlayer
@@ -1554,6 +1619,7 @@ struct PlayerScreen: View {
         let next = episodeQueue[nextIndex]
         displayedTitle = next.title
         currentDescriptor = next.descriptor
+        session.recordHistory(for: next.descriptor)
         failed = false
 
         let nextItem = AVPlayerItem(url: nextURL)
@@ -1782,6 +1848,150 @@ struct FavoriteRowContent: View {
     }
 }
 
+struct WatchHistoryView: View {
+    @EnvironmentObject var session: AppSession
+    @State private var showClearConfirmation = false
+
+    var body: some View {
+        Group {
+            if session.accountWatchHistory.isEmpty {
+                EmptyStateView(title: "Cronologia vuota", icon: "clock.arrow.circlepath", message: "I film e gli episodi avviati compariranno qui.")
+            } else {
+                List {
+                    ForEach(session.accountWatchHistory) { item in
+                        HStack(spacing: 8) {
+                            HistoryNavigation(item: item)
+                            Button(role: .destructive) { session.removeHistory(id: item.id) } label: {
+                                Image(systemName: "trash.fill")
+                                    .foregroundStyle(.red)
+                                    .frame(width: 38, height: 38)
+                                    .background(Color.red.opacity(0.1))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) { session.removeHistory(id: item.id) } label: {
+                                Label("Rimuovi", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+        }
+        .navigationTitle("Cronologia")
+        .toolbar {
+            if !session.accountWatchHistory.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive) { showClearConfirmation = true } label: { Image(systemName: "trash") }
+                }
+            }
+        }
+        .alert("Cancellare la cronologia?", isPresented: $showClearConfirmation) {
+            Button("Annulla", role: .cancel) { }
+            Button("Cancella tutto", role: .destructive) { session.clearAccountWatchHistory() }
+        } message: {
+            Text("Verranno rimossi tutti i contenuti visti da questo account.")
+        }
+    }
+}
+
+struct HistoryNavigation: View {
+    @EnvironmentObject var session: AppSession
+    let item: WatchHistoryItem
+
+    private var descriptor: PlaybackDescriptor? {
+        guard let kind = ContentType(rawValue: item.kind) else { return nil }
+        return PlaybackDescriptor(kind: kind, streamID: item.streamID, title: item.title, subtitle: item.subtitle, imageURL: item.imageURL, fileExtension: item.fileExtension)
+    }
+
+    var body: some View {
+        if let descriptor {
+            NavigationLink {
+                PlayerScreen(
+                    title: item.title,
+                    url: session.streamURL(type: descriptor.kind, id: descriptor.streamID, ext: descriptor.fileExtension),
+                    isLive: false,
+                    resume: descriptor
+                )
+            } label: {
+                HistoryRowContent(item: item)
+            }
+        } else {
+            HistoryRowContent(item: item)
+        }
+    }
+}
+
+struct HistoryRowContent: View {
+    let item: WatchHistoryItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { ZStack { Color(uiColor: .secondarySystemBackground); Image(systemName: "play.rectangle.fill").foregroundStyle(.secondary) } }
+            }
+            .frame(width: 70, height: 58)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipped()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title).font(.headline).lineLimit(2)
+                if let subtitle = item.subtitle, !subtitle.isEmpty {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Text(item.watchedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption2).foregroundStyle(.purple)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct HistoryPosterCard: View {
+    @EnvironmentObject var session: AppSession
+    let item: WatchHistoryItem
+
+    private var descriptor: PlaybackDescriptor? {
+        guard let kind = ContentType(rawValue: item.kind) else { return nil }
+        return PlaybackDescriptor(kind: kind, streamID: item.streamID, title: item.title, subtitle: item.subtitle, imageURL: item.imageURL, fileExtension: item.fileExtension)
+    }
+
+    var body: some View {
+        Group {
+            if let descriptor {
+                NavigationLink {
+                    PlayerScreen(
+                        title: item.title,
+                        url: session.streamURL(type: descriptor.kind, id: descriptor.streamID, ext: descriptor.fileExtension),
+                        isLive: false,
+                        resume: descriptor
+                    )
+                } label: { card }
+            } else {
+                card
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var card: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            AsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").foregroundStyle(.white) } }
+            }
+            .frame(width: 120, height: 145)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipped()
+            Text(item.title).font(.caption.bold()).lineLimit(2).frame(width: 120, alignment: .leading)
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var session: AppSession
     @State private var showLogout = false
@@ -1797,6 +2007,9 @@ struct SettingsView: View {
             Section("Raccolta") {
                 NavigationLink { FavoritesView() } label: {
                     Label("La mia lista", systemImage: "heart.fill")
+                }
+                NavigationLink { WatchHistoryView() } label: {
+                    Label("Cronologia", systemImage: "clock.arrow.circlepath")
                 }
             }
             Section("Sicurezza") { Toggle("Controllo genitori", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) })) }
