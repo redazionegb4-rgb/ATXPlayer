@@ -57,9 +57,9 @@ struct HomeView: View {
                     .zIndex(20)
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 24) {
+                        accountShortcuts
                         hero
                             .zIndex(0)
-                        homeTools
                         counters
                         quickActions
                         if !session.accountFavorites.isEmpty { favoritesRail }
@@ -88,49 +88,98 @@ struct HomeView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 12) {
-            BrandMark(size: 44)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 14) {
+            BrandMark(size: 50)
+            VStack(alignment: .leading, spacing: 4) {
                 Text("ATLANTIX")
-                    .font(.headline.weight(.black))
-                    .tracking(1.7)
+                    .font(.title3.weight(.black))
+                    .tracking(2.0)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text("Ciao, \(session.username)")
-                    .font(.caption)
+                Text("Bentornato, \(session.username)")
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                Text(lastUpdateText)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 12)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) { Divider().opacity(0.35) }
-        .contentShape(Rectangle())
-    }
-
-    private var homeTools: some View {
-        HStack(spacing: 12) {
-            toolButton(title: "Ricerca", icon: "magnifyingglass") { showSearch = true }
-            NavigationLink { FavoritesView() } label: {
-                toolLabel(
-                    title: "La mia lista",
-                    icon: session.accountFavorites.isEmpty ? "heart" : "heart.fill",
-                    badge: session.accountFavorites.count
-                )
-            }
-            .buttonStyle(.plain)
-            NavigationLink { WatchHistoryView() } label: {
-                toolLabel(title: "Cronologia", icon: "clock.arrow.circlepath", badge: 0)
-            }
-            .buttonStyle(.plain)
-            toolButton(title: "Aggiorna", icon: session.isRefreshing ? "hourglass" : "arrow.clockwise") {
+            Spacer(minLength: 10)
+            circleButton("magnifyingglass") { showSearch = true }
+            circleButton(session.isRefreshing ? "hourglass" : "arrow.clockwise") {
                 Task { await session.refreshSafely() }
             }
             .disabled(session.isRefreshing)
         }
         .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 13)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) { Divider().opacity(0.35) }
+        .contentShape(Rectangle())
+    }
+
+    private var lastUpdateText: String {
+        guard let date = session.lastRefresh else { return "Playlist pronta" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "it_IT")
+        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "'Aggiornato oggi alle' HH:mm" : "'Aggiornato il' dd/MM 'alle' HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private var accountShortcuts: some View {
+        HStack(spacing: 14) {
+            NavigationLink { FavoritesView() } label: {
+                shortcutCard(
+                    title: "La mia lista",
+                    subtitle: session.accountFavorites.isEmpty ? "Nessun preferito" : "\(session.accountFavorites.count) contenuti",
+                    icon: session.accountFavorites.isEmpty ? "heart" : "heart.fill",
+                    accent: .pink
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink { WatchHistoryView() } label: {
+                shortcutCard(
+                    title: "Cronologia",
+                    subtitle: session.accountWatchHistory.isEmpty ? "Nessun contenuto" : "\(session.accountWatchHistory.count) visti",
+                    icon: "clock.arrow.circlepath",
+                    accent: .purple
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private func shortcutCard(title: String, subtitle: String, icon: String, accent: Color) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3.bold())
+                .foregroundStyle(accent)
+                .frame(width: 44, height: 44)
+                .background(accent.opacity(0.13))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 76)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.primary.opacity(0.07)))
     }
 
     private func toolButton(title: String, icon: String, action: @escaping () -> Void) -> some View {
