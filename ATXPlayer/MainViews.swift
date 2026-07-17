@@ -24,6 +24,7 @@ private func seriesSortValue(_ item: SeriesItem) -> Double {
 struct MainTabView: View {
     @EnvironmentObject var session: AppSession
     @State private var miniPlayerDescriptor: PlaybackDescriptor?
+    @State private var isMiniPlayerHidden = false
 
     private var latestProgress: PlaybackProgress? { session.continueWatching.first }
 
@@ -37,7 +38,7 @@ struct MainTabView: View {
         }
         .tint(.purple)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let progress = latestProgress, let descriptor = session.descriptor(from: progress) {
+            if !isMiniPlayerHidden, let progress = latestProgress, let descriptor = session.descriptor(from: progress) {
                 HStack(spacing: 12) {
                     AsyncImage(url: URL(string: progress.imageURL ?? "")) { phase in
                         if let image = phase.image { image.resizable().scaledToFill() }
@@ -52,14 +53,18 @@ struct MainTabView: View {
                     Button { miniPlayerDescriptor = descriptor } label: {
                         Image(systemName: "play.fill").font(.headline).frame(width: 38, height: 38).background(Color.purple, in: Circle()).foregroundStyle(.white)
                     }
-                    Button { session.removeProgress(for: descriptor) } label: {
+                    Button { isMiniPlayerHidden = true } label: {
                         Image(systemName: "xmark").foregroundStyle(.secondary)
                     }
+                    .accessibilityLabel("Nascondi mini-player")
                 }
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(.ultraThinMaterial)
                 .overlay(alignment: .top) { Divider() }
             }
+        }
+        .onChange(of: latestProgress?.id) { _ in
+            isMiniPlayerHidden = false
         }
         .sheet(item: $miniPlayerDescriptor) { descriptor in
             NavigationStack {
