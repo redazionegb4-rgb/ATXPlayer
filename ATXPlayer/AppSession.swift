@@ -48,7 +48,8 @@ struct FavoriteItem: Codable, Identifiable, Hashable {
     let addedAt: Date
 }
 
-struct PlaybackDescriptor: Hashable {
+struct PlaybackDescriptor: Hashable, Identifiable {
+    var id: String { keyPart }
     let kind: ContentType
     let streamID: Int
     let title: String
@@ -91,6 +92,7 @@ final class AppSession: ObservableObject {
     @Published var autoLogin = UserDefaults.standard.object(forKey: "autoLogin") as? Bool ?? true
     @Published var refreshOnLaunch = UserDefaults.standard.object(forKey: "refreshOnLaunch") as? Bool ?? false
     @Published var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
+    @Published var interfaceAnimations = UserDefaults.standard.object(forKey: "interfaceAnimations") as? Bool ?? true
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
     @Published private(set) var playbackProgress: [PlaybackProgress] = []
     @Published private(set) var favorites: [FavoriteItem] = []
@@ -460,6 +462,7 @@ final class AppSession: ObservableObject {
     func setAutoLogin(_ value: Bool) { autoLogin = value; UserDefaults.standard.set(value, forKey: "autoLogin") }
     func setRefreshOnLaunch(_ value: Bool) { refreshOnLaunch = value; UserDefaults.standard.set(value, forKey: "refreshOnLaunch") }
     func setAutoplay(_ value: Bool) { autoplay = value; UserDefaults.standard.set(value, forKey: "autoplay") }
+    func setInterfaceAnimations(_ value: Bool) { interfaceAnimations = value; UserDefaults.standard.set(value, forKey: "interfaceAnimations") }
     func setParentalControl(_ value: Bool) { parentalControl = value; UserDefaults.standard.set(value, forKey: "parentalControl") }
 
     func streamURL(type: ContentType, id: Int, ext: String? = nil) -> URL? {

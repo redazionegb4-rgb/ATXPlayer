@@ -2,9 +2,46 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject var session: AppSession
+    @State private var showSplash = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        Group { session.isAuthenticated ? AnyView(MainTabView()) : AnyView(LoginView()) }
-            .animation(.easeInOut(duration: 0.35), value: session.isAuthenticated)
+        ZStack {
+            Group { session.isAuthenticated ? AnyView(MainTabView()) : AnyView(LoginView()) }
+                .opacity(showSplash ? 0 : 1)
+                .scaleEffect(showSplash && !reduceMotion ? 0.985 : 1)
+
+            if showSplash { LaunchAnimationView() }
+        }
+        .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.45), value: session.isAuthenticated)
+        .task {
+            try? await Task.sleep(nanoseconds: reduceMotion ? 250_000_000 : 1_350_000_000)
+            withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.45)) { showSplash = false }
+        }
+    }
+}
+
+struct LaunchAnimationView: View {
+    @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        ZStack {
+            Color(red: 0.02, green: 0.025, blue: 0.07).ignoresSafeArea()
+            RadialGradient(colors: [.purple.opacity(0.42), .clear], center: .center, startRadius: 20, endRadius: 330).ignoresSafeArea()
+            VStack(spacing: 22) {
+                BrandMark(size: 116)
+                    .scaleEffect(appeared || reduceMotion ? 1 : 0.72)
+                    .opacity(appeared ? 1 : 0)
+                Text("ATLANTIX")
+                    .font(.system(size: 38, weight: .black, design: .rounded))
+                    .tracking(5)
+                    .foregroundStyle(LinearGradient(colors: [.cyan, .white, .purple], startPoint: .leading, endPoint: .trailing))
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared || reduceMotion ? 0 : 12)
+            }
+        }
+        .onAppear { withAnimation(.spring(response: 0.7, dampingFraction: 0.72)) { appeared = true } }
+        .transition(.opacity)
     }
 }
 
@@ -27,6 +64,8 @@ struct BrandMark: View {
 struct LoginView: View {
     @EnvironmentObject var session: AppSession
     @FocusState private var focusedField: Field?
+    @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Field { case username, password }
 
@@ -41,6 +80,8 @@ struct LoginView: View {
                 VStack(spacing: 0) {
                     Spacer(minLength: 62)
                     BrandMark(size: 92)
+                        .scaleEffect(appeared || reduceMotion ? 1 : 0.8)
+                        .opacity(appeared ? 1 : 0)
                     Text("ATLANTIX")
                         .font(.system(size: 34, weight: .black, design: .rounded))
                         .tracking(3)
@@ -101,6 +142,8 @@ struct LoginView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                     .padding(.horizontal, 24)
                     .padding(.top, 34)
+                    .offset(y: appeared || reduceMotion ? 0 : 28)
+                    .opacity(appeared ? 1 : 0)
 
                     if let error = session.errorMessage {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -119,7 +162,10 @@ struct LoginView: View {
                 }
             }
         }
-        .onAppear { focusedField = nil }
+        .onAppear {
+            focusedField = nil
+            withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.7).delay(reduceMotion ? 0 : 0.08)) { appeared = true }
+        }
     }
 
     private func loginField<Content: View>(icon: String, title: String, @ViewBuilder content: () -> Content) -> some View {

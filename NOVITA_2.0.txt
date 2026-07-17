@@ -1,0 +1,19 @@
+ATLANTIX 2.0 - BUILD 61
+
+Base: Build 60 funzionante.
+
+Novità principali:
+- Eliminato pull-to-refresh da Home e categorie.
+- Splash animata all'avvio.
+- Animazioni di ingresso Login e Home, rispettando Riduci movimento.
+- Mini-player globale sopra la barra inferiore per riprendere o chiudere l'ultimo contenuto.
+- La mia lista con filtri Diretta/Film/Serie, ordine alfabetico o per aggiunta, rimozione singola e svuotamento.
+- Cronologia con data/ora, ripresa diretta, rimozione singola e cancellazione completa.
+- Home con Più popolari per te e Consigliati per te, calcolati localmente da cronologia, preferiti e contenuti recenti.
+- Banner automatico mantenuto.
+- Pagine dettaglio e dati ricchi mantenuti e rifiniti.
+- Selettore stagioni con memoria dell'ultima stagione aperta per serie e account.
+- Impostazione Animazioni dell'interfaccia.
+- Versione 2.0, Build 61.
+
+Invariati: Bundle ID, scheme, firma, login, DNS, player, PiP, AirPlay e configurazione Xcode Cloud.

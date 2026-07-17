@@ -22,6 +22,11 @@ private func seriesSortValue(_ item: SeriesItem) -> Double {
 }
 
 struct MainTabView: View {
+    @EnvironmentObject var session: AppSession
+    @State private var miniPlayerDescriptor: PlaybackDescriptor?
+
+    private var latestProgress: PlaybackProgress? { session.continueWatching.first }
+
     var body: some View {
         TabView {
             NavigationStack { HomeView() }.tabItem { Label("Home", systemImage: "house.fill") }
@@ -31,6 +36,36 @@ struct MainTabView: View {
             NavigationStack { SettingsView() }.tabItem { Label("Impostazioni", systemImage: "gearshape.fill") }
         }
         .tint(.purple)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let progress = latestProgress, let descriptor = session.descriptor(from: progress) {
+                HStack(spacing: 12) {
+                    AsyncImage(url: URL(string: progress.imageURL ?? "")) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                        else { brandGradient }
+                    }
+                    .frame(width: 46, height: 46).clipShape(RoundedRectangle(cornerRadius: 10)).clipped()
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(progress.title).font(.subheadline.bold()).lineLimit(1)
+                        ProgressView(value: progress.fraction).tint(.purple)
+                    }
+                    Spacer()
+                    Button { miniPlayerDescriptor = descriptor } label: {
+                        Image(systemName: "play.fill").font(.headline).frame(width: 38, height: 38).background(Color.purple, in: Circle()).foregroundStyle(.white)
+                    }
+                    Button { session.removeProgress(for: descriptor) } label: {
+                        Image(systemName: "xmark").foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(.ultraThinMaterial)
+                .overlay(alignment: .top) { Divider() }
+            }
+        }
+        .sheet(item: $miniPlayerDescriptor) { descriptor in
+            NavigationStack {
+                PlayerScreen(title: descriptor.title, url: session.streamURL(type: descriptor.kind, id: descriptor.streamID, ext: descriptor.fileExtension), isLive: descriptor.kind == .live, resume: descriptor)
+            }
+        }
     }
 }
 
@@ -38,6 +73,8 @@ struct HomeView: View {
     @EnvironmentObject var session: AppSession
     @State private var featuredIndex = 0
     @State private var showSearch = false
+    @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let timer = Timer.publish(every: 8, on: .main, in: .common).autoconnect()
 
     private var features: [FeaturedContent] {
@@ -48,6 +85,15 @@ struct HomeView: View {
     private var featured: FeaturedContent? { features.isEmpty ? nil : features[featuredIndex % features.count] }
     private var recentMovies: [VODStream] { Array(session.allMovies.sorted { numericDateValue($0.added) > numericDateValue($1.added) }.prefix(16)) }
     private var recentSeries: [SeriesItem] { Array(session.allSeries.sorted { seriesSortValue($0) > seriesSortValue($1) }.prefix(16)) }
+    private var popularMovies: [VODStream] {
+        let ids = session.accountWatchHistory.filter { $0.kind == ContentType.movies.rawValue }.map(\.streamID)
+        let watched = ids.compactMap { id in session.allMovies.first { $0.streamID == id } }
+        return Array((watched + recentMovies).reduce(into: [Int: VODStream]()) { $0[$1.streamID] = $1 }.values.prefix(12))
+    }
+    private var recommendedSeries: [SeriesItem] {
+        let favorites = session.accountFavorites.filter { $0.kind == ContentType.series.rawValue }.compactMap { fav in session.allSeries.first { $0.seriesID == fav.streamID } }
+        return Array((favorites + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.shuffled().prefix(12))
+    }
 
     var body: some View {
         ZStack {
@@ -55,6 +101,8 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 topBar
                     .zIndex(20)
+                    .offset(y: appeared || reduceMotion ? 0 : -18)
+                    .opacity(appeared ? 1 : 0)
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         accountShortcuts
@@ -65,19 +113,24 @@ struct HomeView: View {
                         if !session.accountFavorites.isEmpty { favoritesRail }
                         if !session.accountWatchHistory.isEmpty { historyRail }
                         if !session.continueWatching.isEmpty { continueWatchingRail }
+                        if !popularMovies.isEmpty { movieRail("Più popolari per te", popularMovies) }
+                        if !recommendedSeries.isEmpty { seriesRail("Consigliati per te", recommendedSeries) }
                         if !recentSeries.isEmpty { seriesRail }
                         if !recentMovies.isEmpty { movieRail }
                         updateStatus
                     }
                     .padding(.top, 12)
                     .padding(.bottom, 110)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared || reduceMotion ? 0 : 24)
                 }
-                .refreshable { await session.refreshSafely() }
+                
             }
             if session.isRefreshing { loadingOverlay.zIndex(50) }
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { GlobalSearchView() } }
+        .onAppear { withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.65)) { appeared = true } }
         .onReceive(timer) { _ in
             guard features.count > 1 else { return }
             withAnimation(.easeInOut(duration: 0.65)) { featuredIndex = (featuredIndex + 1) % features.count }
@@ -415,7 +468,32 @@ struct HomeView: View {
     }
 }
 
-private enum FeaturedContent {
+private func movieRail(_ title: String, _ items: [VODStream]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.title2.bold()).padding(.horizontal)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 14) {
+                    ForEach(items) { item in
+                        NavigationLink { MovieDetailView(item: item) } label: { PosterCard(title: item.name, imageURL: item.streamIcon, badge: item.rating).frame(width: 138) }
+                    }
+                }.padding(.horizontal)
+            }
+        }
+    }
+
+private func seriesRail(_ title: String, _ items: [SeriesItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.title2.bold()).padding(.horizontal)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 14) {
+                    ForEach(items) { item in
+                        NavigationLink { SeriesDetailView(item: item) } label: { PosterCard(title: item.name, imageURL: item.cover, badge: item.rating).frame(width: 138) }
+                    }
+                }.padding(.horizontal)
+            }
+        }
+    }
+enum FeaturedContent {
     case movie(VODStream), series(SeriesItem)
     var title: String { switch self { case .movie(let x): return x.name; case .series(let x): return x.name } }
     var imageURL: String? { switch self { case .movie(let x): return x.streamIcon; case .series(let x): return x.cover } }
@@ -576,7 +654,7 @@ struct ItemGrid: View {
                             LazyVGrid(columns: columns, spacing: 18) { contentCards }
                                 .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 125)
                         }
-                        .refreshable { await load(forceNetwork: true) }
+                        
                     }
                 }
             }
@@ -1208,18 +1286,21 @@ struct SeriesDetailView: View {
     private func selectPreviousSeason() {
         guard let index = selectedSeasonIndex, index > 0 else { return }
         selectedSeason = seasons[index - 1]
+        UserDefaults.standard.set(selectedSeason, forKey: "lastSeason_\(session.accessCode)_\(item.seriesID)")
     }
 
     private func selectNextSeason() {
         guard let index = selectedSeasonIndex, index + 1 < seasons.count else { return }
         selectedSeason = seasons[index + 1]
+        UserDefaults.standard.set(selectedSeason, forKey: "lastSeason_\(session.accessCode)_\(item.seriesID)")
     }
 
     private func load() async {
         loading = true; error = nil
         do {
             info = try await APIClient.shared.seriesInfo(baseURL: session.baseURL, username: session.username, password: session.password, seriesID: item.seriesID)
-            selectedSeason = seasons.first ?? ""
+            let savedSeason = UserDefaults.standard.string(forKey: "lastSeason_\(session.accessCode)_\(item.seriesID)")
+            selectedSeason = seasons.contains(savedSeason ?? "") ? (savedSeason ?? "") : (seasons.first ?? "")
         } catch { self.error = error.localizedDescription }
         loading = false
     }
@@ -1787,10 +1868,22 @@ struct SearchResultRow: View {
 struct FavoritesView: View {
     @EnvironmentObject var session: AppSession
     @State private var showClearConfirmation = false
+    @State private var selectedFilter = "Tutti"
+    @State private var sortAlphabetically = false
 
     private var liveItems: [FavoriteItem] { session.accountFavorites.filter { $0.kind == ContentType.live.rawValue } }
     private var movieItems: [FavoriteItem] { session.accountFavorites.filter { $0.kind == ContentType.movies.rawValue } }
     private var seriesItems: [FavoriteItem] { session.accountFavorites.filter { $0.kind == ContentType.series.rawValue } }
+    private var visibleItems: [FavoriteItem] {
+        let source: [FavoriteItem]
+        switch selectedFilter {
+        case "Diretta": source = liveItems
+        case "Film": source = movieItems
+        case "Serie": source = seriesItems
+        default: source = session.accountFavorites
+        }
+        return sortAlphabetically ? source.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending } : source.sorted { $0.addedAt > $1.addedAt }
+    }
 
     var body: some View {
         Group {
@@ -1806,20 +1899,14 @@ struct FavoritesView: View {
                         }
                         .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
                     }
-                    if !liveItems.isEmpty {
-                        Section("Diretta") {
-                            ForEach(liveItems) { favorite in favoriteRow(favorite) }
-                        }
+                    Section {
+                        Picker("Categoria", selection: $selectedFilter) {
+                            ForEach(["Tutti", "Diretta", "Film", "Serie"], id: \.self) { Text($0) }
+                        }.pickerStyle(.segmented)
+                        Toggle("Ordine alfabetico", isOn: $sortAlphabetically)
                     }
-                    if !movieItems.isEmpty {
-                        Section("Film") {
-                            ForEach(movieItems) { favorite in favoriteRow(favorite) }
-                        }
-                    }
-                    if !seriesItems.isEmpty {
-                        Section("Serie TV") {
-                            ForEach(seriesItems) { favorite in favoriteRow(favorite) }
-                        }
+                    Section(selectedFilter) {
+                        ForEach(visibleItems) { favorite in favoriteRow(favorite) }
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -1932,6 +2019,8 @@ struct FavoriteRowContent: View {
 struct WatchHistoryView: View {
     @EnvironmentObject var session: AppSession
     @State private var showClearConfirmation = false
+    @State private var selectedFilter = "Tutti"
+    @State private var sortAlphabetically = false
 
     var body: some View {
         Group {
@@ -2084,7 +2173,7 @@ struct SettingsView: View {
                 LabeledContent("Ultimo aggiornamento", value: session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "—")
             } header: { Text("Account") }
             Section("Riproduzione") { Toggle("Riproduzione automatica", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })); Toggle("Aggiorna all'apertura", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })); Label("Picture in Picture", systemImage: "pip.fill"); Label("AirPlay", systemImage: "airplayvideo") }
-            Section("Aspetto") { Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Automatico").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") } }
+            Section("Aspetto") { Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Automatico").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") }; Toggle("Animazioni dell’interfaccia", isOn: Binding(get: { session.interfaceAnimations }, set: { session.setInterfaceAnimations($0) })) }
             Section("Raccolta") {
                 NavigationLink { FavoritesView() } label: {
                     Label("La mia lista", systemImage: "heart.fill")
