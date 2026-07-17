@@ -113,8 +113,8 @@ struct HomeView: View {
                         if !session.accountFavorites.isEmpty { favoritesRail }
                         if !session.accountWatchHistory.isEmpty { historyRail }
                         if !session.continueWatching.isEmpty { continueWatchingRail }
-                        if !popularMovies.isEmpty { movieRail("Più popolari per te", popularMovies) }
-                        if !recommendedSeries.isEmpty { seriesRail("Consigliati per te", recommendedSeries) }
+                        if !popularMovies.isEmpty { customMovieRail("Più popolari per te", popularMovies) }
+                        if !recommendedSeries.isEmpty { customSeriesRail("Consigliati per te", recommendedSeries) }
                         if !recentSeries.isEmpty { seriesRail }
                         if !recentMovies.isEmpty { movieRail }
                         updateStatus
@@ -468,7 +468,7 @@ struct HomeView: View {
     }
 }
 
-private func movieRail(_ title: String, _ items: [VODStream]) -> some View {
+private func customMovieRail(_ title: String, _ items: [VODStream]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.title2.bold()).padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -481,7 +481,7 @@ private func movieRail(_ title: String, _ items: [VODStream]) -> some View {
         }
     }
 
-private func seriesRail(_ title: String, _ items: [SeriesItem]) -> some View {
+private func customSeriesRail(_ title: String, _ items: [SeriesItem]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.title2.bold()).padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
