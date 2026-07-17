@@ -1,0 +1,10 @@
+ATLANTIX 2.0 — BUILD 82
+
+OTTIMIZZAZIONE SCORRIMENTO
+- Nuova cache immagini in memoria e su disco.
+- Decodifica delle locandine fuori dal thread principale.
+- Annullamento automatico dei download quando una card esce dallo schermo.
+- Rimosso l’aggiornamento automatico del banner ogni 8 secondi per evitare il ridisegno della Home durante lo scroll.
+- Conteggi delle categorie precalcolati invece di filtrare l’intero catalogo per ogni card.
+- Confermato ordine Home: Visti di recente prima di Continua a guardare.
+- Nessuna modifica a login, DNS, player, PiP, AirPlay e dati salvati.

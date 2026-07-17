@@ -4,6 +4,60 @@ import AVFoundation
 import UIKit
 import SafariServices
 
+@MainActor
+private final class CachedImageLoader: ObservableObject {
+    @Published var phase: AsyncImagePhase = .empty
+    private static let memoryCache = NSCache<NSURL, UIImage>()
+    private var task: Task<Void, Never>?
+
+    func load(_ url: URL?) {
+        task?.cancel()
+        guard let url else { phase = .empty; return }
+        if let cached = Self.memoryCache.object(forKey: url as NSURL) {
+            phase = .success(Image(uiImage: cached))
+            return
+        }
+        phase = .empty
+        task = Task {
+            do {
+                let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 25)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard !Task.isCancelled,
+                      let http = response as? HTTPURLResponse,
+                      (200...299).contains(http.statusCode),
+                      let image = await Self.decode(data) else { return }
+                Self.memoryCache.setObject(image, forKey: url as NSURL, cost: data.count)
+                phase = .success(Image(uiImage: image))
+            } catch {
+                guard !Task.isCancelled else { return }
+                phase = .failure(error)
+            }
+        }
+    }
+
+    nonisolated private static func decode(_ data: Data) async -> UIImage? {
+        await Task.detached(priority: .utility) { UIImage(data: data)?.preparingForDisplay() }.value
+    }
+
+    deinit { task?.cancel() }
+}
+
+private struct CachedAsyncImage<Content: View>: View {
+    let url: URL?
+    let content: (AsyncImagePhase) -> Content
+    @StateObject private var loader = CachedImageLoader()
+
+    init(url: URL?, @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
+        self.url = url
+        self.content = content
+    }
+
+    var body: some View {
+        content(loader.phase)
+            .task(id: url) { loader.load(url) }
+    }
+}
+
 private let brandGradient = LinearGradient(colors: [.cyan, .purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
 private let pageBackground = Color(uiColor: .systemBackground)
 
@@ -60,7 +114,6 @@ struct HomeView: View {
     @EnvironmentObject var session: AppSession
     @State private var featuredIndex = 0
     @State private var showSearch = false
-    private let timer = Timer.publish(every: 8, on: .main, in: .common).autoconnect()
 
     private var features: [FeaturedContent] {
         let movies = session.allMovies
@@ -130,10 +183,6 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { GlobalSearchView() } }
-        .onReceive(timer) { _ in
-            guard features.count > 1 else { return }
-            featuredIndex = (featuredIndex + 1) % features.count
-        }
         .alert("Attenzione", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK", role: .cancel) { session.errorMessage = nil }
         } message: { Text(session.errorMessage ?? "") }
@@ -286,7 +335,7 @@ struct HomeView: View {
     @ViewBuilder private var hero: some View {
         if let featured {
             ZStack(alignment: .bottomLeading) {
-                AsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
+                CachedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { heroFallback }
                 }
@@ -574,6 +623,7 @@ struct ContentBrowser: View {
     @EnvironmentObject var session: AppSession
     let type: ContentType
     @State private var search = ""
+    @State private var categoryCounts: [String: Int] = [:]
 
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
     private var title: String { type == .live ? "TV in diretta" : type == .movies ? "Film" : "Serie TV" }
@@ -607,6 +657,7 @@ struct ContentBrowser: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .task(id: totalCount) { rebuildCategoryCounts() }
     }
 
     private var browserHeader: some View {
@@ -654,10 +705,17 @@ struct ContentBrowser: View {
     }
 
     private func count(for category: Category) -> Int {
+        categoryCounts[category.categoryID] ?? 0
+    }
+
+    private func rebuildCategoryCounts() {
         switch type {
-        case .live: return session.allLive.filter { $0.categoryID == category.categoryID }.count
-        case .movies: return session.allMovies.filter { $0.categoryID == category.categoryID }.count
-        case .series: return session.allSeries.filter { $0.categoryID == category.categoryID }.count
+        case .live:
+            categoryCounts = Dictionary(grouping: session.allLive, by: \.categoryID).mapValues(\.count)
+        case .movies:
+            categoryCounts = Dictionary(grouping: session.allMovies, by: \.categoryID).mapValues(\.count)
+        case .series:
+            categoryCounts = Dictionary(grouping: session.allSeries, by: \.categoryID).mapValues(\.count)
         }
     }
 
@@ -824,7 +882,7 @@ struct ModernPosterCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .topTrailing) {
-                AsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.8)) } }
                 }
@@ -844,7 +902,7 @@ struct LiveChannelCard: View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack {
                 Color(uiColor: .secondarySystemBackground)
-                AsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+                CachedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFit().padding(16) }
                     else { Image(systemName: "tv.fill").font(.system(size: 42)).foregroundStyle(brandGradient) }
                 }
@@ -865,7 +923,7 @@ struct PosterCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .topTrailing) {
-                AsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { ZStack { brandGradient; Image(systemName: landscape ? "tv.fill" : "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.75)) } }
                 }
@@ -889,7 +947,7 @@ struct ContinueWatchingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .bottom) {
-                AsyncImage(url: URL(string: progress.imageURL ?? "")) { phase in
+                CachedAsyncImage(url: URL(string: progress.imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.8)) } }
                 }
@@ -1029,7 +1087,7 @@ struct MovieDetailView: View {
         ZStack(alignment: .bottomLeading) {
             accentGradient(for: title)
             HStack(alignment: .top, spacing: 16) {
-                AsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { ZStack { brandGradient; Image(systemName: "film.fill").font(.largeTitle).foregroundStyle(.white) } }
                 }
@@ -1175,7 +1233,7 @@ struct LiveDetailView: View {
 
     private var liveHero: some View {
         VStack(alignment: .leading, spacing: 14) {
-            AsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+            CachedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
                 if let image = phase.image {
                     image.resizable().scaledToFit().padding(22)
                 } else {
@@ -1539,7 +1597,7 @@ struct SeriesHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 16) {
-                AsyncImage(url: URL(string: cover ?? "")) { phase in
+                CachedAsyncImage(url: URL(string: cover ?? "")) { phase in
                     if let image = phase.image {
                         image.resizable().scaledToFill()
                     } else {
@@ -1610,7 +1668,7 @@ struct EpisodeRow: View {
     let progress: PlaybackProgress?
     var body: some View {
         HStack(spacing: 14) {
-            AsyncImage(url: URL(string: episode.info?.movieImage ?? fallbackImage ?? "")) { phase in
+            CachedAsyncImage(url: URL(string: episode.info?.movieImage ?? fallbackImage ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() } else { ZStack { brandGradient; Image(systemName: "play.fill").foregroundStyle(.primary) } }
             }.frame(width: 126, height: 76).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
             VStack(alignment: .leading, spacing: 5) {
@@ -1659,7 +1717,7 @@ struct MediaDetailLayout<Action: View>: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 22) {
                     HStack(alignment: .top, spacing: 16) {
-                        AsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                        CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                             if let image = phase.image {
                                 image.resizable().scaledToFill()
                             } else {
@@ -2183,7 +2241,7 @@ struct SearchResultRow: View {
     let title: String; let subtitle: String; let imageURL: String?
     var body: some View {
         HStack(spacing: 14) {
-            AsyncImage(url: URL(string: imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }
+            CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }
                 .frame(width: 70, height: 70).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
             VStack(alignment: .leading) { Text(title).font(.headline).foregroundStyle(.primary).lineLimit(2); Text(subtitle).font(.caption).foregroundStyle(.purple) }
             Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary)
@@ -2319,7 +2377,7 @@ struct FavoriteRowContent: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: URL(string: favorite.imageURL ?? "")) { phase in
+            CachedAsyncImage(url: URL(string: favorite.imageURL ?? "")) { phase in
                 if let image = phase.image {
                     image.resizable().scaledToFill()
                 } else {
@@ -2425,7 +2483,7 @@ struct HistoryRowContent: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+            CachedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() }
                 else { ZStack { Color(uiColor: .secondarySystemBackground); Image(systemName: "play.rectangle.fill").foregroundStyle(.secondary) } }
             }
@@ -2476,7 +2534,7 @@ struct HistoryPosterCard: View {
 
     private var card: some View {
         VStack(alignment: .leading, spacing: 7) {
-            AsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+            CachedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() }
                 else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").foregroundStyle(.white) } }
             }
