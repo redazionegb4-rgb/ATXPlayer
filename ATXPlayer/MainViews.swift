@@ -60,44 +60,42 @@ struct HomeView: View {
     @EnvironmentObject var session: AppSession
     @State private var featuredIndex = 0
     @State private var showSearch = false
-    @State private var appeared = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let timer = Timer.publish(every: 8, on: .main, in: .common).autoconnect()
 
     private var features: [FeaturedContent] {
         let movies = session.allMovies
             .filter { !(($0.streamIcon ?? "").isEmpty) }
             .sorted { numericDateValue($0.added) > numericDateValue($1.added) }
-            .prefix(12)
+            .prefix(8)
             .map { FeaturedContent.movie($0) }
         let series = session.allSeries
             .filter { !(($0.cover ?? "").isEmpty) }
             .sorted { seriesSortValue($0) > seriesSortValue($1) }
-            .prefix(12)
+            .prefix(8)
             .map { FeaturedContent.series($0) }
         return Array(movies) + Array(series)
     }
     private var featured: FeaturedContent? { features.isEmpty ? nil : features[featuredIndex % features.count] }
-    private var recentMovies: [VODStream] { Array(session.allMovies.sorted { numericDateValue($0.added) > numericDateValue($1.added) }.prefix(16)) }
-    private var recentSeries: [SeriesItem] { Array(session.allSeries.sorted { seriesSortValue($0) > seriesSortValue($1) }.prefix(16)) }
+    private var recentMovies: [VODStream] { Array(session.allMovies.sorted { numericDateValue($0.added) > numericDateValue($1.added) }.prefix(12)) }
+    private var recentSeries: [SeriesItem] { Array(session.allSeries.sorted { seriesSortValue($0) > seriesSortValue($1) }.prefix(12)) }
     private var popularMovies: [VODStream] {
         let ids = session.accountWatchHistory.filter { $0.kind == ContentType.movies.rawValue }.map(\.streamID)
         let watched = ids.compactMap { id in session.allMovies.first { $0.streamID == id } }
-        return Array((watched + recentMovies).reduce(into: [Int: VODStream]()) { $0[$1.streamID] = $1 }.values.prefix(12))
+        return Array((watched + recentMovies).reduce(into: [Int: VODStream]()) { $0[$1.streamID] = $1 }.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }.prefix(10))
     }
     private var recommendedSeries: [SeriesItem] {
         let favorites = session.accountFavorites.filter { $0.kind == ContentType.series.rawValue }.compactMap { fav in session.allSeries.first { $0.seriesID == fav.streamID } }
-        return Array((favorites + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.shuffled().prefix(12))
+        return Array((favorites + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }.prefix(10))
     }
     private var topRatedMovies: [VODStream] {
         Array(session.allMovies.sorted {
             (Double($0.rating ?? "") ?? 0) > (Double($1.rating ?? "") ?? 0)
-        }.prefix(14))
+        }.prefix(10))
     }
     private var trendingSeries: [SeriesItem] {
         let historyIDs = session.accountWatchHistory.filter { $0.kind == ContentType.series.rawValue }.map(\.streamID)
         let watched = historyIDs.compactMap { id in session.allSeries.first { $0.seriesID == id } }
-        return Array((watched + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.prefix(14))
+        return Array((watched + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }.prefix(10))
     }
 
     var body: some View {
@@ -106,8 +104,6 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 topBar
                     .zIndex(20)
-                    .offset(y: appeared || reduceMotion ? 0 : -18)
-                    .opacity(appeared ? 1 : 0)
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         accountShortcuts
@@ -115,20 +111,18 @@ struct HomeView: View {
                             .zIndex(0)
                         counters
                         quickActions
+                        if !session.accountWatchHistory.isEmpty { historyRail }
                         if !session.continueWatching.isEmpty { continueWatchingRail }
                         if !trendingSeries.isEmpty { customSeriesRail("In tendenza", trendingSeries) }
                         if !recentMovies.isEmpty { movieRail }
                         if !topRatedMovies.isEmpty { customMovieRail("Più votati", topRatedMovies) }
                         if !recommendedSeries.isEmpty { customSeriesRail("Consigliati per te", recommendedSeries) }
                         if !session.accountFavorites.isEmpty { favoritesRail }
-                        if !session.accountWatchHistory.isEmpty { historyRail }
                         if !recentSeries.isEmpty { seriesRail }
                         updateStatus
                     }
                     .padding(.top, 12)
                     .padding(.bottom, 110)
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared || reduceMotion ? 0 : 24)
                 }
                 
             }
@@ -136,10 +130,9 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { GlobalSearchView() } }
-        .onAppear { withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.65)) { appeared = true } }
         .onReceive(timer) { _ in
             guard features.count > 1 else { return }
-            withAnimation(.easeInOut(duration: 0.65)) { featuredIndex = (featuredIndex + 1) % features.count }
+            featuredIndex = (featuredIndex + 1) % features.count
         }
         .alert("Attenzione", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK", role: .cancel) { session.errorMessage = nil }
@@ -173,8 +166,8 @@ struct HomeView: View {
         .padding(.horizontal, 20)
         .padding(.top, 14)
         .padding(.bottom, 13)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) { Divider().opacity(0.35) }
+        .background(Color(uiColor: .systemBackground))
+        .overlay(alignment: .bottom) { Divider().opacity(0.22) }
         .contentShape(Rectangle())
     }
 
@@ -352,7 +345,6 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 28).stroke(Color.primary.opacity(0.08)))
             .padding(.horizontal, 20)
-            .transition(.opacity.combined(with: .scale(scale: 0.985)))
         } else {
             heroFallback.frame(height: 280).clipShape(RoundedRectangle(cornerRadius: 28)).padding(.horizontal, 20)
         }

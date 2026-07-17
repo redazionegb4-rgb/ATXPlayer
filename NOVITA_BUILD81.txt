@@ -1,0 +1,10 @@
+ATLANTIX 2.0 — BUILD 81
+
+- Scorrimento Home ottimizzato e più fluido
+- Rimossi effetti e transizioni pesanti durante lo scrolling
+- Header alleggerito senza materiale trasparente dinamico
+- Carosello principale mantenuto, ma senza animazioni che ridisegnano tutta la Home
+- Liste ridotte e ordinate in modo stabile per evitare continui ricalcoli
+- Rimossa la casualità dei consigli durante ogni aggiornamento della vista
+- “Visti di recente” spostato prima di “Continua a guardare”
+- Player, login, DNS, PiP, AirPlay e logica di riproduzione invariati
