@@ -1,0 +1,13 @@
+ATLANTIX 2.0 — BUILD 88
+
+Aggiornamento prestazioni basato direttamente sul progetto AtlantiX_v2-7 funzionante.
+
+- Eliminato il cambio automatico del banner durante lo scrolling.
+- Nuovo caricamento immagini con cache in memoria e cache di rete.
+- Ridimensionamento e decodifica delle locandine fuori dal thread principale.
+- Cancellazione automatica dei download quando una card esce dallo schermo.
+- Liste verticali e orizzontali rese lazy nelle schermate lunghe.
+- Conteggi delle categorie precalcolati una sola volta anziché filtrare tutto il catalogo per ogni riquadro.
+- Ricerca e ordinamento delle griglie precalcolati solo quando cambiano ricerca o ordinamento.
+- Mantenuto “Visti di recente” prima di “Continua a guardare”.
+- Nessuna modifica a login, DNS, player, PiP, AirPlay o dati salvati.

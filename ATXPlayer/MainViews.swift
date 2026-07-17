@@ -1,60 +1,82 @@
+import Foundation
 import SwiftUI
 import AVKit
 import AVFoundation
 import UIKit
+import ImageIO
 import SafariServices
 
-@MainActor
-private final class CachedImageLoader: ObservableObject {
-    @Published var phase: AsyncImagePhase = .empty
-    private static let memoryCache = NSCache<NSURL, UIImage>()
-    private var task: Task<Void, Never>?
 
-    func load(_ url: URL?) {
-        task?.cancel()
-        guard let url else { phase = .empty; return }
-        if let cached = Self.memoryCache.object(forKey: url as NSURL) {
-            phase = .success(Image(uiImage: cached))
-            return
-        }
-        phase = .empty
-        task = Task {
-            do {
-                let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 25)
-                let (data, response) = try await URLSession.shared.data(for: request)
-                guard !Task.isCancelled,
-                      let http = response as? HTTPURLResponse,
-                      (200...299).contains(http.statusCode),
-                      let image = await Self.decode(data) else { return }
-                Self.memoryCache.setObject(image, forKey: url as NSURL, cost: data.count)
-                phase = .success(Image(uiImage: image))
-            } catch {
-                guard !Task.isCancelled else { return }
-                phase = .failure(error)
-            }
-        }
+// MARK: - Image loading optimized for smooth scrolling
+private final class PosterImageCache {
+    static let shared = PosterImageCache()
+    private let cache = NSCache<NSURL, UIImage>()
+
+    private init() {
+        cache.countLimit = 250
+        cache.totalCostLimit = 120 * 1024 * 1024
     }
 
-    nonisolated private static func decode(_ data: Data) async -> UIImage? {
-        await Task.detached(priority: .utility) { UIImage(data: data)?.preparingForDisplay() }.value
+    func image(for url: URL) -> UIImage? { cache.object(forKey: url as NSURL) }
+    func insert(_ image: UIImage, for url: URL) {
+        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
+        cache.setObject(image, forKey: url as NSURL, cost: cost)
     }
-
-    deinit { task?.cancel() }
 }
 
-private struct CachedAsyncImage<Content: View>: View {
-    let url: URL?
-    let content: (AsyncImagePhase) -> Content
-    @StateObject private var loader = CachedImageLoader()
+private struct OptimizedImagePhase {
+    let image: Image?
+}
 
-    init(url: URL?, @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
-        self.url = url
-        self.content = content
-    }
+private struct OptimizedAsyncImage<Content: View>: View {
+    let url: URL?
+    @ViewBuilder let content: (OptimizedImagePhase) -> Content
+    @State private var uiImage: UIImage?
 
     var body: some View {
-        content(loader.phase)
-            .task(id: url) { loader.load(url) }
+        content(OptimizedImagePhase(image: uiImage.map { Image(uiImage: $0) }))
+            .task(id: url) {
+                guard let url else {
+                    uiImage = nil
+                    return
+                }
+                if let cached = PosterImageCache.shared.image(for: url) {
+                    uiImage = cached
+                    return
+                }
+                do {
+                    var request = URLRequest(url: url)
+                    request.cachePolicy = .returnCacheDataElseLoad
+                    request.timeoutInterval = 20
+                    let (data, _) = try await URLSession.shared.data(for: request)
+                    try Task.checkCancellation()
+                    let decoded = await Task.detached(priority: .utility) {
+                        Self.downsample(data: data, maxPixelSize: 900)
+                    }.value
+                    try Task.checkCancellation()
+                    if let decoded {
+                        PosterImageCache.shared.insert(decoded, for: url)
+                        uiImage = decoded
+                    }
+                } catch is CancellationError {
+                    // The card left the screen: avoid unnecessary work.
+                } catch {
+                    uiImage = nil
+                }
+            }
+    }
+
+    private static func downsample(data: Data, maxPixelSize: CGFloat) -> UIImage? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options) else { return nil }
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 }
 
@@ -335,7 +357,7 @@ struct HomeView: View {
     @ViewBuilder private var hero: some View {
         if let featured {
             ZStack(alignment: .bottomLeading) {
-                CachedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
+                OptimizedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { heroFallback }
                 }
@@ -711,11 +733,11 @@ struct ContentBrowser: View {
     private func rebuildCategoryCounts() {
         switch type {
         case .live:
-            categoryCounts = Dictionary(grouping: session.allLive, by: \.categoryID).mapValues(\.count)
+            categoryCounts = Dictionary(grouping: session.allLive, by: { $0.categoryID ?? "" }).mapValues { $0.count }
         case .movies:
-            categoryCounts = Dictionary(grouping: session.allMovies, by: \.categoryID).mapValues(\.count)
+            categoryCounts = Dictionary(grouping: session.allMovies, by: { $0.categoryID ?? "" }).mapValues { $0.count }
         case .series:
-            categoryCounts = Dictionary(grouping: session.allSeries, by: \.categoryID).mapValues(\.count)
+            categoryCounts = Dictionary(grouping: session.allSeries, by: { $0.categoryID ?? "" }).mapValues { $0.count }
         }
     }
 
@@ -750,6 +772,9 @@ struct ItemGrid: View {
     @State private var error: String?
     @State private var search = ""
     @State private var newestFirst = true
+    @State private var visibleLive: [LiveStream] = []
+    @State private var visibleVOD: [VODStream] = []
+    @State private var visibleSeries: [SeriesItem] = []
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
     var body: some View {
@@ -775,6 +800,8 @@ struct ItemGrid: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await load(forceNetwork: false) }
+        .onChange(of: search) { _ in rebuildVisibleItems() }
+        .onChange(of: newestFirst) { _ in rebuildVisibleItems() }
     }
 
     private var itemHeader: some View {
@@ -830,22 +857,22 @@ struct ItemGrid: View {
     }
 
     private var resultCount: Int {
-        if type == .live { return live.filter(matchLive).count }
-        if type == .movies { return vod.filter(matchMovie).count }
-        return series.filter(matchSeries).count
+        if type == .live { return visibleLive.count }
+        if type == .movies { return visibleVOD.count }
+        return visibleSeries.count
     }
 
     @ViewBuilder private var contentCards: some View {
         if type == .live {
-            ForEach(live.filter(matchLive)) { item in
+            ForEach(visibleLive) { item in
                 NavigationLink { LiveDetailView(item: item) } label: { LiveChannelCard(item: item) }.buttonStyle(.plain)
             }
         } else if type == .movies {
-            ForEach(vod.filter(matchMovie).sorted { newestFirst ? numericDateValue($0.added) > numericDateValue($1.added) : numericDateValue($0.added) < numericDateValue($1.added) }) { item in
+            ForEach(visibleVOD) { item in
                 NavigationLink { MovieDetailView(item: item) } label: { ModernPosterCard(title: item.name, imageURL: item.streamIcon, badge: item.rating, typeLabel: "FILM") }.buttonStyle(.plain)
             }
         } else {
-            ForEach(series.filter(matchSeries).sorted { newestFirst ? seriesSortValue($0) > seriesSortValue($1) : seriesSortValue($0) < seriesSortValue($1) }) { item in
+            ForEach(visibleSeries) { item in
                 NavigationLink { SeriesDetailView(item: item) } label: { ModernPosterCard(title: item.name, imageURL: item.cover, badge: item.rating, typeLabel: "SERIE") }.buttonStyle(.plain)
             }
         }
@@ -854,6 +881,21 @@ struct ItemGrid: View {
     private func matchLive(_ x: LiveStream) -> Bool { search.isEmpty || x.name.localizedCaseInsensitiveContains(search) }
     private func matchMovie(_ x: VODStream) -> Bool { search.isEmpty || x.name.localizedCaseInsensitiveContains(search) || (x.genre ?? "").localizedCaseInsensitiveContains(search) }
     private func matchSeries(_ x: SeriesItem) -> Bool { search.isEmpty || x.name.localizedCaseInsensitiveContains(search) || (x.genre ?? "").localizedCaseInsensitiveContains(search) }
+
+    private func rebuildVisibleItems() {
+        switch type {
+        case .live:
+            visibleLive = live.filter(matchLive)
+        case .movies:
+            visibleVOD = vod.filter(matchMovie).sorted {
+                newestFirst ? numericDateValue($0.added) > numericDateValue($1.added) : numericDateValue($0.added) < numericDateValue($1.added)
+            }
+        case .series:
+            visibleSeries = series.filter(matchSeries).sorted {
+                newestFirst ? seriesSortValue($0) > seriesSortValue($1) : seriesSortValue($0) < seriesSortValue($1)
+            }
+        }
+    }
 
     private func load(forceNetwork: Bool) async {
         loading = true; error = nil
@@ -870,6 +912,7 @@ struct ItemGrid: View {
                 if forceNetwork || series.isEmpty { series = try await APIClient.shared.series(baseURL: session.baseURL, username: session.username, password: session.password, categoryID: category?.categoryID) }
             }
         } catch { self.error = error.localizedDescription }
+        rebuildVisibleItems()
         loading = false
     }
 }
@@ -882,7 +925,7 @@ struct ModernPosterCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .topTrailing) {
-                CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.8)) } }
                 }
@@ -902,7 +945,7 @@ struct LiveChannelCard: View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack {
                 Color(uiColor: .secondarySystemBackground)
-                CachedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+                OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFit().padding(16) }
                     else { Image(systemName: "tv.fill").font(.system(size: 42)).foregroundStyle(brandGradient) }
                 }
@@ -923,7 +966,7 @@ struct PosterCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .topTrailing) {
-                CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { ZStack { brandGradient; Image(systemName: landscape ? "tv.fill" : "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.75)) } }
                 }
@@ -947,7 +990,7 @@ struct ContinueWatchingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .bottom) {
-                CachedAsyncImage(url: URL(string: progress.imageURL ?? "")) { phase in
+                OptimizedAsyncImage(url: URL(string: progress.imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.8)) } }
                 }
@@ -1019,7 +1062,7 @@ struct MovieDetailView: View {
         ZStack {
             pageBackground.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 22) {
+                LazyVStack(alignment: .leading, spacing: 22) {
                     premiumHeader
                     actionButtons
 
@@ -1030,7 +1073,7 @@ struct MovieDetailView: View {
                     if !castNames.isEmpty {
                         detailSection("Cast") {
                             ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 10) {
+                                LazyHStack(spacing: 10) {
                                     ForEach(castNames, id: \.self) { actor in
                                         NavigationLink { ActorView(name: actor) } label: {
                                             Label(actor, systemImage: "person.crop.circle.fill")
@@ -1087,7 +1130,7 @@ struct MovieDetailView: View {
         ZStack(alignment: .bottomLeading) {
             accentGradient(for: title)
             HStack(alignment: .top, spacing: 16) {
-                CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { ZStack { brandGradient; Image(systemName: "film.fill").font(.largeTitle).foregroundStyle(.white) } }
                 }
@@ -1161,7 +1204,7 @@ struct ActorView: View {
         ZStack {
             pageBackground.ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                LazyVStack(alignment: .leading, spacing: 24) {
                     HStack(spacing: 16) {
                         Image(systemName: "person.crop.circle.fill").font(.system(size: 74)).foregroundStyle(accentGradient(for: name))
                         VStack(alignment: .leading) { Text(name).font(.title.bold()); Text("Filmografia disponibile").foregroundStyle(.secondary) }
@@ -1201,7 +1244,7 @@ struct LiveDetailView: View {
         ZStack {
             pageBackground.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     liveHero
                     NavigationLink {
                         PlayerScreen(title: item.name, url: directURL, isLive: true)
@@ -1233,7 +1276,7 @@ struct LiveDetailView: View {
 
     private var liveHero: some View {
         VStack(alignment: .leading, spacing: 14) {
-            CachedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+            OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
                 if let image = phase.image {
                     image.resizable().scaledToFit().padding(22)
                 } else {
@@ -1380,7 +1423,7 @@ struct SeriesDetailView: View {
         ZStack {
             pageBackground.ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     SeriesHeader(item: item, details: info?.info)
                     if !seriesCast.isEmpty { castRail }
                     if loading { ProgressView("Caricamento stagioni…").tint(.white).frame(maxWidth: .infinity).padding(30) }
@@ -1465,7 +1508,7 @@ struct SeriesDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Cast").font(.title3.bold()).padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+                LazyHStack(spacing: 10) {
                     ForEach(seriesCast, id: \.self) { actor in
                         NavigationLink { ActorView(name: actor) } label: {
                             Label(actor, systemImage: "person.crop.circle.fill")
@@ -1597,7 +1640,7 @@ struct SeriesHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 16) {
-                CachedAsyncImage(url: URL(string: cover ?? "")) { phase in
+                OptimizedAsyncImage(url: URL(string: cover ?? "")) { phase in
                     if let image = phase.image {
                         image.resizable().scaledToFill()
                     } else {
@@ -1668,7 +1711,7 @@ struct EpisodeRow: View {
     let progress: PlaybackProgress?
     var body: some View {
         HStack(spacing: 14) {
-            CachedAsyncImage(url: URL(string: episode.info?.movieImage ?? fallbackImage ?? "")) { phase in
+            OptimizedAsyncImage(url: URL(string: episode.info?.movieImage ?? fallbackImage ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() } else { ZStack { brandGradient; Image(systemName: "play.fill").foregroundStyle(.primary) } }
             }.frame(width: 126, height: 76).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
             VStack(alignment: .leading, spacing: 5) {
@@ -1715,9 +1758,9 @@ struct MediaDetailLayout<Action: View>: View {
         ZStack {
             pageBackground.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 22) {
+                LazyVStack(alignment: .leading, spacing: 22) {
                     HStack(alignment: .top, spacing: 16) {
-                        CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                        OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                             if let image = phase.image {
                                 image.resizable().scaledToFill()
                             } else {
@@ -2241,7 +2284,7 @@ struct SearchResultRow: View {
     let title: String; let subtitle: String; let imageURL: String?
     var body: some View {
         HStack(spacing: 14) {
-            CachedAsyncImage(url: URL(string: imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }
+            OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }
                 .frame(width: 70, height: 70).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
             VStack(alignment: .leading) { Text(title).font(.headline).foregroundStyle(.primary).lineLimit(2); Text(subtitle).font(.caption).foregroundStyle(.purple) }
             Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary)
@@ -2377,7 +2420,7 @@ struct FavoriteRowContent: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CachedAsyncImage(url: URL(string: favorite.imageURL ?? "")) { phase in
+            OptimizedAsyncImage(url: URL(string: favorite.imageURL ?? "")) { phase in
                 if let image = phase.image {
                     image.resizable().scaledToFill()
                 } else {
@@ -2483,7 +2526,7 @@ struct HistoryRowContent: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CachedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+            OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() }
                 else { ZStack { Color(uiColor: .secondarySystemBackground); Image(systemName: "play.rectangle.fill").foregroundStyle(.secondary) } }
             }
@@ -2534,7 +2577,7 @@ struct HistoryPosterCard: View {
 
     private var card: some View {
         VStack(alignment: .leading, spacing: 7) {
-            CachedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+            OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() }
                 else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").foregroundStyle(.white) } }
             }
