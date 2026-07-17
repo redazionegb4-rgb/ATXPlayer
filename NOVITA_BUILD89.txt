@@ -1,0 +1,9 @@
+AtlantiX 2.0 — Build 89
+
+OTTIMIZZAZIONE HOME
+- Eliminati ordinamenti e filtri pesanti eseguiti durante ogni ridisegno dello scroll.
+- I contenuti Home vengono ora preparati in uno snapshot e aggiornati solo quando cambiano playlist, cronologia o preferiti.
+- Ridotti i contenuti iniziali per carosello per limitare caricamenti immagini simultanei.
+- Banner alleggerito e senza animazione sul pulsante preferiti.
+- Mantenuto “Visti di recente” prima di “Continua a guardare”.
+- Nessuna modifica a player, login, API, PiP, AirPlay e pagine Film/Serie/Diretta.

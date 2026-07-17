@@ -137,40 +137,27 @@ struct HomeView: View {
     @State private var featuredIndex = 0
     @State private var showSearch = false
 
-    private var features: [FeaturedContent] {
-        let movies = session.allMovies
-            .filter { !(($0.streamIcon ?? "").isEmpty) }
-            .sorted { numericDateValue($0.added) > numericDateValue($1.added) }
-            .prefix(8)
-            .map { FeaturedContent.movie($0) }
-        let series = session.allSeries
-            .filter { !(($0.cover ?? "").isEmpty) }
-            .sorted { seriesSortValue($0) > seriesSortValue($1) }
-            .prefix(8)
-            .map { FeaturedContent.series($0) }
-        return Array(movies) + Array(series)
+    // Home data is snapshotted only when the playlist/history really changes.
+    // This avoids sorting and filtering thousands of items during every scroll redraw.
+    @State private var features: [FeaturedContent] = []
+    @State private var recentMovies: [VODStream] = []
+    @State private var recentSeries: [SeriesItem] = []
+    @State private var recommendedSeries: [SeriesItem] = []
+    @State private var topRatedMovies: [VODStream] = []
+    @State private var trendingSeries: [SeriesItem] = []
+
+    private var featured: FeaturedContent? {
+        guard !features.isEmpty else { return nil }
+        return features[min(featuredIndex, features.count - 1)]
     }
-    private var featured: FeaturedContent? { features.isEmpty ? nil : features[featuredIndex % features.count] }
-    private var recentMovies: [VODStream] { Array(session.allMovies.sorted { numericDateValue($0.added) > numericDateValue($1.added) }.prefix(12)) }
-    private var recentSeries: [SeriesItem] { Array(session.allSeries.sorted { seriesSortValue($0) > seriesSortValue($1) }.prefix(12)) }
-    private var popularMovies: [VODStream] {
-        let ids = session.accountWatchHistory.filter { $0.kind == ContentType.movies.rawValue }.map(\.streamID)
-        let watched = ids.compactMap { id in session.allMovies.first { $0.streamID == id } }
-        return Array((watched + recentMovies).reduce(into: [Int: VODStream]()) { $0[$1.streamID] = $1 }.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }.prefix(10))
-    }
-    private var recommendedSeries: [SeriesItem] {
-        let favorites = session.accountFavorites.filter { $0.kind == ContentType.series.rawValue }.compactMap { fav in session.allSeries.first { $0.seriesID == fav.streamID } }
-        return Array((favorites + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }.prefix(10))
-    }
-    private var topRatedMovies: [VODStream] {
-        Array(session.allMovies.sorted {
-            (Double($0.rating ?? "") ?? 0) > (Double($1.rating ?? "") ?? 0)
-        }.prefix(10))
-    }
-    private var trendingSeries: [SeriesItem] {
-        let historyIDs = session.accountWatchHistory.filter { $0.kind == ContentType.series.rawValue }.map(\.streamID)
-        let watched = historyIDs.compactMap { id in session.allSeries.first { $0.seriesID == id } }
-        return Array((watched + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }.prefix(10))
+
+    private var homeDataVersion: String {
+        [
+            session.allMovies.count,
+            session.allSeries.count,
+            session.accountWatchHistory.count,
+            session.accountFavorites.count
+        ].map(String.init).joined(separator: "-")
     }
 
     var body: some View {
@@ -208,6 +195,53 @@ struct HomeView: View {
         .alert("Attenzione", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK", role: .cancel) { session.errorMessage = nil }
         } message: { Text(session.errorMessage ?? "") }
+        .task(id: homeDataVersion) {
+            rebuildHomeSnapshot()
+        }
+    }
+
+    @MainActor
+    private func rebuildHomeSnapshot() {
+        let sortedMovies = session.allMovies.sorted {
+            numericDateValue($0.added) > numericDateValue($1.added)
+        }
+        let sortedSeries = session.allSeries.sorted {
+            seriesSortValue($0) > seriesSortValue($1)
+        }
+
+        recentMovies = Array(sortedMovies.prefix(10))
+        recentSeries = Array(sortedSeries.prefix(10))
+
+        let featureMovies = sortedMovies
+            .filter { !(($0.streamIcon ?? "").isEmpty) }
+            .prefix(4)
+            .map(FeaturedContent.movie)
+        let featureSeries = sortedSeries
+            .filter { !(($0.cover ?? "").isEmpty) }
+            .prefix(4)
+            .map(FeaturedContent.series)
+        features = Array(featureMovies) + Array(featureSeries)
+        if featuredIndex >= features.count { featuredIndex = 0 }
+
+        topRatedMovies = Array(session.allMovies.sorted {
+            (Double($0.rating ?? "") ?? 0) > (Double($1.rating ?? "") ?? 0)
+        }.prefix(8))
+
+        let seriesByID = Dictionary(uniqueKeysWithValues: session.allSeries.map { ($0.seriesID, $0) })
+        let watchedSeries = session.accountWatchHistory
+            .filter { $0.kind == ContentType.series.rawValue }
+            .compactMap { seriesByID[$0.streamID] }
+        let favoriteSeries = session.accountFavorites
+            .filter { $0.kind == ContentType.series.rawValue }
+            .compactMap { seriesByID[$0.streamID] }
+
+        trendingSeries = deduplicatedSeries(watchedSeries + recentSeries, limit: 8)
+        recommendedSeries = deduplicatedSeries(favoriteSeries + recentSeries, limit: 8)
+    }
+
+    private func deduplicatedSeries(_ items: [SeriesItem], limit: Int) -> [SeriesItem] {
+        var seen = Set<Int>()
+        return Array(items.filter { seen.insert($0.seriesID).inserted }.prefix(limit))
     }
 
     private var topBar: some View {
@@ -361,7 +395,7 @@ struct HomeView: View {
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { heroFallback }
                 }
-                .frame(maxWidth: .infinity).frame(height: 340).clipped()
+                .frame(maxWidth: .infinity).frame(height: 310).clipped()
 
                 LinearGradient(colors: [.clear, .black.opacity(0.15), .black.opacity(0.96)], startPoint: .top, endPoint: .bottom)
 
@@ -414,7 +448,6 @@ struct HomeView: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 28).stroke(Color.primary.opacity(0.08)))
             .padding(.horizontal, 20)
         } else {
             heroFallback.frame(height: 280).clipShape(RoundedRectangle(cornerRadius: 28)).padding(.horizontal, 20)
@@ -429,13 +462,11 @@ struct HomeView: View {
     }
 
     private func toggleFeaturedFavorite(_ featured: FeaturedContent) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            switch featured {
-            case .movie(let item):
-                session.toggleFavorite(kind: .movies, streamID: item.streamID, title: item.name, imageURL: item.streamIcon, fileExtension: item.containerExtension)
-            case .series(let item):
-                session.toggleFavorite(kind: .series, streamID: item.seriesID, title: item.name, imageURL: item.cover)
-            }
+        switch featured {
+        case .movie(let item):
+            session.toggleFavorite(kind: .movies, streamID: item.streamID, title: item.name, imageURL: item.streamIcon, fileExtension: item.containerExtension)
+        case .series(let item):
+            session.toggleFavorite(kind: .series, streamID: item.seriesID, title: item.name, imageURL: item.cover)
         }
     }
 
@@ -484,7 +515,7 @@ struct HomeView: View {
 
     private var favoritesRail: some View {
         MediaRail(title: "La mia lista") {
-            ForEach(session.accountFavorites.prefix(12)) { favorite in
+            ForEach(session.accountFavorites.prefix(8)) { favorite in
                 favoriteHomeLink(favorite)
             }
             NavigationLink { FavoritesView() } label: {
@@ -525,7 +556,7 @@ struct HomeView: View {
 
     private var historyRail: some View {
         MediaRail(title: "Visti di recente") {
-            ForEach(Array(session.accountWatchHistory.prefix(12))) { item in
+            ForEach(Array(session.accountWatchHistory.prefix(8))) { item in
                 HistoryPosterCard(item: item)
             }
             NavigationLink { WatchHistoryView() } label: {
@@ -543,7 +574,7 @@ struct HomeView: View {
 
     private var continueWatchingRail: some View {
         MediaRail(title: "Continua a guardare") {
-            ForEach(session.continueWatching.prefix(12)) { progress in
+            ForEach(session.continueWatching.prefix(8)) { progress in
                 if let descriptor = session.descriptor(from: progress) {
                     NavigationLink {
                         PlayerScreen(
