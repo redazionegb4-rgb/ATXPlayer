@@ -1,0 +1,14 @@
+ATLANTIX 2.0 — BUILD 80
+
+- Home Premium completa con banner automatico e indicatori
+- Pulsanti Guarda, Dettagli e La mia lista nel banner
+- Continua a guardare senza mini-player
+- Sezioni In tendenza, Nuovi arrivi, Più votati, Consigliati, Preferiti e Cronologia
+- Ricerca con filtri, ricerche recenti e suggerimenti
+- Schede film e serie ridisegnate
+- Trailer YouTube quando disponibile
+- Cast selezionabile con pagina interprete
+- Contenuti simili e colori dinamici
+- Episodi con trama, durata, data, voto e stato visione
+- Correzione definitiva errore Ambiguous use of prefix
+- Versione 2.0, build 80

@@ -2,9 +2,31 @@ import SwiftUI
 import AVKit
 import AVFoundation
 import UIKit
+import SafariServices
 
 private let brandGradient = LinearGradient(colors: [.cyan, .purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
 private let pageBackground = Color(uiColor: .systemBackground)
+
+private func accentGradient(for seed: String) -> LinearGradient {
+    let palettes: [[Color]] = [
+        [.cyan, .purple, .indigo],
+        [.orange, .pink, .purple],
+        [.blue, .cyan, .teal],
+        [.red, .orange, .pink],
+        [.indigo, .blue, .purple]
+    ]
+    let value = abs(seed.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) })
+    let colors = palettes[value % palettes.count]
+    return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+}
+
+private func normalizedTrailerURL(_ value: String?) -> URL? {
+    guard var value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+    if value.hasPrefix("http://") || value.hasPrefix("https://") { return URL(string: value) }
+    if value.contains("youtube.com") || value.contains("youtu.be") { return URL(string: "https://" + value) }
+    value = value.replacingOccurrences(of: " ", with: "")
+    return URL(string: "https://www.youtube.com/watch?v=\(value)")
+}
 
 private func numericDateValue(_ value: String?) -> Double {
     guard let value, !value.isEmpty else { return 0 }
@@ -43,27 +65,21 @@ struct HomeView: View {
     private let timer = Timer.publish(every: 8, on: .main, in: .common).autoconnect()
 
     private var features: [FeaturedContent] {
-        let movies = session.allMovies.filter { !($0.streamIcon ?? "").isEmpty }.prefix(25).map { FeaturedContent.movie($0) }
-        let series = session.allSeries.filter { !($0.cover ?? "").isEmpty }.prefix(25).map { FeaturedContent.series($0) }
-        return (Array(movies) + Array(series)).shuffled()
+        let movies = session.allMovies
+            .filter { !(($0.streamIcon ?? "").isEmpty) }
+            .sorted { numericDateValue($0.added) > numericDateValue($1.added) }
+            .prefix(12)
+            .map { FeaturedContent.movie($0) }
+        let series = session.allSeries
+            .filter { !(($0.cover ?? "").isEmpty) }
+            .sorted { seriesSortValue($0) > seriesSortValue($1) }
+            .prefix(12)
+            .map { FeaturedContent.series($0) }
+        return Array(movies) + Array(series)
     }
     private var featured: FeaturedContent? { features.isEmpty ? nil : features[featuredIndex % features.count] }
     private var recentMovies: [VODStream] { Array(session.allMovies.sorted { numericDateValue($0.added) > numericDateValue($1.added) }.prefix(16)) }
     private var recentSeries: [SeriesItem] { Array(session.allSeries.sorted { seriesSortValue($0) > seriesSortValue($1) }.prefix(16)) }
-    private var trendingMovies: [VODStream] {
-        Array(session.allMovies
-            .sorted { ratingValue($0.rating) > ratingValue($1.rating) }
-            .prefix(14))
-    }
-    private var topRatedSeries: [SeriesItem] {
-        Array(session.allSeries
-            .sorted { ratingValue($0.rating) > ratingValue($1.rating) }
-            .prefix(14))
-    }
-    private func ratingValue(_ value: String?) -> Double {
-        guard let value else { return 0 }
-        return Double(value.replacingOccurrences(of: ",", with: ".")) ?? 0
-    }
     private var popularMovies: [VODStream] {
         let ids = session.accountWatchHistory.filter { $0.kind == ContentType.movies.rawValue }.map(\.streamID)
         let watched = ids.compactMap { id in session.allMovies.first { $0.streamID == id } }
@@ -72,6 +88,16 @@ struct HomeView: View {
     private var recommendedSeries: [SeriesItem] {
         let favorites = session.accountFavorites.filter { $0.kind == ContentType.series.rawValue }.compactMap { fav in session.allSeries.first { $0.seriesID == fav.streamID } }
         return Array((favorites + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.shuffled().prefix(12))
+    }
+    private var topRatedMovies: [VODStream] {
+        Array(session.allMovies.sorted {
+            (Double($0.rating ?? "") ?? 0) > (Double($1.rating ?? "") ?? 0)
+        }.prefix(14))
+    }
+    private var trendingSeries: [SeriesItem] {
+        let historyIDs = session.accountWatchHistory.filter { $0.kind == ContentType.series.rawValue }.map(\.streamID)
+        let watched = historyIDs.compactMap { id in session.allSeries.first { $0.seriesID == id } }
+        return Array((watched + recentSeries).reduce(into: [Int: SeriesItem]()) { $0[$1.seriesID] = $1 }.values.prefix(14))
     }
 
     var body: some View {
@@ -89,14 +115,13 @@ struct HomeView: View {
                             .zIndex(0)
                         counters
                         quickActions
+                        if !session.continueWatching.isEmpty { continueWatchingRail }
+                        if !trendingSeries.isEmpty { customSeriesRail("In tendenza", trendingSeries) }
+                        if !recentMovies.isEmpty { movieRail }
+                        if !topRatedMovies.isEmpty { customMovieRail("Più votati", topRatedMovies) }
+                        if !recommendedSeries.isEmpty { customSeriesRail("Consigliati per te", recommendedSeries) }
                         if !session.accountFavorites.isEmpty { favoritesRail }
                         if !session.accountWatchHistory.isEmpty { historyRail }
-                        if !session.continueWatching.isEmpty { continueWatchingRail }
-                        if !trendingMovies.isEmpty { customMovieRail("🔥 In tendenza", trendingMovies) }
-                        if !recentMovies.isEmpty { customMovieRail("🆕 Nuovi film", recentMovies) }
-                        if !topRatedSeries.isEmpty { customSeriesRail("⭐ Serie più votate", topRatedSeries) }
-                        if !popularMovies.isEmpty { customMovieRail("Scelti per te", popularMovies) }
-                        if !recommendedSeries.isEmpty { customSeriesRail("Consigliati per te", recommendedSeries) }
                         if !recentSeries.isEmpty { seriesRail }
                         updateStatus
                     }
@@ -129,7 +154,7 @@ struct HomeView: View {
                     .font(.title3.weight(.black))
                     .tracking(2.0)
                     .lineLimit(1)
-                Text("\(greeting), \(session.username) 👋")
+                Text("Bentornato, \(session.username)")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -151,15 +176,6 @@ struct HomeView: View {
         .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) { Divider().opacity(0.35) }
         .contentShape(Rectangle())
-    }
-
-    private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<12: return "Buongiorno"
-        case 12..<18: return "Buon pomeriggio"
-        default: return "Buonasera"
-        }
     }
 
     private var lastUpdateText: String {
@@ -276,29 +292,87 @@ struct HomeView: View {
 
     @ViewBuilder private var hero: some View {
         if let featured {
-            NavigationLink { featured.destination(session: session) } label: {
-                ZStack(alignment: .bottomLeading) {
-                    AsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
-                        if let image = phase.image { image.resizable().scaledToFill() }
-                        else { heroFallback }
-                    }
-                    .frame(maxWidth: .infinity).frame(height: 300).clipped()
-                    LinearGradient(colors: [.clear, .black.opacity(0.18), .black.opacity(0.95)], startPoint: .top, endPoint: .bottom)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(featured.kind).font(.caption2.bold()).tracking(2).foregroundStyle(.cyan)
-                        Text(featured.title).font(.system(size: 28, weight: .black, design: .rounded)).foregroundStyle(.white).lineLimit(2)
-                        Text(featured.subtitle).font(.caption).foregroundStyle(.white.opacity(0.78)).lineLimit(2)
-                        Label("Apri dettaglio", systemImage: "play.circle.fill").font(.caption.bold()).foregroundStyle(.white).padding(.top, 3)
-                    }.padding(22)
+            ZStack(alignment: .bottomLeading) {
+                AsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { heroFallback }
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 28).stroke(Color.primary.opacity(0.08)))
-                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity).frame(height: 340).clipped()
+
+                LinearGradient(colors: [.clear, .black.opacity(0.15), .black.opacity(0.96)], startPoint: .top, endPoint: .bottom)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(featured.kind).font(.caption2.bold()).tracking(2).foregroundStyle(.cyan)
+                    Text(featured.title)
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    Text(featured.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.78))
+                        .lineLimit(2)
+
+                    HStack(spacing: 10) {
+                        NavigationLink { featured.destination(session: session) } label: {
+                            Label("Guarda", systemImage: "play.fill")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, 17).frame(height: 44)
+                                .background(.white).clipShape(Capsule())
+                        }
+                        NavigationLink { featured.destination(session: session) } label: {
+                            Label("Dettagli", systemImage: "info.circle")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 16).frame(height: 44)
+                                .background(.white.opacity(0.16)).clipShape(Capsule())
+                        }
+                        Button { toggleFeaturedFavorite(featured) } label: {
+                            Image(systemName: isFeaturedFavorite(featured) ? "heart.fill" : "heart")
+                                .font(.headline.bold()).foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(.white.opacity(0.16)).clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if features.count > 1 {
+                        HStack(spacing: 6) {
+                            ForEach(0..<min(features.count, 8), id: \.self) { index in
+                                Capsule()
+                                    .fill(index == featuredIndex % features.count ? Color.white : Color.white.opacity(0.35))
+                                    .frame(width: index == featuredIndex % features.count ? 22 : 6, height: 6)
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
+                }.padding(22)
             }
-            .buttonStyle(.plain)
+            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28).stroke(Color.primary.opacity(0.08)))
+            .padding(.horizontal, 20)
+            .transition(.opacity.combined(with: .scale(scale: 0.985)))
         } else {
-            heroFallback.frame(height: 260).clipShape(RoundedRectangle(cornerRadius: 28)).padding(.horizontal, 20)
+            heroFallback.frame(height: 280).clipShape(RoundedRectangle(cornerRadius: 28)).padding(.horizontal, 20)
+        }
+    }
+
+    private func isFeaturedFavorite(_ featured: FeaturedContent) -> Bool {
+        switch featured {
+        case .movie(let item): return session.isFavorite(kind: .movies, streamID: item.streamID)
+        case .series(let item): return session.isFavorite(kind: .series, streamID: item.seriesID)
+        }
+    }
+
+    private func toggleFeaturedFavorite(_ featured: FeaturedContent) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            switch featured {
+            case .movie(let item):
+                session.toggleFavorite(kind: .movies, streamID: item.streamID, title: item.name, imageURL: item.streamIcon, fileExtension: item.containerExtension)
+            case .series(let item):
+                session.toggleFavorite(kind: .series, streamID: item.seriesID, title: item.name, imageURL: item.cover)
+            }
         }
     }
 
@@ -866,57 +940,91 @@ struct MovieDetailView: View {
     let item: VODStream
     @State private var details: VODInfoResponse?
     @State private var loadingInfo = true
+    @State private var showTrailer = false
 
     private var info: VODDetails? { details?.info }
-    private var metadata: [String] {
-        [info?.genre ?? item.genre, info?.releaseDate ?? item.releaseDate, info?.duration ?? item.duration, (info?.rating ?? item.rating).map { "★ \($0)" }].compactMap { value in
-            guard let value, !value.isEmpty else { return nil }; return value
-        }
+    private var title: String { info?.name ?? item.name }
+    private var imageURL: String? { info?.movieImage ?? item.streamIcon }
+    private var plot: String? { info?.plot ?? item.plot }
+    private var genre: String? { info?.genre ?? item.genre }
+    private var castNames: [String] {
+        Array((info?.cast ?? item.cast ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(10)).map { String($0) }
+    }
+    private var trailerURL: URL? { normalizedTrailerURL(info?.youtubeTrailer) }
+    private var relatedMovies: [VODStream] {
+        guard let genre, !genre.isEmpty else { return [] }
+        let tokens = genre.lowercased().split(separator: ",").map(String.init)
+        return Array(session.allMovies.filter { movie in
+            movie.streamID != item.streamID && tokens.contains { (movie.genre ?? "").lowercased().contains($0.trimmingCharacters(in: .whitespaces)) }
+        }.prefix(12))
+    }
+    private var quality: String {
+        let value = title.uppercased()
+        if value.contains("4K") || value.contains("UHD") { return "4K" }
+        if value.contains("FHD") || value.contains("1080") { return "FHD" }
+        return "HD"
     }
 
     var body: some View {
-        MediaDetailLayout(
-            title: info?.name ?? item.name,
-            imageURL: info?.movieImage ?? item.streamIcon,
-            plot: info?.plot ?? item.plot,
-            metadata: metadata,
-            extraInfo: [
-                ("Regia", info?.director ?? item.director),
-                ("Cast", info?.cast ?? item.cast)
-            ]
-        ) {
-            let movieID = details?.movieData?.streamID ?? item.streamID
-            let movieExt = details?.movieData?.containerExtension ?? item.containerExtension
-            let descriptor = PlaybackDescriptor(
-                kind: .movies,
-                streamID: movieID,
-                title: info?.name ?? item.name,
-                subtitle: "Film",
-                imageURL: info?.movieImage ?? item.streamIcon,
-                fileExtension: movieExt
-            )
-            NavigationLink {
-                PlayerScreen(
-                    title: info?.name ?? item.name,
-                    url: session.streamURL(type: .movies, id: movieID, ext: movieExt),
-                    isLive: false,
-                    resume: descriptor
-                )
-            } label: {
-                playButton(session.savedProgress(for: descriptor) == nil ? "Guarda film" : "Riprendi film")
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 22) {
+                    premiumHeader
+                    actionButtons
+
+                    if let plot, !plot.isEmpty {
+                        detailSection("Trama") { Text(plot).foregroundStyle(.secondary).lineSpacing(4) }
+                    }
+
+                    if !castNames.isEmpty {
+                        detailSection("Cast") {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(castNames, id: \.self) { actor in
+                                        NavigationLink { ActorView(name: actor) } label: {
+                                            Label(actor, systemImage: "person.crop.circle.fill")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.primary)
+                                                .padding(.horizontal, 12).frame(height: 38)
+                                                .background(Color(uiColor: .secondarySystemBackground))
+                                                .clipShape(Capsule())
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let director = info?.director ?? item.director, !director.isEmpty {
+                        detailSection("Regia") { Text(director).foregroundStyle(.secondary) }
+                    }
+
+                    if !relatedMovies.isEmpty {
+                        customMovieRail("Potrebbero piacerti", relatedMovies)
+                            .padding(.horizontal, -18)
+                    }
+                }
+                .padding(18)
+                .padding(.bottom, 120)
             }
         }
-        .overlay(alignment: .topTrailing) {
-            if loadingInfo { ProgressView().tint(.white).padding(22) }
-        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .overlay(alignment: .topTrailing) { if loadingInfo { ProgressView().padding(22) } }
         .task {
             details = try? await APIClient.shared.vodInfo(baseURL: session.baseURL, username: session.username, password: session.password, vodID: item.streamID)
             loadingInfo = false
         }
+        .sheet(isPresented: $showTrailer) {
+            if let trailerURL { SafariView(url: trailerURL).ignoresSafeArea() }
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    session.toggleFavorite(kind: .movies, streamID: item.streamID, title: item.name, imageURL: item.streamIcon, fileExtension: item.containerExtension)
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        session.toggleFavorite(kind: .movies, streamID: item.streamID, title: item.name, imageURL: item.streamIcon, fileExtension: item.containerExtension)
+                    }
                 } label: {
                     Image(systemName: session.isFavorite(kind: .movies, streamID: item.streamID) ? "heart.fill" : "heart")
                 }
@@ -924,6 +1032,103 @@ struct MovieDetailView: View {
             }
         }
     }
+
+    private var premiumHeader: some View {
+        ZStack(alignment: .bottomLeading) {
+            accentGradient(for: title)
+            HStack(alignment: .top, spacing: 16) {
+                AsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { ZStack { brandGradient; Image(systemName: "film.fill").font(.largeTitle).foregroundStyle(.white) } }
+                }
+                .frame(width: 142, height: 214)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .clipped()
+                .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(title).font(.title2.bold()).foregroundStyle(.white).lineLimit(4).minimumScaleFactor(0.75)
+                    HStack(spacing: 7) {
+                        metadataBadge(quality, icon: "sparkles.tv")
+                        if let rating = info?.rating ?? item.rating, !rating.isEmpty { metadataBadge("★ \(rating)", icon: nil) }
+                    }
+                    if let date = info?.releaseDate ?? item.releaseDate, !date.isEmpty { Label(date, systemImage: "calendar").font(.caption).foregroundStyle(.white.opacity(0.85)) }
+                    if let duration = info?.duration ?? item.duration, !duration.isEmpty { Label(duration, systemImage: "clock").font(.caption).foregroundStyle(.white.opacity(0.85)) }
+                    if let genre, !genre.isEmpty { Text(genre).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.9)).lineLimit(3) }
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: 214, alignment: .topLeading)
+            }
+            .padding(18)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private var actionButtons: some View {
+        let movieID = details?.movieData?.streamID ?? item.streamID
+        let movieExt = details?.movieData?.containerExtension ?? item.containerExtension
+        let descriptor = PlaybackDescriptor(kind: .movies, streamID: movieID, title: title, subtitle: "Film", imageURL: imageURL, fileExtension: movieExt)
+        return HStack(spacing: 12) {
+            NavigationLink {
+                PlayerScreen(title: title, url: session.streamURL(type: .movies, id: movieID, ext: movieExt), isLive: false, resume: descriptor)
+            } label: { playButton(session.savedProgress(for: descriptor) == nil ? "Guarda" : "Riprendi") }
+            if trailerURL != nil {
+                Button { showTrailer = true } label: {
+                    Label("Trailer", systemImage: "play.rectangle.fill")
+                        .font(.headline.bold()).foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                }.buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func metadataBadge(_ value: String, icon: String?) -> some View {
+        HStack(spacing: 4) {
+            if let icon { Image(systemName: icon) }
+            Text(value)
+        }
+        .font(.caption2.bold()).foregroundStyle(.white)
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(.black.opacity(0.28)).clipShape(Capsule())
+    }
+
+    private func detailSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title).font(.title3.bold())
+            content()
+        }
+    }
+}
+
+struct ActorView: View {
+    @EnvironmentObject var session: AppSession
+    let name: String
+    private var movies: [VODStream] { Array(session.allMovies.filter { ($0.cast ?? "").localizedCaseInsensitiveContains(name) }.prefix(30)) }
+    private var series: [SeriesItem] { Array(session.allSeries.filter { ($0.cast ?? "").localizedCaseInsensitiveContains(name) }.prefix(30)) }
+    var body: some View {
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "person.crop.circle.fill").font(.system(size: 74)).foregroundStyle(accentGradient(for: name))
+                        VStack(alignment: .leading) { Text(name).font(.title.bold()); Text("Filmografia disponibile").foregroundStyle(.secondary) }
+                    }.padding(.horizontal)
+                    if !movies.isEmpty { customMovieRail("Film", movies) }
+                    if !series.isEmpty { customSeriesRail("Serie TV", series) }
+                    if movies.isEmpty && series.isEmpty { EmptyStateView(title: "Nessun contenuto", icon: "person.crop.circle.badge.questionmark", message: "Non sono presenti altri titoli associati a questo interprete.") }
+                }.padding(.vertical)
+            }
+        }.navigationTitle(name).navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) { }
 }
 
 struct LiveDetailView: View {
@@ -1110,6 +1315,16 @@ struct SeriesDetailView: View {
 
     private var seasons: [String] { (info?.episodes.keys.map { $0 } ?? []).sorted { (Int($0) ?? 0) < (Int($1) ?? 0) } }
     private var episodes: [Episode] { info?.episodes[selectedSeason] ?? [] }
+    private var seriesCast: [String] {
+        Array((info?.info?.cast ?? item.cast ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(10)).map { String($0) }
+    }
+    private var relatedSeries: [SeriesItem] {
+        guard let genre = info?.info?.genre ?? item.genre, !genre.isEmpty else { return [] }
+        let tokens = genre.lowercased().split(separator: ",").map(String.init)
+        return Array(session.allSeries.filter { candidate in
+            candidate.seriesID != item.seriesID && tokens.contains { (candidate.genre ?? "").lowercased().contains($0.trimmingCharacters(in: .whitespaces)) }
+        }.prefix(12))
+    }
 
     var body: some View {
         ZStack {
@@ -1117,6 +1332,7 @@ struct SeriesDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     SeriesHeader(item: item, details: info?.info)
+                    if !seriesCast.isEmpty { castRail }
                     if loading { ProgressView("Caricamento stagioni…").tint(.white).frame(maxWidth: .infinity).padding(30) }
                     else if let error { EmptyStateView(title: "Episodi non disponibili", icon: "rectangle.stack.badge.exclamationmark", message: error) }
                     else if seasons.isEmpty { EmptyStateView(title: "Nessun episodio", icon: "rectangle.stack", message: "Il server non ha restituito stagioni o episodi per questa serie.") }
@@ -1173,6 +1389,9 @@ struct SeriesDetailView: View {
                                 }
                             }
                         }.padding(.horizontal)
+                        if !relatedSeries.isEmpty {
+                            customSeriesRail("Serie simili", relatedSeries)
+                        }
                     }
                 }.padding(.bottom, 100)
             }
@@ -1191,6 +1410,26 @@ struct SeriesDetailView: View {
         .task { await load() }
     }
 
+
+    private var castRail: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Cast").font(.title3.bold()).padding(.horizontal)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(seriesCast, id: \.self) { actor in
+                        NavigationLink { ActorView(name: actor) } label: {
+                            Label(actor, systemImage: "person.crop.circle.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 12).frame(height: 38)
+                                .background(Color(uiColor: .secondarySystemBackground))
+                                .clipShape(Capsule())
+                        }.buttonStyle(.plain)
+                    }
+                }.padding(.horizontal)
+            }
+        }
+    }
 
     private var seasonSelector: some View {
         HStack(spacing: 12) {
@@ -1385,7 +1624,12 @@ struct EpisodeRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Episodio \(episode.episodeNum)").font(.caption.bold()).foregroundStyle(.purple)
                 Text(episode.title).font(.headline).foregroundStyle(.primary).lineLimit(2)
-                if let duration = episode.info?.duration { Text(duration).font(.caption).foregroundStyle(.secondary) }
+                HStack(spacing: 8) {
+                    if let duration = episode.info?.duration, !duration.isEmpty { Label(duration, systemImage: "clock").font(.caption2).foregroundStyle(.secondary) }
+                    if let rating = episode.info?.rating, !rating.isEmpty { Text("★ \(rating)").font(.caption2.bold()).foregroundStyle(.orange) }
+                }
+                if let date = episode.info?.releaseDate, !date.isEmpty { Text(date).font(.caption2).foregroundStyle(.secondary) }
+                if let plot = episode.info?.plot, !plot.isEmpty { Text(plot).font(.caption2).foregroundStyle(.secondary).lineLimit(2) }
                 if let progress {
                     ProgressView(value: progress.fraction).tint(.purple)
                     Text("Riprendi da \(formatTime(progress.position))").font(.caption2).foregroundStyle(.purple)
@@ -1812,35 +2056,135 @@ struct GlobalSearchView: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.dismiss) var dismiss
     @State private var search = ""
-    private var movies: [VODStream] { search.isEmpty ? [] : Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
-    private var series: [SeriesItem] { search.isEmpty ? [] : Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
-    private var live: [LiveStream] { search.isEmpty ? [] : Array(session.allLive.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30)) }
+    @State private var selectedType = "Tutto"
+    @AppStorage("recentSearches") private var recentSearchesData = ""
+
+    private var recentSearches: [String] {
+        recentSearchesData.split(separator: "|").map(String.init).filter { !$0.isEmpty }
+    }
+    private var movies: [VODStream] {
+        guard !search.isEmpty, selectedType == "Tutto" || selectedType == "Film" else { return [] }
+        return Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30))
+    }
+    private var series: [SeriesItem] {
+        guard !search.isEmpty, selectedType == "Tutto" || selectedType == "Serie" else { return [] }
+        return Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30))
+    }
+    private var live: [LiveStream] {
+        guard !search.isEmpty, selectedType == "Tutto" || selectedType == "Diretta" else { return [] }
+        return Array(session.allLive.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(30))
+    }
+    private var popularMovies: [VODStream] {
+        Array(session.allMovies.sorted { (Double($0.rating ?? "") ?? 0) > (Double($1.rating ?? "") ?? 0) }.prefix(10))
+    }
+
     var body: some View {
         ZStack {
             pageBackground.ignoresSafeArea()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
-                    if search.isEmpty { EmptyStateView(title: "Ricerca globale", icon: "magnifyingglass", message: "Cerca contemporaneamente tra canali, film e serie TV.") }
+                    Picker("Tipo", selection: $selectedType) {
+                        ForEach(["Tutto", "Film", "Serie", "Diretta"], id: \.self) { Text($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+
+                    if search.isEmpty {
+                        if !recentSearches.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("Ricerche recenti").font(.title3.bold())
+                                    Spacer()
+                                    Button("Cancella") { recentSearchesData = "" }.font(.caption.bold()).foregroundStyle(.purple)
+                                }
+                                .padding(.horizontal)
+                                FlowLayout(spacing: 8) {
+                                    ForEach(recentSearches, id: \.self) { value in
+                                        Button { search = value } label: {
+                                            Label(value, systemImage: "clock")
+                                                .font(.caption.weight(.semibold))
+                                                .padding(.horizontal, 12).frame(height: 36)
+                                                .background(Color(uiColor: .secondarySystemBackground))
+                                                .clipShape(Capsule())
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Esplora per categoria").font(.title3.bold()).padding(.horizontal)
+                            HStack(spacing: 10) {
+                                searchCategory("Film", "film.fill")
+                                searchCategory("Serie", "rectangle.stack.fill")
+                                searchCategory("Diretta", "dot.radiowaves.left.and.right")
+                            }.padding(.horizontal)
+                        }
+
+                        if !popularMovies.isEmpty {
+                            customMovieRail("Più votati", popularMovies)
+                        }
+                    }
+
                     if !movies.isEmpty { resultSection("Film", movies) { MovieDetailView(item: $0) } }
                     if !series.isEmpty { resultSection("Serie TV", series) { SeriesDetailView(item: $0) } }
                     if !live.isEmpty { resultSection("Canali", live) { LiveDetailView(item: $0) } }
-                    if !search.isEmpty && movies.isEmpty && series.isEmpty && live.isEmpty { EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Non abbiamo trovato contenuti con questo nome.") }
+                    if !search.isEmpty && movies.isEmpty && series.isEmpty && live.isEmpty {
+                        EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Non abbiamo trovato contenuti con questo nome.")
+                    }
                 }.padding(.bottom, 40)
             }
         }
-        .navigationTitle("Cerca").navigationBarTitleDisplayMode(.inline).searchable(text: $search, prompt: "Film, serie o canale")
+        .navigationTitle("Cerca").navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $search, prompt: "Film, serie o canale")
+        .onSubmit(of: .search) { saveSearch(search) }
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Chiudi") { dismiss() } } }
     }
+
+    private func searchCategory(_ title: String, _ icon: String) -> some View {
+        Button {
+            selectedType = title
+        } label: {
+            VStack(spacing: 9) {
+                Image(systemName: icon).font(.title2)
+                Text(title).font(.caption.bold())
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity).frame(height: 88)
+            .background(accentGradient(for: title))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }.buttonStyle(.plain)
+    }
+
+    private func saveSearch(_ value: String) {
+        let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        var values = recentSearches.filter { $0.caseInsensitiveCompare(clean) != .orderedSame }
+        values.insert(clean, at: 0)
+        recentSearchesData = values.prefix(6).joined(separator: "|")
+    }
+
     private func resultSection<T: Identifiable, Destination: View>(_ title: String, _ items: [T], @ViewBuilder destination: @escaping (T) -> Destination) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(.title2.bold()).foregroundStyle(.primary).padding(.horizontal)
             ForEach(items) { item in
                 NavigationLink { destination(item) } label: { SearchResultRow(title: titleFor(item), subtitle: title, imageURL: imageFor(item)) }
+                    .simultaneousGesture(TapGesture().onEnded { saveSearch(search) })
             }
         }
     }
     private func titleFor<T>(_ item: T) -> String { if let x = item as? VODStream { return x.name }; if let x = item as? SeriesItem { return x.name }; if let x = item as? LiveStream { return x.name }; return "Contenuto" }
     private func imageFor<T>(_ item: T) -> String? { if let x = item as? VODStream { return x.streamIcon }; if let x = item as? SeriesItem { return x.cover }; if let x = item as? LiveStream { return x.streamIcon }; return nil }
+}
+
+struct FlowLayout<Content: View>: View {
+    let spacing: CGFloat
+    @ViewBuilder let content: Content
+    init(spacing: CGFloat = 8, @ViewBuilder content: () -> Content) { self.spacing = spacing; self.content = content() }
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: spacing)], spacing: spacing) { content }
+    }
 }
 
 struct SearchResultRow: View {
