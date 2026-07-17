@@ -1,0 +1,10 @@
+ATLANTIX 2.0 — BUILD 79
+
+- Rimosso completamente il mini-player inferiore.
+- Ripristinata la logica classica di “Continua a guardare” nella Home.
+- Nuova Home Premium con saluto dinamico.
+- Banner in evidenza con rotazione automatica.
+- Nuove sezioni: In tendenza, Nuovi film, Serie più votate, Scelti per te e Consigliati per te.
+- La mia lista e Visti di recente restano accessibili dalla Home.
+- Nessuna modifica a login, DNS, API, player principale, PiP, AirPlay e resume.
+- Versione 2.0, build 79.
