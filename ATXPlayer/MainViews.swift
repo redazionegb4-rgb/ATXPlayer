@@ -2736,7 +2736,7 @@ final class DownloadCenter: ObservableObject {
                     throw URLError(.badServerResponse)
                 }
                 let safeName = title.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
-                let filename = "\\(UUID().uuidString)_\\(safeName).\\(fileExtension.isEmpty ? "mp4" : fileExtension)"
+                let filename = "\(UUID().uuidString)_\(safeName).\(fileExtension.isEmpty ? "mp4" : fileExtension)"
                 let destination = downloadsDirectory.appendingPathComponent(filename)
                 try? FileManager.default.removeItem(at: destination)
                 try FileManager.default.moveItem(at: temporaryURL, to: destination)
@@ -2744,7 +2744,7 @@ final class DownloadCenter: ObservableObject {
                 items.insert(item, at: 0)
                 persist()
             } catch {
-                lastError = "Download non riuscito: \\(error.localizedDescription)"
+                lastError = "Download non riuscito: \(error.localizedDescription)"
             }
             activeTitles.remove(title)
         }
