@@ -320,12 +320,16 @@ struct HomeView: View {
             .disabled(session.isRefreshing)
             NavigationLink { SettingsView() } label: {
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.headline.bold())
                     .foregroundStyle(.primary)
-                    .frame(width: 42, height: 42)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .frame(width: 48, height: 48)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.primary.opacity(0.08)))
             }
             .buttonStyle(.plain)
+            .contentShape(Circle())
+            .zIndex(30)
         }
         .padding(.horizontal, 20)
         .padding(.top, 14)
@@ -733,6 +737,7 @@ struct MediaRail<Content: View>: View {
 
 struct ContentBrowser: View {
     @EnvironmentObject var session: AppSession
+    @Environment(\.colorScheme) private var colorScheme
     let type: ContentType
     @State private var search = ""
     @State private var categoryCounts: [String: Int] = [:]
@@ -840,7 +845,9 @@ struct ContentBrowser: View {
                 Image(systemName: "arrow.up.right").font(.caption.bold()).foregroundStyle(.secondary)
             }
             Text(title).font(.headline).lineLimit(2).multilineTextAlignment(.leading)
-            Text("\(count.formatted()) contenuti").font(.caption).foregroundStyle(.secondary)
+            Text("\(count.formatted()) contenuti")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(colorScheme == .dark ? Color.white : Color.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
         .padding(16)
@@ -2980,80 +2987,283 @@ struct OfflinePlaybackView: View {
 struct DownloadsView: View {
     @StateObject private var center = DownloadCenter.shared
     @State private var selectedItem: OfflineDownload?
+    @State private var searchText = ""
+    @State private var selectedSection: DownloadSection = .movies
+
+    private enum DownloadSection: String, CaseIterable, Identifiable {
+        case movies = "Film"
+        case series = "Serie TV"
+        var id: String { rawValue }
+        var icon: String { self == .movies ? "film.fill" : "rectangle.stack.fill" }
+    }
+
+    private var normalizedSearch: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var movieItems: [OfflineDownload] {
+        center.items.filter { $0.subtitle == "Film" && matchesSearch($0) }
+    }
+
+    private var seriesItems: [OfflineDownload] {
+        center.items.filter { $0.subtitle != "Film" && matchesSearch($0) }
+    }
+
+    private var groupedSeries: [(name: String, items: [OfflineDownload])] {
+        let groups = Dictionary(grouping: seriesItems) { item in
+            item.subtitle.components(separatedBy: " • ").first ?? "Serie TV"
+        }
+        return groups.keys.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .map { ($0, groups[$0]!.sorted { $0.createdAt > $1.createdAt }) }
+    }
+
+    private var filteredCount: Int {
+        selectedSection == .movies ? movieItems.count : seriesItems.count
+    }
 
     var body: some View {
         ZStack {
             pageBackground.ignoresSafeArea()
-            if center.items.isEmpty && center.activeTitles.isEmpty {
-                EmptyStateView(title: "Nessun download", icon: "arrow.down.circle", message: "I film e gli episodi scaricati appariranno qui e saranno disponibili anche senza connessione.")
-                    .padding()
-            } else {
-                List {
+            ScrollView {
+                LazyVStack(spacing: 18) {
+                    downloadsHeader
+                    searchBar
+                    sectionPicker
+
                     if !center.activeTitles.isEmpty {
-                        Section("Download in corso") {
-                            ForEach(Array(center.activeTitles).sorted(), id: \.self) { title in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text(title).font(.headline).lineLimit(2)
-                                        Spacer()
-                                        Text("\(Int(center.progress(for: title) * 100))%")
-                                            .font(.caption.bold())
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    ProgressView(value: center.progress(for: title))
-                                        .tint(.purple)
-                                }
-                                .padding(.vertical, 5)
-                            }
-                        }
+                        activeDownloadsSection
                     }
-                    if !center.items.isEmpty {
-                        Section("Disponibili offline") {
-                            ForEach(center.items) { item in
-                                Button { selectedItem = item } label: {
-                                    HStack(spacing: 12) {
-                                        OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
-                                            if let image = phase.image { image.resizable().scaledToFill() }
-                                            else { Image(systemName: "film.fill").frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.secondary.opacity(0.15)) }
-                                        }
-                                        .frame(width: 62, height: 86)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                        .clipped()
-                                        VStack(alignment: .leading, spacing: 5) {
-                                            Text(item.title).font(.headline).lineLimit(2)
-                                            Text(item.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                            Label("Disponibile offline", systemImage: "checkmark.circle.fill").font(.caption2).foregroundStyle(.green)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(.purple)
-                                    }
-                                    .padding(.vertical, 4)
-                                }
-                                .buttonStyle(.plain)
-                                .swipeActions {
-                                    Button(role: .destructive) { center.delete(item) } label: { Label("Elimina", systemImage: "trash") }
-                                }
-                            }
-                        }
+
+                    if filteredCount == 0 {
+                        EmptyStateView(
+                            title: normalizedSearch.isEmpty ? (selectedSection == .movies ? "Nessun film scaricato" : "Nessuna serie scaricata") : "Nessun risultato",
+                            icon: selectedSection.icon,
+                            message: normalizedSearch.isEmpty ? "I contenuti scaricati appariranno qui e saranno disponibili anche senza connessione." : "Prova a cercare un altro titolo o episodio."
+                        )
+                        .padding(.top, 36)
+                    } else if selectedSection == .movies {
+                        movieGrid
+                    } else {
+                        seriesList
                     }
                 }
-                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 120)
             }
         }
-        .navigationTitle("Download")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink { SettingsView() } label: {
-                    Image(systemName: "gearshape.fill")
-                }
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $selectedItem) { item in
             OfflinePlaybackView(item: item)
         }
         .alert("Download", isPresented: Binding(get: { center.lastError != nil }, set: { if !$0 { center.lastError = nil } })) {
             Button("OK") { center.lastError = nil }
         } message: { Text(center.lastError ?? "") }
+    }
+
+    private var downloadsHeader: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 56, height: 56)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Download")
+                    .font(.system(size: 28, weight: .bold))
+                Text("Guarda film e serie anche offline")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            NavigationLink { SettingsView() } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.headline.bold())
+                    .foregroundStyle(.primary)
+                    .frame(width: 48, height: 48)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 14)
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 11) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Cerca nei download", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 50)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
+    }
+
+    private var sectionPicker: some View {
+        HStack(spacing: 8) {
+            ForEach(DownloadSection.allCases) { section in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { selectedSection = section }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: section.icon)
+                        Text(section.rawValue)
+                        Text("\(section == .movies ? movieItems.count : seriesItems.count)")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background((selectedSection == section ? Color.white : Color.secondary).opacity(0.16))
+                            .clipShape(Capsule())
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundStyle(selectedSection == section ? Color.white : Color.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(selectedSection == section ? Color.purple : Color(uiColor: .secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var activeDownloadsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Download in corso", systemImage: "arrow.down.circle")
+                .font(.headline.bold())
+            ForEach(Array(center.activeTitles).sorted(), id: \.self) { title in
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack {
+                        Text(title).font(.subheadline.bold()).lineLimit(2)
+                        Spacer()
+                        Text("\(Int(center.progress(for: title) * 100))%")
+                            .font(.caption.bold())
+                            .foregroundStyle(.purple)
+                    }
+                    ProgressView(value: center.progress(for: title))
+                        .tint(.purple)
+                }
+                .padding(14)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var movieGrid: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(movieItems) { item in
+                downloadCard(item, seriesStyle: false)
+            }
+        }
+    }
+
+    private var seriesList: some View {
+        LazyVStack(spacing: 14) {
+            ForEach(groupedSeries, id: \.name) { group in
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "rectangle.stack.fill")
+                            .foregroundStyle(.purple)
+                        Text(group.name)
+                            .font(.headline.bold())
+                        Spacer()
+                        Text("\(group.items.count) episodi")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(group.items) { item in
+                        downloadCard(item, seriesStyle: true)
+                    }
+                }
+                .padding(14)
+                .background(Color(uiColor: .secondarySystemBackground).opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+        }
+    }
+
+    private func downloadCard(_ item: OfflineDownload, seriesStyle: Bool) -> some View {
+        Button { selectedItem = item } label: {
+            HStack(spacing: 13) {
+                OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        ZStack {
+                            LinearGradient(colors: [.purple.opacity(0.55), .indigo.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            Image(systemName: seriesStyle ? "tv.fill" : "film.fill")
+                                .font(.title2)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                }
+                .frame(width: seriesStyle ? 74 : 70, height: seriesStyle ? 74 : 96)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipped()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    Text(seriesStyle ? episodeSubtitle(item) : "Film")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Label("Disponibile offline", systemImage: "checkmark.circle.fill")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.green)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 29))
+                    .foregroundStyle(.purple)
+            }
+            .padding(12)
+            .background(Color(uiColor: .systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.07)))
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) { center.delete(item) } label: {
+                Label("Elimina download", systemImage: "trash")
+            }
+        }
+        .swipeActions {
+            Button(role: .destructive) { center.delete(item) } label: {
+                Label("Elimina", systemImage: "trash")
+            }
+        }
+    }
+
+    private func matchesSearch(_ item: OfflineDownload) -> Bool {
+        guard !normalizedSearch.isEmpty else { return true }
+        return item.title.localizedCaseInsensitiveContains(normalizedSearch) ||
+            item.subtitle.localizedCaseInsensitiveContains(normalizedSearch)
+    }
+
+    private func episodeSubtitle(_ item: OfflineDownload) -> String {
+        let parts = item.subtitle.components(separatedBy: " • ")
+        return parts.count > 1 ? parts.dropFirst().joined(separator: " • ") : item.subtitle
     }
 }
 
