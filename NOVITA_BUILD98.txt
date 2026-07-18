@@ -1,0 +1,7 @@
+ATLANTIX 2.0 - BUILD 98
+
+- Download molto più veloce tramite URLSessionDownloadTask nativo
+- Avanzamento aggiornato in tempo reale
+- Barra inferiore ridisegnata a 5 sezioni: Home, Diretta, Film, Serie, Download
+- Impostazioni spostate nell’icona ingranaggio in alto, senza testi tagliati
+- Accesso alle Impostazioni sia dalla Home sia dalla pagina Download

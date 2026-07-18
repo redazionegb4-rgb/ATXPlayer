@@ -126,7 +126,6 @@ struct MainTabView: View {
         case movies = "Film"
         case series = "Serie"
         case downloads = "Download"
-        case settings = "Impostazioni"
 
         var icon: String {
             switch self {
@@ -135,7 +134,6 @@ struct MainTabView: View {
             case .movies: return "film.fill"
             case .series: return "rectangle.stack.fill"
             case .downloads: return "arrow.down.circle.fill"
-            case .settings: return "gearshape.fill"
             }
         }
     }
@@ -155,8 +153,6 @@ struct MainTabView: View {
                 NavigationStack { ContentBrowser(type: .series) }
             case .downloads:
                 NavigationStack { DownloadsView() }
-            case .settings:
-                NavigationStack { SettingsView() }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -322,6 +318,14 @@ struct HomeView: View {
                 Task { await session.refreshSafely() }
             }
             .disabled(session.isRefreshing)
+            NavigationLink { SettingsView() } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 42, height: 42)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
         .padding(.top, 14)
@@ -2759,6 +2763,8 @@ final class DownloadCenter: ObservableObject {
     @Published private(set) var progressByTitle: [String: Double] = [:]
     @Published var lastError: String?
 
+    private var activeTasks: [String: URLSessionDownloadTask] = [:]
+    private var progressMonitors: [String: Task<Void, Never>] = [:]
     private let metadataKey = "atlantix.offline.downloads.v2"
 
     private init() {
@@ -2797,72 +2803,76 @@ final class DownloadCenter: ObservableObject {
         let ext = fileExtension.isEmpty ? "mp4" : fileExtension
         let filename = "\(UUID().uuidString)_\(safeName).\(ext)"
         let destination = directory.appendingPathComponent(filename)
-        let temporary = directory.appendingPathComponent(".\(UUID().uuidString).download")
 
-        Task.detached(priority: .userInitiated) { [weak self] in
-            do {
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                FileManager.default.createFile(atPath: temporary.path, contents: nil)
-                let handle = try FileHandle(forWritingTo: temporary)
-                defer { try? handle.close() }
+        var request = URLRequest(url: remoteURL)
+        request.timeoutInterval = 60 * 60
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
 
-                let (bytes, response) = try await URLSession.shared.bytes(from: remoteURL)
+        let task = URLSession.shared.downloadTask(with: request) { [weak self] temporaryURL, response, error in
+            Task { @MainActor in
+                guard let self else { return }
+                self.progressMonitors[title]?.cancel()
+                self.progressMonitors.removeValue(forKey: title)
+                self.activeTasks.removeValue(forKey: title)
+
+                if let error {
+                    self.activeTitles.remove(title)
+                    self.progressByTitle.removeValue(forKey: title)
+                    self.lastError = "Download non riuscito: \(error.localizedDescription)"
+                    return
+                }
                 if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                    throw URLError(.badServerResponse)
+                    self.activeTitles.remove(title)
+                    self.progressByTitle.removeValue(forKey: title)
+                    self.lastError = "Download non riuscito: errore server \(http.statusCode)."
+                    return
+                }
+                guard let temporaryURL else {
+                    self.activeTitles.remove(title)
+                    self.progressByTitle.removeValue(forKey: title)
+                    self.lastError = "Download non riuscito: file temporaneo mancante."
+                    return
                 }
 
-                let expected = response.expectedContentLength
-                var received: Int64 = 0
-                var buffer = Data()
-                buffer.reserveCapacity(64 * 1024)
-                var lastReported: Int64 = 0
-
-                for try await byte in bytes {
-                    buffer.append(byte)
-                    received += 1
-                    if buffer.count >= 64 * 1024 {
-                        try handle.write(contentsOf: buffer)
-                        buffer.removeAll(keepingCapacity: true)
-                    }
-                    if expected > 0 && received - lastReported >= 256 * 1024 {
-                        lastReported = received
-                        let value = min(1, Double(received) / Double(expected))
-                        await MainActor.run {
-                            self?.progressByTitle[title] = value
-                        }
-                    }
-                }
-
-                if !buffer.isEmpty { try handle.write(contentsOf: buffer) }
-                try? FileManager.default.removeItem(at: destination)
-                try FileManager.default.moveItem(at: temporary, to: destination)
-
-                let item = OfflineDownload(
-                    id: UUID(),
-                    title: title,
-                    subtitle: subtitle,
-                    imageURL: imageURL,
-                    localFilename: filename,
-                    createdAt: Date()
-                )
-                await MainActor.run {
-                    guard let self else { return }
+                do {
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    try? FileManager.default.removeItem(at: destination)
+                    try FileManager.default.moveItem(at: temporaryURL, to: destination)
+                    let item = OfflineDownload(
+                        id: UUID(),
+                        title: title,
+                        subtitle: subtitle,
+                        imageURL: imageURL,
+                        localFilename: filename,
+                        createdAt: Date()
+                    )
                     self.items.insert(item, at: 0)
                     self.progressByTitle[title] = 1
                     self.activeTitles.remove(title)
                     self.progressByTitle.removeValue(forKey: title)
                     self.persist()
-                }
-            } catch {
-                try? FileManager.default.removeItem(at: temporary)
-                await MainActor.run {
-                    self?.activeTitles.remove(title)
-                    self?.progressByTitle.removeValue(forKey: title)
-                    self?.lastError = "Download non riuscito: \(error.localizedDescription)"
+                } catch {
+                    self.activeTitles.remove(title)
+                    self.progressByTitle.removeValue(forKey: title)
+                    self.lastError = "Download non riuscito: \(error.localizedDescription)"
                 }
             }
         }
-    }
+
+        activeTasks[title] = task
+        let monitor = Task { @MainActor [weak self, weak task] in
+            while let task, !Task.isCancelled {
+                let fraction = task.progress.fractionCompleted
+                if fraction.isFinite && fraction >= 0 {
+                    self?.progressByTitle[title] = min(1, fraction)
+                }
+                if task.state == .completed || task.state == .canceling { break }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+        progressMonitors[title] = monitor
+        task.resume()
 
     func delete(_ item: OfflineDownload) {
         try? FileManager.default.removeItem(at: item.localURL)
@@ -3030,6 +3040,13 @@ struct DownloadsView: View {
             }
         }
         .navigationTitle("Download")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink { SettingsView() } label: {
+                    Image(systemName: "gearshape.fill")
+                }
+            }
+        }
         .fullScreenCover(item: $selectedItem) { item in
             OfflinePlaybackView(item: item)
         }
