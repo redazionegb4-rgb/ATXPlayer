@@ -132,9 +132,22 @@ final class AppSession: ObservableObject {
             accessCode = username
             if refreshOnLaunch || (allLive.isEmpty && allMovies.isEmpty && allSeries.isEmpty) { await reloadPlaylist() }
         } catch {
-            isAuthenticated = false
-            errorMessage = error.localizedDescription
-            UserDefaults.standard.set(false, forKey: "hasSavedSession")
+            // In assenza di rete manteniamo aperta la sessione salvata: la sezione
+            // Download e la playlist in cache devono restare utilizzabili offline.
+            if let apiError = error as? APIError {
+                switch apiError {
+                case .invalidCredentials, .disabled(_), .activation(_):
+                    isAuthenticated = false
+                    errorMessage = apiError.localizedDescription
+                    UserDefaults.standard.set(false, forKey: "hasSavedSession")
+                default:
+                    isAuthenticated = true
+                    errorMessage = nil
+                }
+            } else {
+                isAuthenticated = true
+                errorMessage = nil
+            }
         }
     }
 

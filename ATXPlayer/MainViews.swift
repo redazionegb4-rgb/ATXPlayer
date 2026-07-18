@@ -120,16 +120,70 @@ private func seriesSortValue(_ item: SeriesItem) -> Double {
 }
 
 struct MainTabView: View {
-    var body: some View {
-        TabView {
-            NavigationStack { HomeView() }.tabItem { Label("Home", systemImage: "house.fill") }
-            NavigationStack { ContentBrowser(type: .live) }.tabItem { Label("Diretta", systemImage: "dot.radiowaves.left.and.right") }
-            NavigationStack { ContentBrowser(type: .movies) }.tabItem { Label("Film", systemImage: "film.fill") }
-            NavigationStack { ContentBrowser(type: .series) }.tabItem { Label("Serie", systemImage: "rectangle.stack.fill") }
-            NavigationStack { DownloadsView() }.tabItem { Label("Download", systemImage: "arrow.down.circle.fill") }
-            NavigationStack { SettingsView() }.tabItem { Label("Impostazioni", systemImage: "gearshape.fill") }
+    private enum AppTab: String, CaseIterable {
+        case home = "Home"
+        case live = "Diretta"
+        case movies = "Film"
+        case series = "Serie"
+        case downloads = "Download"
+        case settings = "Impostazioni"
+
+        var icon: String {
+            switch self {
+            case .home: return "house.fill"
+            case .live: return "dot.radiowaves.left.and.right"
+            case .movies: return "film.fill"
+            case .series: return "rectangle.stack.fill"
+            case .downloads: return "arrow.down.circle.fill"
+            case .settings: return "gearshape.fill"
+            }
         }
-        .tint(.purple)
+    }
+
+    @State private var selectedTab: AppTab = .home
+
+    var body: some View {
+        ZStack {
+            switch selectedTab {
+            case .home:
+                NavigationStack { HomeView() }
+            case .live:
+                NavigationStack { ContentBrowser(type: .live) }
+            case .movies:
+                NavigationStack { ContentBrowser(type: .movies) }
+            case .series:
+                NavigationStack { ContentBrowser(type: .series) }
+            case .downloads:
+                NavigationStack { DownloadsView() }
+            case .settings:
+                NavigationStack { SettingsView() }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 0) {
+                ForEach(AppTab.allCases, id: \.self) { tab in
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 18, weight: .semibold))
+                            Text(tab.rawValue)
+                                .font(.system(size: 9, weight: .semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.65)
+                        }
+                        .foregroundStyle(selectedTab == tab ? Color.purple : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                        .padding(.bottom, 5)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .background(.ultraThinMaterial)
+            .overlay(alignment: .top) { Divider() }
+        }
     }
 }
 
@@ -2702,15 +2756,20 @@ final class DownloadCenter: ObservableObject {
     static let shared = DownloadCenter()
     @Published private(set) var items: [OfflineDownload] = []
     @Published private(set) var activeTitles: Set<String> = []
+    @Published private(set) var progressByTitle: [String: Double] = [:]
     @Published var lastError: String?
 
-    private let metadataKey = "atlantix.offline.downloads.v1"
+    private let metadataKey = "atlantix.offline.downloads.v2"
+
     private init() {
-        if let data = UserDefaults.standard.data(forKey: metadataKey),
-           let saved = try? JSONDecoder().decode([OfflineDownload].self, from: data) {
+        let oldKey = "atlantix.offline.downloads.v1"
+        let savedData = UserDefaults.standard.data(forKey: metadataKey) ?? UserDefaults.standard.data(forKey: oldKey)
+        if let savedData,
+           let saved = try? JSONDecoder().decode([OfflineDownload].self, from: savedData) {
             items = saved.filter { FileManager.default.fileExists(atPath: $0.localURL.path) }
         }
         try? FileManager.default.createDirectory(at: downloadsDirectory, withIntermediateDirectories: true)
+        persist()
     }
 
     private var downloadsDirectory: URL {
@@ -2720,6 +2779,7 @@ final class DownloadCenter: ObservableObject {
 
     func isDownloaded(title: String) -> Bool { items.contains { $0.title == title } }
     func isDownloading(title: String) -> Bool { activeTitles.contains(title) }
+    func progress(for title: String) -> Double { progressByTitle[title] ?? 0 }
 
     func download(title: String, subtitle: String, imageURL: String?, remoteURL: URL?, fileExtension: String) {
         guard let remoteURL else {
@@ -2727,26 +2787,80 @@ final class DownloadCenter: ObservableObject {
             return
         }
         guard !isDownloaded(title: title), !isDownloading(title: title) else { return }
+
         activeTitles.insert(title)
+        progressByTitle[title] = 0
         lastError = nil
-        Task {
+
+        let directory = downloadsDirectory
+        let safeName = title.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
+        let ext = fileExtension.isEmpty ? "mp4" : fileExtension
+        let filename = "\(UUID().uuidString)_\(safeName).\(ext)"
+        let destination = directory.appendingPathComponent(filename)
+        let temporary = directory.appendingPathComponent(".\(UUID().uuidString).download")
+
+        Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                let (temporaryURL, response) = try await URLSession.shared.download(from: remoteURL)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                FileManager.default.createFile(atPath: temporary.path, contents: nil)
+                let handle = try FileHandle(forWritingTo: temporary)
+                defer { try? handle.close() }
+
+                let (bytes, response) = try await URLSession.shared.bytes(from: remoteURL)
                 if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                     throw URLError(.badServerResponse)
                 }
-                let safeName = title.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
-                let filename = "\(UUID().uuidString)_\(safeName).\(fileExtension.isEmpty ? "mp4" : fileExtension)"
-                let destination = downloadsDirectory.appendingPathComponent(filename)
+
+                let expected = response.expectedContentLength
+                var received: Int64 = 0
+                var buffer = Data()
+                buffer.reserveCapacity(64 * 1024)
+                var lastReported: Int64 = 0
+
+                for try await byte in bytes {
+                    buffer.append(byte)
+                    received += 1
+                    if buffer.count >= 64 * 1024 {
+                        try handle.write(contentsOf: buffer)
+                        buffer.removeAll(keepingCapacity: true)
+                    }
+                    if expected > 0 && received - lastReported >= 256 * 1024 {
+                        lastReported = received
+                        let value = min(1, Double(received) / Double(expected))
+                        await MainActor.run {
+                            self?.progressByTitle[title] = value
+                        }
+                    }
+                }
+
+                if !buffer.isEmpty { try handle.write(contentsOf: buffer) }
                 try? FileManager.default.removeItem(at: destination)
-                try FileManager.default.moveItem(at: temporaryURL, to: destination)
-                let item = OfflineDownload(id: UUID(), title: title, subtitle: subtitle, imageURL: imageURL, localFilename: filename, createdAt: Date())
-                items.insert(item, at: 0)
-                persist()
+                try FileManager.default.moveItem(at: temporary, to: destination)
+
+                let item = OfflineDownload(
+                    id: UUID(),
+                    title: title,
+                    subtitle: subtitle,
+                    imageURL: imageURL,
+                    localFilename: filename,
+                    createdAt: Date()
+                )
+                await MainActor.run {
+                    guard let self else { return }
+                    self.items.insert(item, at: 0)
+                    self.progressByTitle[title] = 1
+                    self.activeTitles.remove(title)
+                    self.progressByTitle.removeValue(forKey: title)
+                    self.persist()
+                }
             } catch {
-                lastError = "Download non riuscito: \(error.localizedDescription)"
+                try? FileManager.default.removeItem(at: temporary)
+                await MainActor.run {
+                    self?.activeTitles.remove(title)
+                    self?.progressByTitle.removeValue(forKey: title)
+                    self?.lastError = "Download non riuscito: \(error.localizedDescription)"
+                }
             }
-            activeTitles.remove(title)
         }
     }
 
@@ -2757,7 +2871,9 @@ final class DownloadCenter: ObservableObject {
     }
 
     private func persist() {
-        if let data = try? JSONEncoder().encode(items) { UserDefaults.standard.set(data, forKey: metadataKey) }
+        if let data = try? JSONEncoder().encode(items) {
+            UserDefaults.standard.set(data, forKey: metadataKey)
+        }
     }
 }
 
@@ -2773,13 +2889,24 @@ struct DownloadActionButton: View {
         Button {
             center.download(title: title, subtitle: subtitle, imageURL: imageURL, remoteURL: remoteURL, fileExtension: fileExtension)
         } label: {
-            HStack {
-                if center.isDownloading(title: title) { ProgressView().tint(.white) }
-                else { Image(systemName: center.isDownloaded(title: title) ? "checkmark.circle.fill" : "arrow.down.circle.fill") }
-                Text(center.isDownloaded(title: title) ? "Scaricato" : center.isDownloading(title: title) ? "Download in corso…" : "Scarica per guardarlo offline")
+            VStack(spacing: 8) {
+                HStack {
+                    if center.isDownloading(title: title) { ProgressView().tint(.white) }
+                    else { Image(systemName: center.isDownloaded(title: title) ? "checkmark.circle.fill" : "arrow.down.circle.fill") }
+                    Text(center.isDownloaded(title: title) ? "Scaricato" : center.isDownloading(title: title) ? "Download in corso…" : "Scarica per guardarlo offline")
+                }
+                if center.isDownloading(title: title) {
+                    ProgressView(value: center.progress(for: title))
+                        .tint(.white)
+                    Text("\(Int(center.progress(for: title) * 100))%")
+                        .font(.caption.bold())
+                }
             }
-            .font(.headline.bold()).foregroundStyle(.white)
-            .frame(maxWidth: .infinity).padding(.vertical, 15)
+            .font(.headline.bold())
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .padding(.horizontal, 14)
             .background(LinearGradient(colors: [.indigo, .purple], startPoint: .leading, endPoint: .trailing))
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
@@ -2799,19 +2926,49 @@ struct DownloadIconButton: View {
         Button {
             center.download(title: title, subtitle: subtitle, imageURL: imageURL, remoteURL: remoteURL, fileExtension: fileExtension)
         } label: {
-            Group {
-                if center.isDownloading(title: title) { ProgressView() }
-                else { Image(systemName: center.isDownloaded(title: title) ? "checkmark.circle.fill" : "arrow.down.circle") }
+            ZStack {
+                if center.isDownloading(title: title) {
+                    ProgressView(value: center.progress(for: title))
+                        .progressViewStyle(.circular)
+                } else {
+                    Image(systemName: center.isDownloaded(title: title) ? "checkmark.circle.fill" : "arrow.down.circle")
+                }
             }
-            .font(.title2).frame(width: 44, height: 44)
+            .font(.title2)
+            .frame(width: 44, height: 44)
         }
         .disabled(center.isDownloaded(title: title) || center.isDownloading(title: title))
         .accessibilityLabel("Scarica episodio")
     }
 }
 
+struct OfflinePlaybackView: View {
+    @Environment(\.dismiss) private var dismiss
+    let item: OfflineDownload
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            PlayerScreen(title: item.title, url: item.localURL, isLive: false, resume: nil)
+                .navigationBarBackButtonHidden(true)
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(.black.opacity(0.62))
+                    .clipShape(Circle())
+            }
+            .padding(.leading, 14)
+            .padding(.top, 12)
+        }
+        .background(Color.black.ignoresSafeArea())
+        .statusBarHidden(true)
+    }
+}
+
 struct DownloadsView: View {
     @StateObject private var center = DownloadCenter.shared
+    @State private var selectedItem: OfflineDownload?
 
     var body: some View {
         ZStack {
@@ -2824,29 +2981,48 @@ struct DownloadsView: View {
                     if !center.activeTitles.isEmpty {
                         Section("Download in corso") {
                             ForEach(Array(center.activeTitles).sorted(), id: \.self) { title in
-                                HStack(spacing: 12) { ProgressView(); Text(title).lineLimit(2); Spacer() }
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text(title).font(.headline).lineLimit(2)
+                                        Spacer()
+                                        Text("\(Int(center.progress(for: title) * 100))%")
+                                            .font(.caption.bold())
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    ProgressView(value: center.progress(for: title))
+                                        .tint(.purple)
+                                }
+                                .padding(.vertical, 5)
                             }
                         }
                     }
-                    Section("Disponibili offline") {
-                        ForEach(center.items) { item in
-                            NavigationLink {
-                                PlayerScreen(title: item.title, url: item.localURL, isLive: false, resume: nil)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
-                                        if let image = phase.image { image.resizable().scaledToFill() }
-                                        else { Image(systemName: "film.fill").frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.secondary.opacity(0.15)) }
+                    if !center.items.isEmpty {
+                        Section("Disponibili offline") {
+                            ForEach(center.items) { item in
+                                Button { selectedItem = item } label: {
+                                    HStack(spacing: 12) {
+                                        OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+                                            if let image = phase.image { image.resizable().scaledToFill() }
+                                            else { Image(systemName: "film.fill").frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.secondary.opacity(0.15)) }
+                                        }
+                                        .frame(width: 62, height: 86)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .clipped()
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            Text(item.title).font(.headline).lineLimit(2)
+                                            Text(item.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                            Label("Disponibile offline", systemImage: "checkmark.circle.fill").font(.caption2).foregroundStyle(.green)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(.purple)
                                     }
-                                    .frame(width: 62, height: 86).clipShape(RoundedRectangle(cornerRadius: 10)).clipped()
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(item.title).font(.headline).lineLimit(2)
-                                        Text(item.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                        Label("Disponibile offline", systemImage: "checkmark.circle.fill").font(.caption2).foregroundStyle(.green)
-                                    }
-                                }.padding(.vertical, 4)
+                                    .padding(.vertical, 4)
+                                }
+                                .buttonStyle(.plain)
+                                .swipeActions {
+                                    Button(role: .destructive) { center.delete(item) } label: { Label("Elimina", systemImage: "trash") }
+                                }
                             }
-                            .swipeActions { Button(role: .destructive) { center.delete(item) } label: { Label("Elimina", systemImage: "trash") } }
                         }
                     }
                 }
@@ -2854,8 +3030,12 @@ struct DownloadsView: View {
             }
         }
         .navigationTitle("Download")
+        .fullScreenCover(item: $selectedItem) { item in
+            OfflinePlaybackView(item: item)
+        }
         .alert("Download", isPresented: Binding(get: { center.lastError != nil }, set: { if !$0 { center.lastError = nil } })) {
             Button("OK") { center.lastError = nil }
         } message: { Text(center.lastError ?? "") }
     }
 }
+
