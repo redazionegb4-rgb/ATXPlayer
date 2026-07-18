@@ -2873,6 +2873,7 @@ final class DownloadCenter: ObservableObject {
         }
         progressMonitors[title] = monitor
         task.resume()
+    }
 
     func delete(_ item: OfflineDownload) {
         try? FileManager.default.removeItem(at: item.localURL)

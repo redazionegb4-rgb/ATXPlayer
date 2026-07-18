@@ -1,0 +1,6 @@
+AtlantiX 2.0 – Build 102
+
+- Corretto errore di compilazione in MainViews.swift (chiusura mancante del metodo download).
+- Mantenuto il download nativo URLSessionDownloadTask.
+- Mantenuta la barra a 5 sezioni con Impostazioni accessibili dall’ingranaggio.
+- Versione 2.0, build 102.
