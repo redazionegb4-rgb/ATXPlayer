@@ -3079,16 +3079,6 @@ struct DownloadsView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            NavigationLink { SettingsView() } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.headline.bold())
-                    .foregroundStyle(.primary)
-                    .frame(width: 48, height: 48)
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.primary.opacity(0.08)))
-            }
-            .buttonStyle(.plain)
         }
         .padding(.top, 14)
     }
