@@ -2729,6 +2729,14 @@ struct SettingsView: View {
             Section("Sicurezza") { Toggle("Controllo genitori", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) })) }
             Section { Button("Esci dall'account", role: .destructive) { showLogout = true } }
         }
+        // La barra inferiore personalizzata occupa parte della safe area.
+        // Questo spazio consente di scorrere la voce “Esci dall’account”
+        // completamente sopra la barra, mantenendola visibile e cliccabile.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: 88)
+                .accessibilityHidden(true)
+        }
         .navigationTitle("Impostazioni")
         .alert("Vuoi uscire dall'account?", isPresented: $showLogout) {
             Button("Annulla", role: .cancel) { }
