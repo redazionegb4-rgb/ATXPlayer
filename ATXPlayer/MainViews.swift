@@ -126,6 +126,7 @@ struct MainTabView: View {
             NavigationStack { ContentBrowser(type: .live) }.tabItem { Label("Diretta", systemImage: "dot.radiowaves.left.and.right") }
             NavigationStack { ContentBrowser(type: .movies) }.tabItem { Label("Film", systemImage: "film.fill") }
             NavigationStack { ContentBrowser(type: .series) }.tabItem { Label("Serie", systemImage: "rectangle.stack.fill") }
+            NavigationStack { DownloadsView() }.tabItem { Label("Download", systemImage: "arrow.down.circle.fill") }
             NavigationStack { SettingsView() }.tabItem { Label("Impostazioni", systemImage: "gearshape.fill") }
         }
         .tint(.purple)
@@ -1192,19 +1193,35 @@ struct MovieDetailView: View {
         let movieID = details?.movieData?.streamID ?? item.streamID
         let movieExt = details?.movieData?.containerExtension ?? item.containerExtension
         let descriptor = PlaybackDescriptor(kind: .movies, streamID: movieID, title: title, subtitle: "Film", imageURL: imageURL, fileExtension: movieExt)
-        return HStack(spacing: 12) {
-            NavigationLink {
-                PlayerScreen(title: title, url: session.streamURL(type: .movies, id: movieID, ext: movieExt), isLive: false, resume: descriptor)
-            } label: { playButton(session.savedProgress(for: descriptor) == nil ? "Guarda" : "Riprendi") }
-            if trailerURL != nil {
-                Button { showTrailer = true } label: {
-                    Label("Trailer", systemImage: "play.rectangle.fill")
-                        .font(.headline.bold()).foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                }.buttonStyle(.plain)
+        return VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                NavigationLink {
+                    PlayerScreen(title: title, url: session.streamURL(type: .movies, id: movieID, ext: movieExt), isLive: false, resume: descriptor)
+                } label: { playButton(session.savedProgress(for: descriptor) == nil ? "Guarda" : "Riprendi") }
+                if trailerURL != nil {
+                    Button { showTrailer = true } label: {
+                        Label("Trailer", systemImage: "play.rectangle.fill")
+                            .font(.headline.bold()).foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 16)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                    }.buttonStyle(.plain)
+                }
             }
+            let downloadID = "movie-\(movieID)"
+            Button {
+                DownloadManager.shared.downloadMovie(id: movieID, title: title, imageURL: imageURL, remoteURL: session.streamURL(type: .movies, id: movieID, ext: movieExt))
+            } label: {
+                Label(DownloadManager.shared.contains(id: downloadID) ? "Aggiunto ai download" : "Scarica per guardare offline", systemImage: DownloadManager.shared.contains(id: downloadID) ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                    .font(.headline.bold())
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+            }
+            .buttonStyle(.plain)
+            .disabled(DownloadManager.shared.contains(id: downloadID))
         }
     }
 
@@ -1499,17 +1516,42 @@ struct SeriesDetailView: View {
                                         descriptor: queuedDescriptor
                                     )
                                 }
-                                NavigationLink {
-                                    PlayerScreen(
-                                        title: episode.title,
-                                        url: session.streamURL(type: .series, id: episode.id, ext: episode.containerExtension),
-                                        isLive: false,
-                                        resume: descriptor,
-                                        episodeQueue: queue,
-                                        startIndex: index
-                                    )
-                                } label: {
-                                    EpisodeRow(episode: episode, fallbackImage: item.cover, progress: session.savedProgress(for: descriptor))
+                                HStack(spacing: 10) {
+                                    NavigationLink {
+                                        PlayerScreen(
+                                            title: episode.title,
+                                            url: session.streamURL(type: .series, id: episode.id, ext: episode.containerExtension),
+                                            isLive: false,
+                                            resume: descriptor,
+                                            episodeQueue: queue,
+                                            startIndex: index
+                                        )
+                                    } label: {
+                                        EpisodeRow(episode: episode, fallbackImage: item.cover, progress: session.savedProgress(for: descriptor))
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Button {
+                                        DownloadManager.shared.downloadEpisode(
+                                            id: episode.id,
+                                            title: episode.title,
+                                            series: item.name,
+                                            season: selectedSeason,
+                                            episode: episode.episodeNum,
+                                            imageURL: episode.info?.movieImage ?? item.cover,
+                                            remoteURL: session.streamURL(type: .series, id: episode.id, ext: episode.containerExtension)
+                                        )
+                                    } label: {
+                                        Image(systemName: DownloadManager.shared.contains(id: "episode-\(episode.id)") ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                                            .font(.title2)
+                                            .foregroundStyle(.purple)
+                                            .frame(width: 44, height: 44)
+                                            .background(Color(uiColor: .secondarySystemBackground))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(DownloadManager.shared.contains(id: "episode-\(episode.id)"))
+                                    .accessibilityLabel("Scarica episodio")
                                 }
                             }
                         }.padding(.horizontal)
@@ -2620,6 +2662,135 @@ struct HistoryPosterCard: View {
     }
 }
 
+
+struct DownloadsView: View {
+    @ObservedObject private var downloads = DownloadManager.shared
+
+    var body: some View {
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            if downloads.items.isEmpty {
+                EmptyStateView(title: "Nessun download", icon: "arrow.down.circle", message: "I film e gli episodi scaricati appariranno qui e saranno disponibili anche senza connessione.")
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: 24) {
+                        storageHeader
+                        if !downloads.activeItems.isEmpty { activeSection }
+                        if !downloads.movies.isEmpty { completedSection("Film", items: downloads.movies) }
+                        if !downloads.episodes.isEmpty { completedSection("Serie TV", items: downloads.episodes) }
+                    }
+                    .padding(16)
+                    .padding(.bottom, 100)
+                }
+            }
+        }
+        .navigationTitle("Download")
+        .toolbar {
+            if !downloads.movies.isEmpty || !downloads.episodes.isEmpty {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Elimina completati", role: .destructive) { downloads.deleteAllCompleted() }
+                }
+            }
+        }
+    }
+
+    private var storageHeader: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "internaldrive.fill")
+                .font(.title2)
+                .foregroundStyle(.purple)
+                .frame(width: 50, height: 50)
+                .background(Color.purple.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 15))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Disponibili offline").font(.headline)
+                Text("Spazio occupato: \(ByteCountFormatter.string(fromByteCount: downloads.usedBytes, countStyle: .file))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private var activeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("In corso").font(.title2.bold())
+            ForEach(downloads.activeItems) { item in
+                downloadRow(item, playable: false)
+            }
+        }
+    }
+
+    private func completedSection(_ title: String, items: [OfflineDownload]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.title2.bold())
+            ForEach(items) { item in
+                downloadRow(item, playable: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func downloadRow(_ item: OfflineDownload, playable: Bool) -> some View {
+        HStack(spacing: 12) {
+            OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { ZStack { brandGradient; Image(systemName: item.kind == .movie ? "film.fill" : "tv.fill").foregroundStyle(.white) } }
+            }
+            .frame(width: 74, height: 105)
+            .clipShape(RoundedRectangle(cornerRadius: 13))
+            .clipped()
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(item.title).font(.headline).lineLimit(2)
+                if let subtitle = item.subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                if item.state == .downloading || item.state == .queued {
+                    ProgressView(value: item.progress)
+                    Text("\(Int(item.progress * 100))%") .font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Label(stateTitle(item.state), systemImage: stateIcon(item.state))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(item.state == .failed ? .red : .secondary)
+                }
+                HStack(spacing: 12) {
+                    if item.state == .downloading {
+                        Button("Pausa") { downloads.pause(id: item.id) }.font(.caption.bold())
+                    } else if item.state == .paused || item.state == .failed {
+                        Button("Riprendi") { downloads.resume(id: item.id) }.font(.caption.bold())
+                    }
+                    Button("Elimina", role: .destructive) { downloads.delete(id: item.id) }.font(.caption.bold())
+                }
+            }
+            Spacer()
+            if playable, let localURL = item.localURL {
+                NavigationLink {
+                    PlayerScreen(title: item.title, url: localURL, isLive: false)
+                } label: {
+                    Image(systemName: "play.fill")
+                        .foregroundStyle(.white)
+                        .frame(width: 48, height: 48)
+                        .background(brandGradient)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func stateTitle(_ state: OfflineDownload.State) -> String {
+        switch state { case .queued: return "In attesa"; case .downloading: return "Download in corso"; case .paused: return "In pausa"; case .completed: return "Scaricato"; case .failed: return "Download non riuscito" }
+    }
+
+    private func stateIcon(_ state: OfflineDownload.State) -> String {
+        switch state { case .queued: return "clock"; case .downloading: return "arrow.down.circle"; case .paused: return "pause.circle"; case .completed: return "checkmark.circle.fill"; case .failed: return "exclamationmark.triangle.fill" }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var session: AppSession
     @State private var showLogout = false
@@ -2632,6 +2803,12 @@ struct SettingsView: View {
             } header: { Text("Account") }
             Section("Riproduzione") { Toggle("Riproduzione automatica", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })); Toggle("Aggiorna all'apertura", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })); Label("Picture in Picture", systemImage: "pip.fill"); Label("AirPlay", systemImage: "airplayvideo") }
             Section("Aspetto") { Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Automatico").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") }; Toggle("Animazioni dell’interfaccia", isOn: Binding(get: { session.interfaceAnimations }, set: { session.setInterfaceAnimations($0) })) }
+            Section("Download") {
+                Toggle("Consenti rete mobile", isOn: Binding(get: { DownloadManager.shared.allowCellular }, set: { DownloadManager.shared.setAllowCellular($0) }))
+                LabeledContent("Spazio occupato", value: ByteCountFormatter.string(fromByteCount: DownloadManager.shared.usedBytes, countStyle: .file))
+                Text("Disattivando la rete mobile, i nuovi download partiranno solo quando è disponibile una connessione Wi-Fi.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Raccolta") {
                 NavigationLink { FavoritesView() } label: {
                     Label("La mia lista", systemImage: "heart.fill")
