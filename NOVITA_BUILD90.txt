@@ -1,9 +1,8 @@
-ATLANTIX 2.0 - BUILD 90
+AtlantiX 2.0 - Build 90
 
-- Nuova scheda Download nella barra inferiore a 6 pulsanti.
-- Download locale di film e singoli episodi.
-- Riproduzione dei file scaricati senza connessione.
-- Download consentiti anche tramite rete mobile, con opzione disattivabile.
-- Pagina Download con avanzamento, pausa, riprendi ed elimina.
-- Film ed episodi separati nella raccolta offline.
-- Versione applicazione mantenuta a 2.0.
+- Nuova scheda Download nella barra inferiore
+- Download offline di film ed episodi
+- Riproduzione dei file scaricati senza connessione
+- Stato download in corso
+- Eliminazione con swipe
+- Versione mantenuta a 2.0
