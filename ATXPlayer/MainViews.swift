@@ -2744,36 +2744,27 @@ struct HistoryPosterCard: View {
 
 struct SettingsView: View {
     @EnvironmentObject var session: AppSession
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showLogout = false
+
     var body: some View {
-        Form {
-            Section {
-                HStack(spacing: 14) { BrandMark(size: 58); VStack(alignment: .leading, spacing: 4) { Text(session.username).font(.headline); Label(session.userInfo?.status ?? "—", systemImage: "checkmark.seal.fill").font(.caption).foregroundStyle(.green); Text("Scadenza: \(expiry)").font(.caption).foregroundStyle(.secondary) } }
-                Button { Task { await session.refreshSafely() } } label: { Label(session.isRefreshing ? "Aggiornamento…" : "Aggiorna playlist", systemImage: "arrow.clockwise") }.disabled(session.isRefreshing)
-                LabeledContent("Ultimo aggiornamento", value: session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "—")
-            } header: { Text("Account") }
-            Section("Riproduzione") { Toggle("Riproduzione automatica", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })); Toggle("Aggiorna all'apertura", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })); Label("Picture in Picture", systemImage: "pip.fill"); Label("AirPlay", systemImage: "airplayvideo") }
-            Section("Aspetto") { Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Automatico").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") }; Toggle("Animazioni dell’interfaccia", isOn: Binding(get: { session.interfaceAnimations }, set: { session.setInterfaceAnimations($0) })) }
-            Section("Raccolta") {
-                NavigationLink { FavoritesView() } label: {
-                    Label("La mia lista", systemImage: "heart.fill")
-                }
-                NavigationLink { WatchHistoryView() } label: {
-                    Label("Cronologia", systemImage: "clock.arrow.circlepath")
-                }
+        ScrollView {
+            VStack(spacing: 18) {
+                accountCard
+                quickActions
+                playbackCard
+                appearanceCard
+                libraryCard
+                securityCard
+                logoutButton
             }
-            Section("Sicurezza") { Toggle("Controllo genitori", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) })) }
-            Section { Button("Esci dall'account", role: .destructive) { showLogout = true } }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 112)
         }
-        // La barra inferiore personalizzata occupa parte della safe area.
-        // Questo spazio consente di scorrere la voce “Esci dall’account”
-        // completamente sopra la barra, mantenendola visibile e cliccabile.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear
-                .frame(height: 88)
-                .accessibilityHidden(true)
-        }
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle("Impostazioni")
+        .navigationBarTitleDisplayMode(.large)
         .alert("Vuoi uscire dall'account?", isPresented: $showLogout) {
             Button("Annulla", role: .cancel) { }
             Button("Esci", role: .destructive) { session.signOut() }
@@ -2781,7 +2772,287 @@ struct SettingsView: View {
             Text("Dovrai inserire nuovamente nome utente e password per entrare.")
         }
     }
-    private var expiry: String { guard let timestamp = session.userInfo?.expDate, let seconds = TimeInterval(timestamp) else { return "—" }; return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted) }
+
+    private var accountCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(brandGradient)
+                        .frame(width: 66, height: 66)
+                    BrandMark(size: 48)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(session.username)
+                        .font(.title3.bold())
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.seal.fill")
+                        Text(session.userInfo?.status ?? "Account attivo")
+                    }
+                    .font(.caption.bold())
+                    .foregroundStyle(.green)
+                    Text("Scadenza: \(expiry)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            Divider()
+
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Ultimo aggiornamento")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "Mai")
+                        .font(.subheadline.weight(.semibold))
+                }
+                Spacer()
+                Button {
+                    Task { await session.refreshSafely() }
+                } label: {
+                    HStack(spacing: 7) {
+                        if session.isRefreshing {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Text(session.isRefreshing ? "Aggiorno" : "Aggiorna")
+                    }
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(brandGradient.opacity(0.18), in: Capsule())
+                }
+                .disabled(session.isRefreshing)
+            }
+        }
+        .settingsCard()
+    }
+
+    private var quickActions: some View {
+        HStack(spacing: 12) {
+            NavigationLink { FavoritesView() } label: {
+                settingsQuickAction(title: "La mia lista", icon: "heart.fill", value: "Preferiti")
+            }
+            NavigationLink { WatchHistoryView() } label: {
+                settingsQuickAction(title: "Cronologia", icon: "clock.arrow.circlepath", value: "Visioni")
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var playbackCard: some View {
+        settingsSection(title: "Riproduzione", icon: "play.rectangle.fill") {
+            SettingsToggleRow(
+                title: "Riproduzione automatica",
+                subtitle: "Avvia automaticamente il contenuto successivo",
+                icon: "play.circle.fill",
+                isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })
+            )
+            SettingsDivider()
+            SettingsToggleRow(
+                title: "Aggiorna all'apertura",
+                subtitle: "Sincronizza la playlist quando avvii l'app",
+                icon: "arrow.triangle.2.circlepath",
+                isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })
+            )
+            SettingsDivider()
+            SettingsInfoRow(title: "Picture in Picture", subtitle: "Continua a guardare mentre usi altre app", icon: "pip.fill")
+            SettingsDivider()
+            SettingsInfoRow(title: "AirPlay", subtitle: "Riproduci su TV e dispositivi compatibili", icon: "airplayvideo")
+        }
+    }
+
+    private var appearanceCard: some View {
+        settingsSection(title: "Aspetto", icon: "paintbrush.fill") {
+            VStack(alignment: .leading, spacing: 10) {
+                SettingsInfoRow(title: "Tema", subtitle: "Scegli l'aspetto dell'app", icon: "circle.lefthalf.filled")
+                Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) {
+                    Text("Auto").tag("system")
+                    Text("Chiaro").tag("light")
+                    Text("Scuro").tag("dark")
+                }
+                .pickerStyle(.segmented)
+            }
+            SettingsDivider()
+            SettingsToggleRow(
+                title: "Animazioni interfaccia",
+                subtitle: "Transizioni ed effetti visivi",
+                icon: "sparkles",
+                isOn: Binding(get: { session.interfaceAnimations }, set: { session.setInterfaceAnimations($0) })
+            )
+        }
+    }
+
+    private var libraryCard: some View {
+        settingsSection(title: "Raccolta", icon: "square.stack.fill") {
+            NavigationLink { FavoritesView() } label: {
+                SettingsNavigationRow(title: "La mia lista", subtitle: "Film e serie salvati", icon: "heart.fill")
+            }
+            SettingsDivider()
+            NavigationLink { WatchHistoryView() } label: {
+                SettingsNavigationRow(title: "Cronologia", subtitle: "Contenuti guardati di recente", icon: "clock.arrow.circlepath")
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var securityCard: some View {
+        settingsSection(title: "Sicurezza", icon: "lock.shield.fill") {
+            SettingsToggleRow(
+                title: "Controllo genitori",
+                subtitle: "Proteggi i contenuti con restrizioni",
+                icon: "person.badge.shield.checkmark.fill",
+                isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) })
+            )
+        }
+    }
+
+    private var logoutButton: some View {
+        Button(role: .destructive) { showLogout = true } label: {
+            HStack {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                Text("Esci dall'account").fontWeight(.semibold)
+                Spacer()
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity)
+            .background(Color.red.opacity(colorScheme == .dark ? 0.16 : 0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.red.opacity(0.24), lineWidth: 1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func settingsSection<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 2)
+            VStack(spacing: 0) { content() }
+                .settingsCard()
+        }
+    }
+
+    private func settingsQuickAction(title: String, icon: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(brandGradient)
+            Text(title).font(.subheadline.bold()).foregroundStyle(.primary)
+            Text(value).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 102, alignment: .leading)
+        .padding(15)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var expiry: String {
+        guard let timestamp = session.userInfo?.expDate,
+              let seconds = TimeInterval(timestamp) else { return "—" }
+        return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
+private struct SettingsToggleRow: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 13) {
+            SettingsIcon(icon: icon)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: $isOn).labelsHidden()
+        }
+        .padding(.vertical, 13)
+        .padding(.horizontal, 14)
+    }
+}
+
+private struct SettingsInfoRow: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 13) {
+            SettingsIcon(icon: icon)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 13)
+        .padding(.horizontal, 14)
+    }
+}
+
+private struct SettingsNavigationRow: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 13) {
+            SettingsIcon(icon: icon)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 13)
+        .padding(.horizontal, 14)
+    }
+}
+
+private struct SettingsIcon: View {
+    let icon: String
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(brandGradient.opacity(0.16))
+                .frame(width: 38, height: 38)
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(brandGradient)
+        }
+    }
+}
+
+private struct SettingsDivider: View {
+    var body: some View {
+        Divider().padding(.leading, 65)
+    }
+}
+
+private extension View {
+    func settingsCard() -> some View {
+        self
+            .padding(0)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.primary.opacity(0.055), lineWidth: 1)
+            }
+    }
 }
 
 struct EmptyStateView: View {
