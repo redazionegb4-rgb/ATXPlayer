@@ -2748,23 +2748,23 @@ struct SettingsView: View {
     @State private var showLogout = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                accountCard
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 22) {
+                pageHeader
+                accountHero
                 quickActions
-                playbackCard
-                appearanceCard
-                libraryCard
-                securityCard
+                playbackSection
+                appearanceSection
+                privacySection
                 logoutButton
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 112)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 128)
         }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(settingsBackground.ignoresSafeArea())
         .navigationTitle("Impostazioni")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .alert("Vuoi uscire dall'account?", isPresented: $showLogout) {
             Button("Annulla", role: .cancel) { }
             Button("Esci", role: .destructive) { session.signOut() }
@@ -2773,39 +2773,57 @@ struct SettingsView: View {
         }
     }
 
-    private var accountCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 14) {
+    private var settingsBackground: Color {
+        colorScheme == .dark ? Color.black : Color(.systemGroupedBackground)
+    }
+
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Personalizza AtlantiX")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+            Text("Gestisci account, riproduzione e aspetto dell'app")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var accountHero: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 15) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(brandGradient)
-                        .frame(width: 66, height: 66)
-                    BrandMark(size: 48)
+                        .frame(width: 72, height: 72)
+                        .shadow(color: Color.purple.opacity(0.28), radius: 18, y: 8)
+                    BrandMark(size: 50)
                 }
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(session.username)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(session.username.isEmpty ? "Il tuo account" : session.username)
                         .font(.title3.bold())
                         .lineLimit(1)
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.seal.fill")
-                        Text(session.userInfo?.status ?? "Account attivo")
+                        Text((session.userInfo?.status ?? "Attivo").capitalized)
                     }
                     .font(.caption.bold())
                     .foregroundStyle(.green)
-                    Text("Scadenza: \(expiry)")
+                    Text("Scadenza  •  \(expiry)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
+                Spacer(minLength: 4)
             }
+            .padding(18)
 
-            Divider()
+            Rectangle()
+                .fill(Color.primary.opacity(0.07))
+                .frame(height: 1)
 
-            HStack {
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Ultimo aggiornamento")
-                        .font(.caption)
+                    Text("ULTIMO AGGIORNAMENTO")
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.secondary)
                     Text(session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "Mai")
                         .font(.subheadline.weight(.semibold))
@@ -2823,86 +2841,84 @@ struct SettingsView: View {
                         Text(session.isRefreshing ? "Aggiorno" : "Aggiorna")
                     }
                     .font(.subheadline.bold())
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(brandGradient.opacity(0.18), in: Capsule())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(brandGradient, in: Capsule())
                 }
                 .disabled(session.isRefreshing)
             }
+            .padding(16)
         }
-        .settingsCard()
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(brandGradient.opacity(colorScheme == .dark ? 0.20 : 0.12), lineWidth: 1)
+        }
     }
 
     private var quickActions: some View {
         HStack(spacing: 12) {
             NavigationLink { FavoritesView() } label: {
-                settingsQuickAction(title: "La mia lista", icon: "heart.fill", value: "Preferiti")
+                premiumQuickAction(title: "La mia lista", subtitle: "Preferiti", icon: "heart.fill")
             }
             NavigationLink { WatchHistoryView() } label: {
-                settingsQuickAction(title: "Cronologia", icon: "clock.arrow.circlepath", value: "Visioni")
+                premiumQuickAction(title: "Cronologia", subtitle: "Visti di recente", icon: "clock.arrow.circlepath")
             }
         }
         .buttonStyle(.plain)
     }
 
-    private var playbackCard: some View {
-        settingsSection(title: "Riproduzione", icon: "play.rectangle.fill") {
+    private var playbackSection: some View {
+        premiumSection(title: "Riproduzione", subtitle: "Comportamento del player", icon: "play.fill") {
             SettingsToggleRow(
                 title: "Riproduzione automatica",
-                subtitle: "Avvia automaticamente il contenuto successivo",
+                subtitle: "Avvia il contenuto successivo",
                 icon: "play.circle.fill",
                 isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) })
             )
             SettingsDivider()
             SettingsToggleRow(
                 title: "Aggiorna all'apertura",
-                subtitle: "Sincronizza la playlist quando avvii l'app",
+                subtitle: "Sincronizza la playlist all'avvio",
                 icon: "arrow.triangle.2.circlepath",
                 isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) })
             )
             SettingsDivider()
-            SettingsInfoRow(title: "Picture in Picture", subtitle: "Continua a guardare mentre usi altre app", icon: "pip.fill")
+            SettingsInfoRow(title: "Picture in Picture", subtitle: "Continua mentre usi altre app", icon: "pip.fill")
             SettingsDivider()
-            SettingsInfoRow(title: "AirPlay", subtitle: "Riproduci su TV e dispositivi compatibili", icon: "airplayvideo")
+            SettingsInfoRow(title: "AirPlay", subtitle: "Riproduci sui dispositivi compatibili", icon: "airplayvideo")
         }
     }
 
-    private var appearanceCard: some View {
-        settingsSection(title: "Aspetto", icon: "paintbrush.fill") {
-            VStack(alignment: .leading, spacing: 10) {
-                SettingsInfoRow(title: "Tema", subtitle: "Scegli l'aspetto dell'app", icon: "circle.lefthalf.filled")
+    private var appearanceSection: some View {
+        premiumSection(title: "Aspetto", subtitle: "Colori e animazioni", icon: "paintbrush.fill") {
+            VStack(alignment: .leading, spacing: 12) {
+                SettingsInfoRow(title: "Tema dell'app", subtitle: "Scegli la modalità che preferisci", icon: "circle.lefthalf.filled")
                 Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) {
                     Text("Auto").tag("system")
                     Text("Chiaro").tag("light")
                     Text("Scuro").tag("dark")
                 }
                 .pickerStyle(.segmented)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
             }
             SettingsDivider()
             SettingsToggleRow(
-                title: "Animazioni interfaccia",
-                subtitle: "Transizioni ed effetti visivi",
+                title: "Animazioni",
+                subtitle: "Transizioni ed effetti dell'interfaccia",
                 icon: "sparkles",
                 isOn: Binding(get: { session.interfaceAnimations }, set: { session.setInterfaceAnimations($0) })
             )
         }
     }
 
-    private var libraryCard: some View {
-        settingsSection(title: "Raccolta", icon: "square.stack.fill") {
-            NavigationLink { FavoritesView() } label: {
-                SettingsNavigationRow(title: "La mia lista", subtitle: "Film e serie salvati", icon: "heart.fill")
-            }
-            SettingsDivider()
-            NavigationLink { WatchHistoryView() } label: {
-                SettingsNavigationRow(title: "Cronologia", subtitle: "Contenuti guardati di recente", icon: "clock.arrow.circlepath")
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var securityCard: some View {
-        settingsSection(title: "Sicurezza", icon: "lock.shield.fill") {
+    private var privacySection: some View {
+        premiumSection(title: "Privacy e sicurezza", subtitle: "Protezione dei contenuti", icon: "lock.shield.fill") {
             SettingsToggleRow(
                 title: "Controllo genitori",
                 subtitle: "Proteggi i contenuti con restrizioni",
@@ -2914,49 +2930,88 @@ struct SettingsView: View {
 
     private var logoutButton: some View {
         Button(role: .destructive) { showLogout = true } label: {
-            HStack {
-                Image(systemName: "rectangle.portrait.and.arrow.right")
-                Text("Esci dall'account").fontWeight(.semibold)
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(Color.red.opacity(0.14)).frame(width: 42, height: 42)
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 17, weight: .bold))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Esci dall'account").font(.subheadline.bold())
+                    Text("Rimuovi l'accesso salvato da questo dispositivo")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tertiary)
             }
-            .padding(16)
+            .foregroundStyle(.red)
+            .padding(15)
             .frame(maxWidth: .infinity)
-            .background(Color.red.opacity(colorScheme == .dark ? 0.16 : 0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Color.red.opacity(colorScheme == .dark ? 0.10 : 0.07), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.red.opacity(0.24), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.red.opacity(0.20), lineWidth: 1)
             }
         }
     }
 
     @ViewBuilder
-    private func settingsSection<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: icon)
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 2)
+    private func premiumSection<Content: View>(title: String, subtitle: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 11) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(brandGradient.opacity(0.16))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: icon)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(brandGradient)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.headline)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+            }
             VStack(spacing: 0) { content() }
-                .settingsCard()
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.primary.opacity(0.055), lineWidth: 1)
+                }
         }
     }
 
-    private func settingsQuickAction(title: String, icon: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(brandGradient)
-            Text(title).font(.subheadline.bold()).foregroundStyle(.primary)
-            Text(value).font(.caption).foregroundStyle(.secondary)
+    private func premiumQuickAction(title: String, subtitle: String, icon: String) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(brandGradient.opacity(0.17))
+                    .frame(width: 48, height: 48)
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(brandGradient)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.subheadline.bold()).foregroundStyle(.primary)
+                Text(subtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, minHeight: 102, alignment: .leading)
-        .padding(15)
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 78)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.primary.opacity(0.055), lineWidth: 1)
+        }
     }
 
     private var expiry: String {
         guard let timestamp = session.userInfo?.expDate,
-              let seconds = TimeInterval(timestamp) else { return "—" }
+              let seconds = TimeInterval(timestamp) else { return "Nessuna scadenza" }
         return Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted)
     }
 }
