@@ -249,11 +249,10 @@ struct HomeView: View {
         .task(id: homeDataVersion) {
             rebuildHomeSnapshot()
         }
-        .task(id: features.count) {
-            guard features.count > 1 else { return }
+        .task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
-                guard !Task.isCancelled, features.count > 1 else { return }
+                guard !Task.isCancelled, features.count > 1, !session.isRefreshing else { continue }
                 await MainActor.run {
                     withAnimation(.easeInOut(duration: 0.45)) {
                         featuredIndex = (featuredIndex + 1) % features.count
@@ -308,75 +307,51 @@ struct HomeView: View {
     }
 
     private var topBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                BrandMark(size: 46)
-
-                Text("ATLANTIX")
-                    .font(.title3.weight(.black))
-                    .tracking(1.7)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .layoutPriority(2)
-
-                Spacer(minLength: 4)
-
-                HStack(spacing: 8) {
-                    compactCircleButton("magnifyingglass") { showSearch = true }
-                    compactCircleButton(session.isRefreshing ? "hourglass" : "arrow.clockwise") {
-                        Task { await session.refreshSafely() }
-                    }
-                    .disabled(session.isRefreshing)
-
-                    NavigationLink { SettingsView() } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 42, height: 42)
-                            .background(Color(uiColor: .secondarySystemBackground))
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.primary.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Circle())
-                }
-            }
+        HStack(spacing: 8) {
+            BrandMark(size: 42)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Bentornato, \(session.username)")
-                    .font(.subheadline.weight(.medium))
+                Text("ATLANTIX")
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .tracking(1.4)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                Text("Bentornato, \(session.username) · \(lastUpdateCompactText)")
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Text(lastUpdateText)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.72)
             }
-            .padding(.leading, 56)
-            .padding(.trailing, 4)
+            .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 6) {
+                compactCircleButton("magnifyingglass") { showSearch = true }
+                compactCircleButton(session.isRefreshing ? "hourglass" : "arrow.clockwise") {
+                    Task { await session.refreshSafely() }
+                }
+                .disabled(session.isRefreshing)
+
+                NavigationLink { SettingsView() } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 38, height: 38)
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                .contentShape(Circle())
+            }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 11)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(Color(uiColor: .systemBackground))
         .overlay(alignment: .bottom) { Divider().opacity(0.22) }
         .contentShape(Rectangle())
-    }
-
-    private func compactCircleButton(_ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(.primary)
-                .frame(width: 42, height: 42)
-                .background(Color(uiColor: .secondarySystemBackground))
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.primary.opacity(0.08)))
-        }
-        .buttonStyle(.plain)
-        .contentShape(Circle())
     }
 
     private var lastUpdateText: String {
@@ -384,6 +359,14 @@ struct HomeView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "it_IT")
         formatter.dateFormat = Calendar.current.isDateInToday(date) ? "'Aggiornato oggi alle' HH:mm" : "'Aggiornato il' dd/MM 'alle' HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private var lastUpdateCompactText: String {
+        guard let date = session.lastRefresh else { return "Playlist pronta" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "it_IT")
+        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "'oggi' HH:mm" : "dd/MM HH:mm"
         return formatter.string(from: date)
     }
 
@@ -476,6 +459,19 @@ struct HomeView: View {
                 .minimumScaleFactor(0.72)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func compactCircleButton(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .bold))
+                .frame(width: 38, height: 38)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
     }
 
     private func circleButton(_ icon: String, action: @escaping () -> Void) -> some View {
