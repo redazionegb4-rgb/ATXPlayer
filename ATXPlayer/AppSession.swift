@@ -113,6 +113,7 @@ final class AppSession: ObservableObject {
             password = savedPassword
             accessCode = savedUsername
             baseURL = UserDefaults.standard.string(forKey: "baseURL") ?? ""
+            DownloadCenter.shared.switchAccount(to: savedUsername)
             isAuthenticated = true
             Task { await restoreSession() }
         }
@@ -184,6 +185,7 @@ final class AppSession: ObservableObject {
             accessCode = username
             UserDefaults.standard.set(baseURL, forKey: "baseURL")
             userInfo = login.userInfo
+            DownloadCenter.shared.switchAccount(to: username)
             KeychainStore.save(username, for: "username")
             KeychainStore.save(password, for: "password")
             KeychainStore.delete("accessCode")
@@ -250,6 +252,7 @@ final class AppSession: ObservableObject {
     func refreshSafely() async { errorMessage = nil; await reloadPlaylist() }
 
     func signOut() {
+        DownloadCenter.shared.switchAccount(to: nil)
         isAuthenticated = false
         userInfo = nil
         liveCategories = []; movieCategories = []; seriesCategories = []

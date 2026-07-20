@@ -3142,22 +3142,118 @@ final class DownloadCenter: ObservableObject {
 
     private var activeTasks: [String: URLSessionDownloadTask] = [:]
     private var progressMonitors: [String: Task<Void, Never>] = [:]
-    private let metadataKey = "atlantix.offline.downloads.v2"
+    private var currentAccountKey: String?
+    private let metadataPrefix = "atlantix.offline.downloads.v3"
+    private let migrationPrefix = "atlantix.offline.downloads.migrated.v3"
 
     private init() {
-        let oldKey = "atlantix.offline.downloads.v1"
-        let savedData = UserDefaults.standard.data(forKey: metadataKey) ?? UserDefaults.standard.data(forKey: oldKey)
-        if let savedData,
-           let saved = try? JSONDecoder().decode([OfflineDownload].self, from: savedData) {
-            items = saved.filter { FileManager.default.fileExists(atPath: $0.localURL.path) }
+        try? FileManager.default.createDirectory(at: downloadsRootDirectory, withIntermediateDirectories: true)
+    }
+
+    /// Cambia l'archivio download quando cambia l'account autenticato.
+    /// Ogni utente ha metadati e cartella fisica separati.
+    func switchAccount(to username: String?) {
+        cancelActiveDownloads()
+        items = []
+        lastError = nil
+
+        guard let username = username?.trimmingCharacters(in: .whitespacesAndNewlines), !username.isEmpty else {
+            currentAccountKey = nil
+            return
         }
+
+        let accountKey = accountIdentifier(for: username)
+        currentAccountKey = accountKey
         try? FileManager.default.createDirectory(at: downloadsDirectory, withIntermediateDirectories: true)
-        persist()
+
+        if let data = UserDefaults.standard.data(forKey: metadataKey(for: accountKey)),
+           let saved = try? JSONDecoder().decode([OfflineDownload].self, from: data) {
+            items = saved.filter { FileManager.default.fileExists(atPath: $0.localURL.path) }
+            persist()
+            return
+        }
+
+        migrateLegacyDownloadsIfNeeded(to: accountKey)
+        loadItems(for: accountKey)
+    }
+
+    private var downloadsRootDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AtlantiXDownloads", isDirectory: true)
     }
 
     private var downloadsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("AtlantiXDownloads", isDirectory: true)
+        downloadsRootDirectory
+            .appendingPathComponent(currentAccountKey ?? "no-account", isDirectory: true)
+    }
+
+    private func metadataKey(for accountKey: String) -> String {
+        "\(metadataPrefix).\(accountKey)"
+    }
+
+    private func accountIdentifier(for username: String) -> String {
+        // Hash FNV-1a stabile: evita di salvare il nome utente in chiaro nel percorso.
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in username.lowercased().utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
+    }
+
+    private func loadItems(for accountKey: String) {
+        guard let data = UserDefaults.standard.data(forKey: metadataKey(for: accountKey)),
+              let saved = try? JSONDecoder().decode([OfflineDownload].self, from: data) else {
+            items = []
+            return
+        }
+        items = saved.filter { FileManager.default.fileExists(atPath: $0.localURL.path) }
+        persist()
+    }
+
+    private func migrateLegacyDownloadsIfNeeded(to accountKey: String) {
+        let migrationKey = "\(migrationPrefix).\(accountKey)"
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+        defer { UserDefaults.standard.set(true, forKey: migrationKey) }
+
+        let legacyKeys = ["atlantix.offline.downloads.v2", "atlantix.offline.downloads.v1"]
+        guard let legacyData = legacyKeys.compactMap({ UserDefaults.standard.data(forKey: $0) }).first,
+              let legacyItems = try? JSONDecoder().decode([OfflineDownload].self, from: legacyData) else { return }
+
+        try? FileManager.default.createDirectory(at: downloadsDirectory, withIntermediateDirectories: true)
+        var migrated: [OfflineDownload] = []
+
+        for item in legacyItems {
+            let oldURL = item.localURL
+            guard FileManager.default.fileExists(atPath: oldURL.path) else { continue }
+            let destination = downloadsDirectory.appendingPathComponent(item.localFilename)
+            if oldURL != destination {
+                try? FileManager.default.removeItem(at: destination)
+                do { try FileManager.default.moveItem(at: oldURL, to: destination) }
+                catch { continue }
+            }
+            migrated.append(OfflineDownload(
+                id: item.id,
+                title: item.title,
+                subtitle: item.subtitle,
+                imageURL: item.imageURL,
+                localFilename: "\(accountKey)/\(item.localFilename)",
+                createdAt: item.createdAt
+            ))
+        }
+
+        items = migrated
+        persist()
+        legacyKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+    }
+
+    private func cancelActiveDownloads() {
+        activeTasks.values.forEach { $0.cancel() }
+        progressMonitors.values.forEach { $0.cancel() }
+        activeTasks.removeAll()
+        progressMonitors.removeAll()
+        activeTitles.removeAll()
+        progressByTitle.removeAll()
     }
 
     func isDownloaded(title: String) -> Bool { items.contains { $0.title == title } }
@@ -3165,6 +3261,10 @@ final class DownloadCenter: ObservableObject {
     func progress(for title: String) -> Double { progressByTitle[title] ?? 0 }
 
     func download(title: String, subtitle: String, imageURL: String?, remoteURL: URL?, fileExtension: String) {
+        guard let accountKey = currentAccountKey else {
+            lastError = "Accedi al tuo account prima di scaricare un contenuto."
+            return
+        }
         guard let remoteURL else {
             lastError = "Indirizzo del contenuto non valido."
             return
@@ -3179,6 +3279,7 @@ final class DownloadCenter: ObservableObject {
         let safeName = title.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
         let ext = fileExtension.isEmpty ? "mp4" : fileExtension
         let filename = "\(UUID().uuidString)_\(safeName).\(ext)"
+        let relativeFilename = "\(accountKey)/\(filename)"
         let destination = directory.appendingPathComponent(filename)
 
         var request = URLRequest(url: remoteURL)
@@ -3193,10 +3294,19 @@ final class DownloadCenter: ObservableObject {
                 self.progressMonitors.removeValue(forKey: title)
                 self.activeTasks.removeValue(forKey: title)
 
+                // Se nel frattempo è cambiato account, non associare il file al nuovo utente.
+                guard self.currentAccountKey == accountKey else {
+                    self.activeTitles.remove(title)
+                    self.progressByTitle.removeValue(forKey: title)
+                    return
+                }
+
                 if let error {
                     self.activeTitles.remove(title)
                     self.progressByTitle.removeValue(forKey: title)
-                    self.lastError = "Download non riuscito: \(error.localizedDescription)"
+                    if (error as NSError).code != NSURLErrorCancelled {
+                        self.lastError = "Download non riuscito: \(error.localizedDescription)"
+                    }
                     return
                 }
                 if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
@@ -3221,7 +3331,7 @@ final class DownloadCenter: ObservableObject {
                         title: title,
                         subtitle: subtitle,
                         imageURL: imageURL,
-                        localFilename: filename,
+                        localFilename: relativeFilename,
                         createdAt: Date()
                     )
                     self.items.insert(item, at: 0)
@@ -3259,9 +3369,9 @@ final class DownloadCenter: ObservableObject {
     }
 
     private func persist() {
-        if let data = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(data, forKey: metadataKey)
-        }
+        guard let accountKey = currentAccountKey,
+              let data = try? JSONEncoder().encode(items) else { return }
+        UserDefaults.standard.set(data, forKey: metadataKey(for: accountKey))
     }
 }
 
@@ -3327,6 +3437,114 @@ struct DownloadIconButton: View {
         }
         .disabled(center.isDownloaded(title: title) || center.isDownloading(title: title))
         .accessibilityLabel("Scarica episodio")
+    }
+}
+
+
+private struct SwipeDeleteDownloadCard: View {
+    let item: OfflineDownload
+    let seriesStyle: Bool
+    let subtitle: String
+    let onPlay: () -> Void
+    let onDelete: () -> Void
+
+    @State private var offset: CGFloat = 0
+    @State private var isOpen = false
+    private let actionWidth: CGFloat = 92
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.red)
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                VStack(spacing: 5) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 19, weight: .semibold))
+                    Text("Elimina")
+                        .font(.caption.bold())
+                }
+                .foregroundStyle(.white)
+                .frame(width: actionWidth, maxHeight: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                if isOpen { close() } else { onPlay() }
+            } label: {
+                HStack(spacing: 13) {
+                    OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+                        if let image = phase.image {
+                            image.resizable().scaledToFill()
+                        } else {
+                            ZStack {
+                                LinearGradient(colors: [.purple.opacity(0.55), .indigo.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                Image(systemName: seriesStyle ? "tv.fill" : "film.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                    }
+                    .frame(width: seriesStyle ? 74 : 70, height: seriesStyle ? 74 : 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipped()
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.title)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        Label("Disponibile offline", systemImage: "checkmark.circle.fill")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.green)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 29))
+                        .foregroundStyle(.purple)
+                }
+                .padding(12)
+                .background(Color(uiColor: .systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.07)))
+                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .offset(x: offset)
+            .gesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                        let base = isOpen ? -actionWidth : 0
+                        offset = min(0, max(-actionWidth, base + value.translation.width))
+                    }
+                    .onEnded { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                        let predicted = (isOpen ? -actionWidth : 0) + value.predictedEndTranslation.width
+                        predicted < -actionWidth * 0.45 ? open() : close()
+                    }
+            )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.86), value: offset)
+        .accessibilityAction(named: "Elimina download") { onDelete() }
+    }
+
+    private func open() {
+        isOpen = true
+        offset = -actionWidth
+    }
+
+    private func close() {
+        isOpen = false
+        offset = 0
     }
 }
 
@@ -3561,58 +3779,13 @@ struct DownloadsView: View {
     }
 
     private func downloadCard(_ item: OfflineDownload, seriesStyle: Bool) -> some View {
-        Button { selectedItem = item } label: {
-            HStack(spacing: 13) {
-                OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        ZStack {
-                            LinearGradient(colors: [.purple.opacity(0.55), .indigo.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            Image(systemName: seriesStyle ? "tv.fill" : "film.fill")
-                                .font(.title2)
-                                .foregroundStyle(.white)
-                        }
-                    }
-                }
-                .frame(width: seriesStyle ? 74 : 70, height: seriesStyle ? 74 : 96)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .clipped()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                    Text(seriesStyle ? episodeSubtitle(item) : "Film")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                    Label("Disponibile offline", systemImage: "checkmark.circle.fill")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.green)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 29))
-                    .foregroundStyle(.purple)
-            }
-            .padding(12)
-            .background(Color(uiColor: .systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.07)))
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button(role: .destructive) { center.delete(item) } label: {
-                Label("Elimina download", systemImage: "trash")
-            }
-        }
-        .swipeActions {
-            Button(role: .destructive) { center.delete(item) } label: {
-                Label("Elimina", systemImage: "trash")
-            }
-        }
+        SwipeDeleteDownloadCard(
+            item: item,
+            seriesStyle: seriesStyle,
+            subtitle: seriesStyle ? episodeSubtitle(item) : "Film",
+            onPlay: { selectedItem = item },
+            onDelete: { center.delete(item) }
+        )
     }
 
     private func matchesSearch(_ item: OfflineDownload) -> Bool {
