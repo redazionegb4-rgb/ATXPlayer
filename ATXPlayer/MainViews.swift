@@ -3441,41 +3441,18 @@ struct DownloadIconButton: View {
 }
 
 
-private struct SwipeDeleteDownloadCard: View {
+private struct DownloadContentCard: View {
     let item: OfflineDownload
     let seriesStyle: Bool
     let subtitle: String
     let onPlay: () -> Void
     let onDelete: () -> Void
 
-    @State private var offset: CGFloat = 0
-    @State private var isOpen = false
-    private let actionWidth: CGFloat = 92
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.red)
-
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                VStack(spacing: 5) {
-                    Image(systemName: "trash.fill")
-                        .font(.system(size: 19, weight: .semibold))
-                    Text("Elimina")
-                        .font(.caption.bold())
-                }
-                .foregroundStyle(.white)
-                .frame(width: actionWidth)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                if isOpen { close() } else { onPlay() }
-            } label: {
+        HStack(spacing: 0) {
+            Button(action: onPlay) {
                 HStack(spacing: 13) {
                     OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
                         if let image = phase.image {
@@ -3506,46 +3483,51 @@ private struct SwipeDeleteDownloadCard: View {
                             .font(.caption2.bold())
                             .foregroundStyle(.green)
                     }
+
                     Spacer(minLength: 8)
+
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: 29))
                         .foregroundStyle(.purple)
                 }
                 .padding(12)
-                .background(Color(uiColor: .systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.07)))
-                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .offset(x: offset)
-            .gesture(
-                DragGesture(minimumDistance: 12)
-                    .onChanged { value in
-                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                        let base = isOpen ? -actionWidth : 0
-                        offset = min(0, max(-actionWidth, base + value.translation.width))
-                    }
-                    .onEnded { value in
-                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                        let predicted = (isOpen ? -actionWidth : 0) + value.predictedEndTranslation.width
-                        predicted < -actionWidth * 0.45 ? open() : close()
-                    }
-            )
+
+            Divider()
+                .padding(.vertical, 12)
+
+            Button {
+                showDeleteConfirmation = true
+            } label: {
+                VStack(spacing: 5) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("Elimina")
+                        .font(.caption2.bold())
+                }
+                .foregroundStyle(.red)
+                .frame(width: 72)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Elimina download")
         }
+        .background(Color(uiColor: .systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .animation(.interactiveSpring(response: 0.26, dampingFraction: 0.86), value: offset)
-        .accessibilityAction(named: "Elimina download") { onDelete() }
-    }
-
-    private func open() {
-        isOpen = true
-        offset = -actionWidth
-    }
-
-    private func close() {
-        isOpen = false
-        offset = 0
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.07)))
+        .confirmationDialog(
+            "Eliminare questo download?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Elimina", role: .destructive) { onDelete() }
+            Button("Annulla", role: .cancel) { }
+        } message: {
+            Text("Il contenuto verrà rimosso dal dispositivo.")
+        }
     }
 }
 
@@ -3780,7 +3762,7 @@ struct DownloadsView: View {
     }
 
     private func downloadCard(_ item: OfflineDownload, seriesStyle: Bool) -> some View {
-        SwipeDeleteDownloadCard(
+        DownloadContentCard(
             item: item,
             seriesStyle: seriesStyle,
             subtitle: seriesStyle ? episodeSubtitle(item) : "Film",
