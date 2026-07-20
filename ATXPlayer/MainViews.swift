@@ -3467,7 +3467,8 @@ private struct SwipeDeleteDownloadCard: View {
                         .font(.caption.bold())
                 }
                 .foregroundStyle(.white)
-                .frame(width: actionWidth, maxHeight: .infinity)
+                .frame(width: actionWidth)
+                .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
