@@ -1390,7 +1390,7 @@ struct LiveDetailView: View {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     liveHero
                     NavigationLink {
-                        LivePlayerRouter(title: item.name, url: directURL)
+                        PlayerScreen(title: item.name, url: directURL, isLive: true)
                     } label: {
                         playButton("Guarda in diretta")
                     }
@@ -1994,60 +1994,9 @@ struct NativePlayerController: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
         @Binding var pictureInPictureActive: Bool
-        private var itemStatusObservation: NSKeyValueObservation?
-        private var timeControlObservation: NSKeyValueObservation?
-        private weak var observedPlayer: AVPlayer?
-        private var autoplayAttempts = 0
 
         init(pictureInPictureActive: Binding<Bool>) {
             _pictureInPictureActive = pictureInPictureActive
-        }
-
-        deinit {
-            itemStatusObservation?.invalidate()
-            timeControlObservation?.invalidate()
-        }
-
-        func observe(_ player: AVPlayer) {
-            guard observedPlayer !== player else { return }
-            itemStatusObservation?.invalidate()
-            timeControlObservation?.invalidate()
-            observedPlayer = player
-            autoplayAttempts = 0
-
-            if let item = player.currentItem {
-                itemStatusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self, weak player] item, _ in
-                    guard let self, let player, item.status == .readyToPlay else { return }
-                    DispatchQueue.main.async {
-                        self.forceAutoplay(player)
-                    }
-                }
-            }
-
-            timeControlObservation = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self, weak player] playerObject, _ in
-                guard let self, let player else { return }
-                guard playerObject.timeControlStatus != .playing else {
-                    self.autoplayAttempts = 0
-                    return
-                }
-                DispatchQueue.main.async {
-                    self.forceAutoplay(player)
-                }
-            }
-        }
-
-        private func forceAutoplay(_ player: AVPlayer) {
-            guard player.currentItem?.status != .failed else { return }
-            player.playImmediately(atRate: 1.0)
-            guard autoplayAttempts < 8 else { return }
-            autoplayAttempts += 1
-            let delay = 0.12 * Double(autoplayAttempts)
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak player] in
-                guard let self, let player,
-                      self.observedPlayer === player,
-                      player.timeControlStatus != .playing else { return }
-                player.playImmediately(atRate: 1.0)
-            }
         }
 
         func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
@@ -2085,7 +2034,6 @@ struct NativePlayerController: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.delegate = context.coordinator
-        context.coordinator.observe(player)
         controller.showsPlaybackControls = true
         controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
         controller.canStartPictureInPictureAutomaticallyFromInline = true
@@ -2099,7 +2047,6 @@ struct NativePlayerController: UIViewControllerRepresentable {
         if controller.player !== player {
             controller.player = player
         }
-        context.coordinator.observe(player)
         controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
         controller.canStartPictureInPictureAutomaticallyFromInline = true
         if player.timeControlStatus != .playing {
@@ -2140,6 +2087,7 @@ struct PlayerScreen: View {
     @State private var autoAdvanceCancelled = false
     @State private var livePlaybackStarted = false
     @State private var liveStartupAttempts = 0
+    @State private var liveStartupTask: Task<Void, Never>?
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2227,25 +2175,6 @@ struct PlayerScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             resumePlaybackIfNeeded(delay: 0.12)
         }
-        .onReceive(Timer.publish(every: 0.12, on: .main, in: .common).autoconnect()) { _ in
-            guard isLive, let player, !failed else { return }
-            let hasAdvanced = player.currentTime().seconds.isFinite && player.currentTime().seconds > 0.05
-            let isActuallyPlaying = player.timeControlStatus == .playing && player.rate > 0
-            if hasAdvanced || isActuallyPlaying {
-                livePlaybackStarted = true
-                liveStartupAttempts = 0
-            } else if liveStartupAttempts < 16 {
-                liveStartupAttempts += 1
-                if liveStartupAttempts == 2 || liveStartupAttempts == 5 || liveStartupAttempts == 9 {
-                    player.playImmediately(atRate: 1.0)
-                }
-                if liveStartupAttempts == 12, let item = player.currentItem {
-                    item.preferredForwardBufferDuration = 0
-                    item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
-                    player.playImmediately(atRate: 1.0)
-                }
-            }
-        }
         .onDisappear { closePlayerIfNeeded() }
     }
 
@@ -2318,11 +2247,12 @@ struct PlayerScreen: View {
         ]
         let asset = AVURLAsset(url: currentURL, options: assetOptions)
         let item = AVPlayerItem(asset: asset)
-        item.preferredForwardBufferDuration = isLive ? 0 : 3.0
+        item.preferredForwardBufferDuration = isLive ? 0.5 : 3.0
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive
         if isLive {
+            // Buffer molto ridotto, ma non azzerato: migliora la compatibilità
+            // con i server HLS più lenti senza ritardare visibilmente l'avvio.
             item.preferredPeakBitRate = 0
-            item.preferredMaximumResolution = .zero
             livePlaybackStarted = false
             liveStartupAttempts = 0
         }
@@ -2344,17 +2274,7 @@ struct PlayerScreen: View {
 
     private func startPlayback(_ player: AVPlayer) {
         if isLive {
-            player.currentItem?.preferredForwardBufferDuration = 0
-            player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
-            player.playImmediately(atRate: 1.0)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
-                guard self.player === player, !self.failed else { return }
-                player.playImmediately(atRate: 1.0)
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                guard self.player === player, !self.failed, player.timeControlStatus != .playing else { return }
-                player.playImmediately(atRate: 1.0)
-            }
+            startLivePlayback(player)
             return
         }
 
@@ -2370,6 +2290,44 @@ struct PlayerScreen: View {
         }
     }
 
+
+    private func startLivePlayback(_ player: AVPlayer) {
+        liveStartupTask?.cancel()
+        livePlaybackStarted = false
+        liveStartupAttempts = 0
+
+        player.currentItem?.preferredForwardBufferDuration = 0.5
+        player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
+        player.playImmediately(atRate: 1.0)
+
+        // Controllo breve e limitato esclusivamente alla schermata Live.
+        // Non esistono timer permanenti e il task viene cancellato alla chiusura.
+        liveStartupTask = Task { @MainActor in
+            let delays: [UInt64] = [180_000_000, 350_000_000, 650_000_000, 1_100_000_000, 1_700_000_000]
+
+            for delay in delays {
+                do { try await Task.sleep(nanoseconds: delay) } catch { return }
+                guard !Task.isCancelled, self.player === player, !self.failed else { return }
+
+                let currentSeconds = player.currentTime().seconds
+                let hasAdvanced = currentSeconds.isFinite && currentSeconds > 0.05
+                let isPlaying = player.timeControlStatus == .playing && player.rate > 0
+
+                if hasAdvanced || isPlaying {
+                    self.livePlaybackStarted = true
+                    self.liveStartupAttempts = 0
+                    return
+                }
+
+                self.liveStartupAttempts += 1
+                player.playImmediately(atRate: 1.0)
+            }
+
+            guard !Task.isCancelled, self.player === player else { return }
+            self.livePlaybackStarted = player.timeControlStatus == .playing || player.rate > 0
+        }
+    }
+
     private func resumePlaybackIfNeeded(delay: Double = 0.0) {
         guard !failed, let player else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -2380,7 +2338,7 @@ struct PlayerScreen: View {
 
     private func validate(item: AVPlayerItem, player: AVPlayer) {
         Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_000_000_000)
             if item.status == .failed {
                 failed = true
                 player.pause()
@@ -2449,6 +2407,8 @@ struct PlayerScreen: View {
 
     private func closePlayerIfNeeded() {
         guard !pictureInPictureActive else { return }
+        liveStartupTask?.cancel()
+        liveStartupTask = nil
         if let currentDescriptor, let player {
             session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
         }
@@ -3043,21 +3003,6 @@ struct SettingsView: View {
 
     private var playbackSection: some View {
         premiumSection(title: "Riproduzione", subtitle: "Comportamento del player", icon: "play.fill") {
-            VStack(alignment: .leading, spacing: 12) {
-                SettingsInfoRow(
-                    title: "Player canali Live",
-                    subtitle: session.livePlayerEngine == "vlc" ? "VLC — avvio rapido e compatibilità elevata" : "Apple AVPlayer — player di sistema",
-                    icon: "tv.and.mediabox"
-                )
-                Picker("Player Live", selection: Binding(get: { session.livePlayerEngine }, set: { session.setLivePlayerEngine($0) })) {
-                    Text("VLC").tag("vlc")
-                    Text("Apple").tag("apple")
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 14)
-            }
-            SettingsDivider()
             SettingsToggleRow(
                 title: "Riproduzione automatica",
                 subtitle: "Avvia il contenuto successivo",
