@@ -2020,58 +2020,13 @@ struct NativePlayerController: UIViewControllerRepresentable {
         }
 
         func configureAutoplay(for player: AVPlayer, isLive: Bool) {
-            guard observedPlayer !== player || self.isLive != isLive else { return }
-            stopObserving()
-            observedPlayer = player
-            self.isLive = isLive
-
-            guard isLive else { return }
-            startupDeadline = Date().addingTimeInterval(7.0)
-
-            timeControlObservation = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self, weak player] _, _ in
-                DispatchQueue.main.async {
-                    guard let self, let player else { return }
-                    self.ensureLivePlaybackStarted(on: player)
-                }
-            }
-
-            itemStatusObservation = player.currentItem?.observe(\.status, options: [.initial, .new]) { [weak self, weak player] item, _ in
-                DispatchQueue.main.async {
-                    guard let self, let player else { return }
-                    if item.status == .readyToPlay {
-                        self.ensureLivePlaybackStarted(on: player, force: true)
-                    }
-                }
-            }
-
-            let delays: [TimeInterval] = [0.05, 0.20, 0.45, 0.85, 1.35, 2.10, 3.20, 4.80, 6.20]
-            for delay in delays {
-                let work = DispatchWorkItem { [weak self, weak player] in
-                    guard let self, let player else { return }
-                    self.ensureLivePlaybackStarted(on: player, force: true)
-                }
-                startupWorkItems.append(work)
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-            }
-        }
-
-        private func ensureLivePlaybackStarted(on player: AVPlayer, force: Bool = false) {
-            guard isLive, observedPlayer === player, Date() <= startupDeadline else {
-                cancelStartupRetries()
-                return
-            }
-
-            let seconds = player.currentTime().seconds
-            let hasAdvanced = seconds.isFinite && seconds > 0.05
-            if player.timeControlStatus == .playing || hasAdvanced {
-                cancelStartupRetries()
-                return
-            }
-
-            guard force || player.timeControlStatus == .paused else { return }
-            player.play()
-            if player.rate == 0 {
-                player.rate = 1.0
+            // L’avvio dei Live viene gestito esclusivamente da PlayerScreen.
+            // Evitiamo observer e richiami concorrenti a play(), che potevano
+            // lasciare AVPlayer con il primo fotogramma fermo.
+            if observedPlayer !== player || self.isLive != isLive {
+                stopObserving()
+                observedPlayer = player
+                self.isLive = isLive
             }
         }
 
@@ -2123,12 +2078,6 @@ struct NativePlayerController: UIViewControllerRepresentable {
         controller.updatesNowPlayingInfoCenter = true
 
         context.coordinator.configureAutoplay(for: player, isLive: isLive)
-        if isLive {
-            DispatchQueue.main.async {
-                player.play()
-                if player.rate == 0 { player.rate = 1.0 }
-            }
-        }
         return controller
     }
 
@@ -2334,7 +2283,7 @@ struct PlayerScreen: View {
         ]
         let asset = AVURLAsset(url: currentURL, options: assetOptions)
         let item = AVPlayerItem(asset: asset)
-        item.preferredForwardBufferDuration = isLive ? 0.5 : 3.0
+        item.preferredForwardBufferDuration = isLive ? 1.25 : 3.0
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive
         if isLive {
             // Buffer molto ridotto, ma non azzerato: migliora la compatibilità
@@ -2344,7 +2293,7 @@ struct PlayerScreen: View {
             liveStartupAttempts = 0
         }
         let newPlayer = AVPlayer(playerItem: item)
-        newPlayer.automaticallyWaitsToMinimizeStalling = isLive ? false : true
+        newPlayer.automaticallyWaitsToMinimizeStalling = true
         newPlayer.preventsDisplaySleepDuringVideoPlayback = true
         player = newPlayer
         installObservers(on: newPlayer, item: item)
@@ -2383,37 +2332,55 @@ struct PlayerScreen: View {
         livePlaybackStarted = false
         liveStartupAttempts = 0
 
-        player.currentItem?.preferredForwardBufferDuration = 0.5
+        player.currentItem?.preferredForwardBufferDuration = 1.25
         player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
-        player.play()
-        if player.rate == 0 { player.rate = 1.0 }
 
-        // Retry brevi solo durante l'apertura della diretta. Una volta avviata,
-        // il task termina e la pausa manuale dell'utente resta rispettata.
         liveStartupTask = Task { @MainActor in
-            let checkpoints: [UInt64] = [180_000_000, 420_000_000, 750_000_000, 1_200_000_000, 1_900_000_000, 2_900_000_000, 4_200_000_000, 6_000_000_000]
-            var previous: UInt64 = 0
+            // Attende che AVPlayerItem sia realmente pronto prima di avviare.
+            // Questo evita il caso in cui appare il primo fotogramma ma il
+            // flusso resta fermo finché l’utente non tocca i controlli.
+            let readyDeadline = Date().addingTimeInterval(8)
+            while player.currentItem?.status == .unknown && Date() < readyDeadline {
+                do { try await Task.sleep(nanoseconds: 100_000_000) } catch { return }
+                guard !Task.isCancelled, self.player === player else { return }
+            }
 
-            for checkpoint in checkpoints {
-                do { try await Task.sleep(nanoseconds: checkpoint - previous) } catch { return }
-                previous = checkpoint
-                guard !Task.isCancelled, self.player === player, !self.failed else { return }
+            guard !Task.isCancelled, self.player === player else { return }
+            guard player.currentItem?.status != .failed else {
+                self.failed = true
+                return
+            }
 
-                let seconds = player.currentTime().seconds
-                let hasAdvanced = seconds.isFinite && seconds > 0.05
-                if player.timeControlStatus == .playing || hasAdvanced {
+            player.play()
+
+            // Controlliamo l’avanzamento reale del flusso, non il solo rate.
+            // Se il primo fotogramma resta bloccato, eseguiamo al massimo due
+            // cicli pausa/play, equivalenti al gesto che lo sbloccava a mano.
+            var lastTime = player.currentTime().seconds
+            for attempt in 0..<3 {
+                do { try await Task.sleep(nanoseconds: attempt == 0 ? 900_000_000 : 1_200_000_000) } catch { return }
+                guard !Task.isCancelled, self.player === player else { return }
+
+                let currentTime = player.currentTime().seconds
+                let advanced = currentTime.isFinite && lastTime.isFinite && currentTime > lastTime + 0.03
+                if advanced || player.timeControlStatus == .playing {
                     self.livePlaybackStarted = true
                     self.liveStartupAttempts = 0
                     return
                 }
 
                 self.liveStartupAttempts += 1
-                player.play()
-                if player.rate == 0 { player.rate = 1.0 }
+                if attempt < 2 {
+                    player.pause()
+                    do { try await Task.sleep(nanoseconds: 120_000_000) } catch { return }
+                    guard !Task.isCancelled, self.player === player else { return }
+                    player.play()
+                    lastTime = player.currentTime().seconds
+                }
             }
 
             guard !Task.isCancelled, self.player === player else { return }
-            self.livePlaybackStarted = player.timeControlStatus == .playing || player.rate > 0
+            self.livePlaybackStarted = player.timeControlStatus == .playing
         }
     }
 
