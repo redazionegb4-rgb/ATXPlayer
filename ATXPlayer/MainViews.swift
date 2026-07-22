@@ -1990,13 +1990,24 @@ private func playButton(_ title: String) -> some View {
 
 struct NativePlayerController: UIViewControllerRepresentable {
     let player: AVPlayer
+    let isLive: Bool
     @Binding var pictureInPictureActive: Bool
 
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
         @Binding var pictureInPictureActive: Bool
+        private var timeControlObservation: NSKeyValueObservation?
+        private var itemStatusObservation: NSKeyValueObservation?
+        private var startupWorkItems: [DispatchWorkItem] = []
+        private weak var observedPlayer: AVPlayer?
+        private var isLive = false
+        private var startupDeadline = Date.distantPast
 
         init(pictureInPictureActive: Binding<Bool>) {
             _pictureInPictureActive = pictureInPictureActive
+        }
+
+        deinit {
+            stopObserving()
         }
 
         func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
@@ -2008,13 +2019,83 @@ struct NativePlayerController: UIViewControllerRepresentable {
             resumePlayback(on: playerViewController.player)
         }
 
+        func configureAutoplay(for player: AVPlayer, isLive: Bool) {
+            guard observedPlayer !== player || self.isLive != isLive else { return }
+            stopObserving()
+            observedPlayer = player
+            self.isLive = isLive
+
+            guard isLive else { return }
+            startupDeadline = Date().addingTimeInterval(7.0)
+
+            timeControlObservation = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self, weak player] _, _ in
+                DispatchQueue.main.async {
+                    guard let self, let player else { return }
+                    self.ensureLivePlaybackStarted(on: player)
+                }
+            }
+
+            itemStatusObservation = player.currentItem?.observe(\.status, options: [.initial, .new]) { [weak self, weak player] item, _ in
+                DispatchQueue.main.async {
+                    guard let self, let player else { return }
+                    if item.status == .readyToPlay {
+                        self.ensureLivePlaybackStarted(on: player, force: true)
+                    }
+                }
+            }
+
+            let delays: [TimeInterval] = [0.05, 0.20, 0.45, 0.85, 1.35, 2.10, 3.20, 4.80, 6.20]
+            for delay in delays {
+                let work = DispatchWorkItem { [weak self, weak player] in
+                    guard let self, let player else { return }
+                    self.ensureLivePlaybackStarted(on: player, force: true)
+                }
+                startupWorkItems.append(work)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            }
+        }
+
+        private func ensureLivePlaybackStarted(on player: AVPlayer, force: Bool = false) {
+            guard isLive, observedPlayer === player, Date() <= startupDeadline else {
+                cancelStartupRetries()
+                return
+            }
+
+            let seconds = player.currentTime().seconds
+            let hasAdvanced = seconds.isFinite && seconds > 0.05
+            if player.timeControlStatus == .playing || hasAdvanced {
+                cancelStartupRetries()
+                return
+            }
+
+            guard force || player.timeControlStatus == .paused else { return }
+            player.play()
+            if player.rate == 0 {
+                player.rate = 1.0
+            }
+        }
+
+        private func cancelStartupRetries() {
+            startupWorkItems.forEach { $0.cancel() }
+            startupWorkItems.removeAll()
+        }
+
+        private func stopObserving() {
+            cancelStartupRetries()
+            timeControlObservation?.invalidate()
+            itemStatusObservation?.invalidate()
+            timeControlObservation = nil
+            itemStatusObservation = nil
+            observedPlayer = nil
+        }
+
         private func resumePlayback(on player: AVPlayer?) {
             guard let player else { return }
-            player.playImmediately(atRate: 1.0)
+            player.play()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
                 guard player.timeControlStatus != .playing else { return }
-                player.pause()
-                player.playImmediately(atRate: 1.0)
+                player.play()
+                if player.rate == 0 { player.rate = 1.0 }
             }
         }
 
@@ -2041,11 +2122,12 @@ struct NativePlayerController: UIViewControllerRepresentable {
         controller.exitsFullScreenWhenPlaybackEnds = false
         controller.updatesNowPlayingInfoCenter = true
 
-        // AVPlayerViewController può azzerare temporaneamente il rate quando viene
-        // collegato alla gerarchia. Rimettiamo subito il player in riproduzione.
-        DispatchQueue.main.async {
-            guard controller.player === player, player.rate == 0 else { return }
-            player.playImmediately(atRate: 1.0)
+        context.coordinator.configureAutoplay(for: player, isLive: isLive)
+        if isLive {
+            DispatchQueue.main.async {
+                player.play()
+                if player.rate == 0 { player.rate = 1.0 }
+            }
         }
         return controller
     }
@@ -2056,9 +2138,7 @@ struct NativePlayerController: UIViewControllerRepresentable {
         }
         controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
         controller.canStartPictureInPictureAutomaticallyFromInline = true
-        if player.timeControlStatus != .playing {
-            player.playImmediately(atRate: 1.0)
-        }
+        context.coordinator.configureAutoplay(for: player, isLive: isLive)
     }
 }
 
@@ -2095,9 +2175,6 @@ struct PlayerScreen: View {
     @State private var livePlaybackStarted = false
     @State private var liveStartupAttempts = 0
     @State private var liveStartupTask: Task<Void, Never>?
-    @State private var liveItemStatusObserver: NSKeyValueObservation?
-    @State private var liveTimeControlObserver: NSKeyValueObservation?
-    @State private var liveAutoplayArmed = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2120,7 +2197,7 @@ struct PlayerScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if let player {
-                NativePlayerController(player: player, pictureInPictureActive: $pictureInPictureActive)
+                NativePlayerController(player: player, isLive: isLive, pictureInPictureActive: $pictureInPictureActive)
                     .ignoresSafeArea(edges: .bottom)
                     .opacity(isLive && !livePlaybackStarted ? 0.001 : 1)
 
@@ -2269,16 +2346,8 @@ struct PlayerScreen: View {
         let newPlayer = AVPlayer(playerItem: item)
         newPlayer.automaticallyWaitsToMinimizeStalling = isLive ? false : true
         newPlayer.preventsDisplaySleepDuringVideoPlayback = true
-        if isLive {
-            newPlayer.defaultRate = 1.0
-            newPlayer.actionAtItemEnd = .none
-            liveAutoplayArmed = true
-        }
         player = newPlayer
         installObservers(on: newPlayer, item: item)
-        if isLive {
-            installLiveAutoplayObservers(on: newPlayer, item: item)
-        }
 
         if !isLive, let currentDescriptor, let saved = session.savedProgress(for: currentDescriptor), saved.position >= 20 {
             pendingResumePosition = saved.position
@@ -2313,93 +2382,39 @@ struct PlayerScreen: View {
         liveStartupTask?.cancel()
         livePlaybackStarted = false
         liveStartupAttempts = 0
-        liveAutoplayArmed = true
 
         player.currentItem?.preferredForwardBufferDuration = 0.5
         player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
-
-        // Imposta il rate desiderato subito, anche quando l'item non è ancora ready.
-        // In questo modo AVPlayer parte appena riceve i primi segmenti invece di
-        // presentarsi con il pulsante Play e rate a zero.
-        player.defaultRate = 1.0
         player.play()
-        player.playImmediately(atRate: 1.0)
+        if player.rate == 0 { player.rate = 1.0 }
 
-        // Retry brevi e solo durante l'avvio. Appena il player entra davvero in
-        // riproduzione il task termina e non interferisce con una pausa volontaria.
+        // Retry brevi solo durante l'apertura della diretta. Una volta avviata,
+        // il task termina e la pausa manuale dell'utente resta rispettata.
         liveStartupTask = Task { @MainActor in
-            let delays: [UInt64] = [120_000_000, 220_000_000, 380_000_000, 650_000_000, 1_000_000_000, 1_500_000_000]
+            let checkpoints: [UInt64] = [180_000_000, 420_000_000, 750_000_000, 1_200_000_000, 1_900_000_000, 2_900_000_000, 4_200_000_000, 6_000_000_000]
+            var previous: UInt64 = 0
 
-            for delay in delays {
-                do { try await Task.sleep(nanoseconds: delay) } catch { return }
-                guard !Task.isCancelled, self.player === player, !self.failed, self.liveAutoplayArmed else { return }
+            for checkpoint in checkpoints {
+                do { try await Task.sleep(nanoseconds: checkpoint - previous) } catch { return }
+                previous = checkpoint
+                guard !Task.isCancelled, self.player === player, !self.failed else { return }
 
-                let currentSeconds = player.currentTime().seconds
-                let hasAdvanced = currentSeconds.isFinite && currentSeconds > 0.05
-                let isPlaying = player.timeControlStatus == .playing && player.rate > 0
-
-                if hasAdvanced || isPlaying {
-                    markLivePlaybackStarted()
+                let seconds = player.currentTime().seconds
+                let hasAdvanced = seconds.isFinite && seconds > 0.05
+                if player.timeControlStatus == .playing || hasAdvanced {
+                    self.livePlaybackStarted = true
+                    self.liveStartupAttempts = 0
                     return
                 }
 
                 self.liveStartupAttempts += 1
                 player.play()
-                player.playImmediately(atRate: 1.0)
+                if player.rate == 0 { player.rate = 1.0 }
             }
+
+            guard !Task.isCancelled, self.player === player else { return }
+            self.livePlaybackStarted = player.timeControlStatus == .playing || player.rate > 0
         }
-    }
-
-    private func installLiveAutoplayObservers(on player: AVPlayer, item: AVPlayerItem) {
-        removeLiveAutoplayObservers()
-
-        liveItemStatusObserver = item.observe(\.status, options: [.initial, .new]) { observedItem, _ in
-            DispatchQueue.main.async {
-                guard self.player === player, self.liveAutoplayArmed else { return }
-                switch observedItem.status {
-                case .readyToPlay:
-                    player.play()
-                    player.playImmediately(atRate: 1.0)
-                case .failed:
-                    self.failed = true
-                    self.liveAutoplayArmed = false
-                default:
-                    break
-                }
-            }
-        }
-
-        liveTimeControlObserver = player.observe(\.timeControlStatus, options: [.initial, .new]) { observedPlayer, _ in
-            DispatchQueue.main.async {
-                guard self.player === player else { return }
-                if observedPlayer.timeControlStatus == .playing && observedPlayer.rate > 0 {
-                    self.markLivePlaybackStarted()
-                } else if self.liveAutoplayArmed,
-                          observedPlayer.timeControlStatus == .paused,
-                          item.status == .readyToPlay {
-                    // Alcuni stream/controller riportano il rate a zero proprio nel
-                    // passaggio a readyToPlay. Lo correggiamo soltanto in startup.
-                    observedPlayer.playImmediately(atRate: 1.0)
-                }
-            }
-        }
-    }
-
-    private func markLivePlaybackStarted() {
-        guard isLive else { return }
-        livePlaybackStarted = true
-        liveAutoplayArmed = false
-        liveStartupAttempts = 0
-        liveStartupTask?.cancel()
-        liveStartupTask = nil
-        removeLiveAutoplayObservers()
-    }
-
-    private func removeLiveAutoplayObservers() {
-        liveItemStatusObserver?.invalidate()
-        liveTimeControlObserver?.invalidate()
-        liveItemStatusObserver = nil
-        liveTimeControlObserver = nil
     }
 
     private func resumePlaybackIfNeeded(delay: Double = 0.0) {
@@ -2483,8 +2498,6 @@ struct PlayerScreen: View {
         guard !pictureInPictureActive else { return }
         liveStartupTask?.cancel()
         liveStartupTask = nil
-        liveAutoplayArmed = false
-        removeLiveAutoplayObservers()
         if let currentDescriptor, let player {
             session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
         }
