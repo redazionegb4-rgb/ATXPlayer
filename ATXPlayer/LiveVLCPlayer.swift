@@ -1,6 +1,9 @@
 import SwiftUI
 import UIKit
-import VLCKitSPM
+
+#if canImport(MobileVLCKit)
+import MobileVLCKit
+#endif
 
 /// Seleziona il motore impostato dall'utente esclusivamente per i canali Live.
 /// Film, serie e download continuano a usare AVPlayer.
@@ -20,6 +23,7 @@ struct LivePlayerRouter: View {
     }
 }
 
+#if canImport(MobileVLCKit)
 struct VLCPlayerScreen: View {
     let title: String
     let url: URL?
@@ -209,3 +213,16 @@ private struct VLCVideoSurface: UIViewRepresentable {
     }
 }
 
+#else
+/// Se MobileVLCKit non è presente nel progetto viene utilizzato il player Apple,
+/// ora dotato di avvio automatico osservando lo stato reale dello stream.
+struct VLCPlayerScreen: View {
+    let title: String
+    let url: URL?
+
+    var body: some View {
+        PlayerScreen(title: title, url: url, isLive: true)
+            .navigationTitle(title)
+    }
+}
+#endif

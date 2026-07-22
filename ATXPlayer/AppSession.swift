@@ -94,7 +94,7 @@ final class AppSession: ObservableObject {
     @Published var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
     @Published var interfaceAnimations = UserDefaults.standard.object(forKey: "interfaceAnimations") as? Bool ?? true
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
-    @Published var livePlayerEngine = UserDefaults.standard.string(forKey: "livePlayerEngine") ?? "vlc"
+    @Published var livePlayerEngine = UserDefaults.standard.string(forKey: "livePlayerEngine") ?? "apple"
     @Published private(set) var playbackProgress: [PlaybackProgress] = []
     @Published private(set) var favorites: [FavoriteItem] = []
     @Published private(set) var watchHistory: [WatchHistoryItem] = []

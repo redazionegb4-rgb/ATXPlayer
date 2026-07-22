@@ -1994,9 +1994,60 @@ struct NativePlayerController: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
         @Binding var pictureInPictureActive: Bool
+        private var itemStatusObservation: NSKeyValueObservation?
+        private var timeControlObservation: NSKeyValueObservation?
+        private weak var observedPlayer: AVPlayer?
+        private var autoplayAttempts = 0
 
         init(pictureInPictureActive: Binding<Bool>) {
             _pictureInPictureActive = pictureInPictureActive
+        }
+
+        deinit {
+            itemStatusObservation?.invalidate()
+            timeControlObservation?.invalidate()
+        }
+
+        func observe(_ player: AVPlayer) {
+            guard observedPlayer !== player else { return }
+            itemStatusObservation?.invalidate()
+            timeControlObservation?.invalidate()
+            observedPlayer = player
+            autoplayAttempts = 0
+
+            if let item = player.currentItem {
+                itemStatusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self, weak player] item, _ in
+                    guard let self, let player, item.status == .readyToPlay else { return }
+                    DispatchQueue.main.async {
+                        self.forceAutoplay(player)
+                    }
+                }
+            }
+
+            timeControlObservation = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self, weak player] playerObject, _ in
+                guard let self, let player else { return }
+                guard playerObject.timeControlStatus != .playing else {
+                    self.autoplayAttempts = 0
+                    return
+                }
+                DispatchQueue.main.async {
+                    self.forceAutoplay(player)
+                }
+            }
+        }
+
+        private func forceAutoplay(_ player: AVPlayer) {
+            guard player.currentItem?.status != .failed else { return }
+            player.playImmediately(atRate: 1.0)
+            guard autoplayAttempts < 8 else { return }
+            autoplayAttempts += 1
+            let delay = 0.12 * Double(autoplayAttempts)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak player] in
+                guard let self, let player,
+                      self.observedPlayer === player,
+                      player.timeControlStatus != .playing else { return }
+                player.playImmediately(atRate: 1.0)
+            }
         }
 
         func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
@@ -2034,6 +2085,7 @@ struct NativePlayerController: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.delegate = context.coordinator
+        context.coordinator.observe(player)
         controller.showsPlaybackControls = true
         controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
         controller.canStartPictureInPictureAutomaticallyFromInline = true
@@ -2047,6 +2099,7 @@ struct NativePlayerController: UIViewControllerRepresentable {
         if controller.player !== player {
             controller.player = player
         }
+        context.coordinator.observe(player)
         controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
         controller.canStartPictureInPictureAutomaticallyFromInline = true
         if player.timeControlStatus != .playing {
