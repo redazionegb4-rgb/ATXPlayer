@@ -1390,7 +1390,7 @@ struct LiveDetailView: View {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     liveHero
                     NavigationLink {
-                        PlayerScreen(title: item.name, url: directURL, isLive: true)
+                        LiveVLCPlayerScreen(title: item.name, url: directURL)
                     } label: {
                         playButton("Guarda in diretta")
                     }
