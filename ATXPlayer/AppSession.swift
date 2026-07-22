@@ -94,6 +94,7 @@ final class AppSession: ObservableObject {
     @Published var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
     @Published var interfaceAnimations = UserDefaults.standard.object(forKey: "interfaceAnimations") as? Bool ?? true
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
+    @Published var livePlayerEngine = UserDefaults.standard.string(forKey: "livePlayerEngine") ?? "vlc"
     @Published private(set) var playbackProgress: [PlaybackProgress] = []
     @Published private(set) var favorites: [FavoriteItem] = []
     @Published private(set) var watchHistory: [WatchHistoryItem] = []
@@ -480,6 +481,7 @@ final class AppSession: ObservableObject {
     func setAutoplay(_ value: Bool) { autoplay = value; UserDefaults.standard.set(value, forKey: "autoplay") }
     func setInterfaceAnimations(_ value: Bool) { interfaceAnimations = value; UserDefaults.standard.set(value, forKey: "interfaceAnimations") }
     func setParentalControl(_ value: Bool) { parentalControl = value; UserDefaults.standard.set(value, forKey: "parentalControl") }
+    func setLivePlayerEngine(_ value: String) { livePlayerEngine = value; UserDefaults.standard.set(value, forKey: "livePlayerEngine") }
 
     func streamURL(type: ContentType, id: Int, ext: String? = nil) -> URL? {
         let path: String

@@ -26,9 +26,9 @@
   A025 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>";};
   A026 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>";};
   A027 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViews.swift; sourceTree = "<group>";};
-  A029 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveVLCPlayer.swift; sourceTree = "<group>";};
   A028 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>";};
-  A101 = {isa = PBXBuildFile; fileRef = A021;}; A102 = {isa = PBXBuildFile; fileRef = A022;}; A103 = {isa = PBXBuildFile; fileRef = A023;}; A104 = {isa = PBXBuildFile; fileRef = A024;}; A105 = {isa = PBXBuildFile; fileRef = A025;}; A106 = {isa = PBXBuildFile; fileRef = A026;}; A108 = {isa = PBXBuildFile; fileRef = A027;}; A109 = {isa = PBXBuildFile; fileRef = A029;}; A107 = {isa = PBXBuildFile; fileRef = A028;};
+  A029 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveVLCPlayer.swift; sourceTree = "<group>";};
+  A101 = {isa = PBXBuildFile; fileRef = A021;}; A102 = {isa = PBXBuildFile; fileRef = A022;}; A103 = {isa = PBXBuildFile; fileRef = A023;}; A104 = {isa = PBXBuildFile; fileRef = A024;}; A105 = {isa = PBXBuildFile; fileRef = A025;}; A106 = {isa = PBXBuildFile; fileRef = A026;}; A108 = {isa = PBXBuildFile; fileRef = A027;}; A107 = {isa = PBXBuildFile; fileRef = A028;}; A109 = {isa = PBXBuildFile; fileRef = A029;};
  };
  rootObject = A001;
 }

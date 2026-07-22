@@ -1390,7 +1390,7 @@ struct LiveDetailView: View {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     liveHero
                     NavigationLink {
-                        LiveVLCPlayerScreen(title: item.name, url: directURL)
+                        LivePlayerRouter(title: item.name, url: directURL)
                     } label: {
                         playButton("Guarda in diretta")
                     }
@@ -2990,6 +2990,21 @@ struct SettingsView: View {
 
     private var playbackSection: some View {
         premiumSection(title: "Riproduzione", subtitle: "Comportamento del player", icon: "play.fill") {
+            VStack(alignment: .leading, spacing: 12) {
+                SettingsInfoRow(
+                    title: "Player canali Live",
+                    subtitle: session.livePlayerEngine == "vlc" ? "VLC — avvio rapido e compatibilità elevata" : "Apple AVPlayer — player di sistema",
+                    icon: "tv.and.mediabox"
+                )
+                Picker("Player Live", selection: Binding(get: { session.livePlayerEngine }, set: { session.setLivePlayerEngine($0) })) {
+                    Text("VLC").tag("vlc")
+                    Text("Apple").tag("apple")
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
+            }
+            SettingsDivider()
             SettingsToggleRow(
                 title: "Riproduzione automatica",
                 subtitle: "Avvia il contenuto successivo",
