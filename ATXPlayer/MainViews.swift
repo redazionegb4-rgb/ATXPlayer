@@ -2004,6 +2004,17 @@ struct NativePlayerController: UIViewControllerRepresentable {
 
         func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
             pictureInPictureActive = false
+            resumePlayback(on: playerViewController.player)
+        }
+
+        private func resumePlayback(on player: AVPlayer?) {
+            guard let player else { return }
+            player.playImmediately(atRate: 1.0)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                guard player.timeControlStatus != .playing else { return }
+                player.pause()
+                player.playImmediately(atRate: 1.0)
+            }
         }
 
         func playerViewController(
@@ -2037,6 +2048,9 @@ struct NativePlayerController: UIViewControllerRepresentable {
         }
         controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
         controller.canStartPictureInPictureAutomaticallyFromInline = true
+        if player.timeControlStatus != .playing {
+            player.playImmediately(atRate: 1.0)
+        }
     }
 }
 
@@ -2049,6 +2063,7 @@ struct PlaybackQueueItem: Identifiable, Hashable {
 
 struct PlayerScreen: View {
     @EnvironmentObject var session: AppSession
+    @Environment(\.scenePhase) private var scenePhase
     let title: String
     let url: URL?
     let isLive: Bool
@@ -2117,17 +2132,31 @@ struct PlayerScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .alert("Riprendere la visione?", isPresented: $showResumePrompt) {
             Button("Ricomincia") {
-                player?.seek(to: .zero)
-                player?.play()
+                player?.seek(to: .zero) { _ in
+                    if let player { startPlayback(player) }
+                }
             }
             Button("Riprendi da \(formatTime(pendingResumePosition))") {
                 let target = CMTime(seconds: pendingResumePosition, preferredTimescale: 600)
-                player?.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { _ in player?.play() }
+                player?.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                    if let player { startPlayback(player) }
+                }
             }
         } message: {
             Text("Hai già iniziato questo contenuto.")
         }
         .task { configurePlayer() }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                resumePlaybackIfNeeded()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            resumePlaybackIfNeeded(delay: 0.25)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            resumePlaybackIfNeeded(delay: 0.12)
+        }
         .onDisappear { closePlayerIfNeeded() }
     }
 
@@ -2196,7 +2225,10 @@ struct PlayerScreen: View {
         if let currentDescriptor { session.recordHistory(for: currentDescriptor) }
 
         let item = AVPlayerItem(url: currentURL)
+        item.preferredForwardBufferDuration = isLive ? 1.0 : 3.0
         let newPlayer = AVPlayer(playerItem: item)
+        newPlayer.automaticallyWaitsToMinimizeStalling = false
+        newPlayer.preventsDisplaySleepDuringVideoPlayback = true
         player = newPlayer
         installObservers(on: newPlayer, item: item)
 
@@ -2204,10 +2236,31 @@ struct PlayerScreen: View {
             pendingResumePosition = saved.position
             showResumePrompt = true
         } else {
-            newPlayer.play()
+            startPlayback(newPlayer)
         }
 
         validate(item: item, player: newPlayer)
+    }
+
+    private func startPlayback(_ player: AVPlayer) {
+        player.playImmediately(atRate: 1.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            guard self.player === player, player.timeControlStatus != .playing else { return }
+            player.pause()
+            player.playImmediately(atRate: 1.0)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+            guard self.player === player, player.timeControlStatus != .playing else { return }
+            player.playImmediately(atRate: 1.0)
+        }
+    }
+
+    private func resumePlaybackIfNeeded(delay: Double = 0.0) {
+        guard !failed, let player else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard self.player === player else { return }
+            self.startPlayback(player)
+        }
     }
 
     private func validate(item: AVPlayerItem, player: AVPlayer) {
@@ -2265,9 +2318,10 @@ struct PlayerScreen: View {
         failed = false
 
         let nextItem = AVPlayerItem(url: nextURL)
+        nextItem.preferredForwardBufferDuration = 3.0
         player.replaceCurrentItem(with: nextItem)
         installObservers(on: player, item: nextItem)
-        player.play()
+        startPlayback(player)
         validate(item: nextItem, player: player)
     }
 
