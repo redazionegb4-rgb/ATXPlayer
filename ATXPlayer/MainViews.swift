@@ -2084,6 +2084,10 @@ struct PlayerScreen: View {
     @State private var showNextEpisodeCountdown = false
     @State private var nextEpisodeCountdown = 3
     @State private var autoAdvanceCancelled = false
+    @State private var itemStatusObservation: NSKeyValueObservation?
+    @State private var keepUpObservation: NSKeyValueObservation?
+    @State private var timeControlObservation: NSKeyValueObservation?
+    @State private var liveStartupWorkItem: DispatchWorkItem?
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2231,6 +2235,7 @@ struct PlayerScreen: View {
         newPlayer.preventsDisplaySleepDuringVideoPlayback = true
         player = newPlayer
         installObservers(on: newPlayer, item: item)
+        if isLive { installLiveStartupObservers(on: newPlayer, item: item) }
 
         if !isLive, let currentDescriptor, let saved = session.savedProgress(for: currentDescriptor), saved.position >= 20 {
             pendingResumePosition = saved.position
@@ -2253,6 +2258,81 @@ struct PlayerScreen: View {
             guard self.player === player, player.timeControlStatus != .playing else { return }
             player.playImmediately(atRate: 1.0)
         }
+        if isLive { scheduleLiveStartupRecovery(for: player) }
+    }
+
+    private func installLiveStartupObservers(on player: AVPlayer, item: AVPlayerItem) {
+        itemStatusObservation?.invalidate()
+        keepUpObservation?.invalidate()
+        timeControlObservation?.invalidate()
+
+        itemStatusObservation = item.observe(\.status, options: [.initial, .new]) { observedItem, _ in
+            DispatchQueue.main.async {
+                guard self.player === player else { return }
+                switch observedItem.status {
+                case .readyToPlay:
+                    self.failed = false
+                    self.jumpToLiveEdgeIfAvailable(player)
+                    player.playImmediately(atRate: 1.0)
+                    self.scheduleLiveStartupRecovery(for: player)
+                case .failed:
+                    self.failed = true
+                default:
+                    break
+                }
+            }
+        }
+
+        keepUpObservation = item.observe(\.isPlaybackLikelyToKeepUp, options: [.new]) { observedItem, _ in
+            guard observedItem.isPlaybackLikelyToKeepUp else { return }
+            DispatchQueue.main.async {
+                guard self.player === player else { return }
+                player.playImmediately(atRate: 1.0)
+            }
+        }
+
+        timeControlObservation = player.observe(\.timeControlStatus, options: [.new]) { observedPlayer, _ in
+            guard observedPlayer.timeControlStatus == .waitingToPlayAtSpecifiedRate else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                guard self.player === player, player.timeControlStatus != .playing else { return }
+                self.jumpToLiveEdgeIfAvailable(player)
+                player.playImmediately(atRate: 1.0)
+            }
+        }
+    }
+
+    private func scheduleLiveStartupRecovery(for player: AVPlayer) {
+        liveStartupWorkItem?.cancel()
+        let initialTime = player.currentTime().seconds
+        let workItem = DispatchWorkItem {
+            guard self.player === player, !self.failed else { return }
+            let currentTime = player.currentTime().seconds
+            let progressed = initialTime.isFinite && currentTime.isFinite && currentTime > initialTime + 0.15
+            guard player.timeControlStatus != .playing || !progressed else { return }
+
+            self.jumpToLiveEdgeIfAvailable(player)
+            player.pause()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                guard self.player === player else { return }
+                player.playImmediately(atRate: 1.0)
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.15) {
+                guard self.player === player, player.timeControlStatus != .playing else { return }
+                self.jumpToLiveEdgeIfAvailable(player)
+                player.playImmediately(atRate: 1.0)
+            }
+        }
+        liveStartupWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
+    }
+
+    private func jumpToLiveEdgeIfAvailable(_ player: AVPlayer) {
+        guard let range = player.currentItem?.seekableTimeRanges.last?.timeRangeValue else { return }
+        let end = CMTimeRangeGetEnd(range)
+        guard end.isValid, end.isNumeric else { return }
+        let target = CMTimeSubtract(end, CMTime(seconds: 0.35, preferredTimescale: 600))
+        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     private func resumePlaybackIfNeeded(delay: Double = 0.0) {
@@ -2334,6 +2414,14 @@ struct PlayerScreen: View {
 
     private func closePlayerIfNeeded() {
         guard !pictureInPictureActive else { return }
+        liveStartupWorkItem?.cancel()
+        liveStartupWorkItem = nil
+        itemStatusObservation?.invalidate()
+        keepUpObservation?.invalidate()
+        timeControlObservation?.invalidate()
+        itemStatusObservation = nil
+        keepUpObservation = nil
+        timeControlObservation = nil
         if let currentDescriptor, let player {
             session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
         }
