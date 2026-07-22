@@ -1,9 +1,6 @@
 import SwiftUI
 import UIKit
-
-#if canImport(MobileVLCKit)
-import MobileVLCKit
-#endif
+import VLCKitSPM
 
 /// Seleziona il motore impostato dall'utente esclusivamente per i canali Live.
 /// Film, serie e download continuano a usare AVPlayer.
@@ -23,7 +20,6 @@ struct LivePlayerRouter: View {
     }
 }
 
-#if canImport(MobileVLCKit)
 struct VLCPlayerScreen: View {
     let title: String
     let url: URL?
@@ -213,16 +209,3 @@ private struct VLCVideoSurface: UIViewRepresentable {
     }
 }
 
-#else
-/// Fallback di sicurezza: il progetto resta compilabile anche prima che CocoaPods
-/// abbia risolto MobileVLCKit. Con il pod installato viene usato VLC realmente.
-struct VLCPlayerScreen: View {
-    let title: String
-    let url: URL?
-
-    var body: some View {
-        PlayerScreen(title: title, url: url, isLive: true)
-            .navigationTitle(title)
-    }
-}
-#endif
