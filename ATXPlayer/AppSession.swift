@@ -94,7 +94,7 @@ final class AppSession: ObservableObject {
     @Published var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
     @Published var interfaceAnimations = UserDefaults.standard.object(forKey: "interfaceAnimations") as? Bool ?? true
     @Published var parentalControl = UserDefaults.standard.bool(forKey: "parentalControl")
-    @Published var livePlayerEngine = UserDefaults.standard.string(forKey: "livePlayerEngine") ?? "apple"
+    @Published var livePlayerEngine = "vlc"
     @Published private(set) var playbackProgress: [PlaybackProgress] = []
     @Published private(set) var favorites: [FavoriteItem] = []
     @Published private(set) var watchHistory: [WatchHistoryItem] = []
@@ -102,6 +102,10 @@ final class AppSession: ObservableObject {
     var colorScheme: ColorScheme? { appearance == "light" ? .light : appearance == "dark" ? .dark : nil }
 
     init() {
+        // VLC è il player Live predefinito di sistema a ogni avvio.
+        livePlayerEngine = "vlc"
+        UserDefaults.standard.set("vlc", forKey: "livePlayerEngine")
+
         let hasSession = UserDefaults.standard.bool(forKey: "hasSavedSession")
         loadPlaylistCache()
         loadPlaybackProgress()
