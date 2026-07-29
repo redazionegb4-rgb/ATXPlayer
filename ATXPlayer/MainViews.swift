@@ -511,7 +511,7 @@ struct HomeView: View {
 
                 VStack(alignment: .leading, spacing: 11) {
                     Text("ATLANTIX  •  \(featured.kind.uppercased())")
-                        .font(.caption2.black()).tracking(2.2).foregroundStyle(.cyan)
+                        .font(.caption2.weight(.black)).tracking(2.2).foregroundStyle(.cyan)
                     Text(featured.title)
                         .font(.system(size: 34, weight: .black, design: .rounded))
                         .foregroundStyle(.white).lineLimit(2)
