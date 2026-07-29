@@ -809,7 +809,6 @@ struct ContentBrowser: View {
     @EnvironmentObject var session: AppSession
     let type: ContentType
     @State private var search = ""
-    @State private var categoryCounts: [String: Int] = [:]
 
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
     private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
@@ -842,7 +841,6 @@ struct ContentBrowser: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task(id: totalCount) { rebuildCategoryCounts() }
     }
 
     private var cinematicHeader: some View {
@@ -901,13 +899,20 @@ struct ContentBrowser: View {
         .padding(14).streamingPanel(radius: 24).padding(.horizontal, 16)
     }
 
-    private func count(for category: Category) -> Int { categoryCounts[category.categoryID] ?? 0 }
-    private func rebuildCategoryCounts() {
+    private func count(for category: Category) -> Int {
+        let targetID = normalizedCategoryID(category.categoryID)
         switch type {
-        case .live: categoryCounts = Dictionary(grouping: session.allLive, by: { $0.categoryID ?? "" }).mapValues { $0.count }
-        case .movies: categoryCounts = Dictionary(grouping: session.allMovies, by: { $0.categoryID ?? "" }).mapValues { $0.count }
-        case .series: categoryCounts = Dictionary(grouping: session.allSeries, by: { $0.categoryID ?? "" }).mapValues { $0.count }
+        case .live:
+            return session.allLive.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
+        case .movies:
+            return session.allMovies.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
+        case .series:
+            return session.allSeries.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
         }
+    }
+
+    private func normalizedCategoryID(_ value: String?) -> String {
+        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func categoryRow(_ category: Category, index: Int) -> some View {
