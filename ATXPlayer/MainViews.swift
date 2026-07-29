@@ -81,8 +81,11 @@ private struct OptimizedAsyncImage<Content: View>: View {
     }
 }
 
-private let brandGradient = LinearGradient(colors: [.cyan, .purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
-private let pageBackground = Color(uiColor: .systemBackground)
+private let atlantiXRed = Color(red: 0.90, green: 0.03, blue: 0.08)
+private let atlantiXBlack = Color(red: 0.025, green: 0.025, blue: 0.03)
+private let atlantiXCard = Color(red: 0.095, green: 0.095, blue: 0.105)
+private let brandGradient = LinearGradient(colors: [atlantiXRed, Color(red: 0.55, green: 0.01, blue: 0.04)], startPoint: .topLeading, endPoint: .bottomTrailing)
+private let pageBackground = atlantiXBlack
 
 private func accentGradient(for seed: String) -> LinearGradient {
     let palettes: [[Color]] = [
@@ -156,6 +159,8 @@ struct MainTabView: View {
                 NavigationStack { DownloadsView() }
             }
         }
+        .preferredColorScheme(.dark)
+        .tint(atlantiXRed)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 0) {
                 ForEach(AppTab.allCases, id: \.self) { tab in
@@ -170,7 +175,7 @@ struct MainTabView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.65)
                         }
-                        .foregroundStyle(selectedTab == tab ? Color.purple : Color.secondary)
+                        .foregroundStyle(selectedTab == tab ? atlantiXRed : Color.white.opacity(0.55))
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
                         .padding(.bottom, 5)
@@ -178,8 +183,8 @@ struct MainTabView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .background(.ultraThinMaterial)
-            .overlay(alignment: .top) { Divider() }
+            .background(atlantiXBlack.opacity(0.97))
+            .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5) }
         }
     }
 }
@@ -220,11 +225,11 @@ struct HomeView: View {
                     .zIndex(20)
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 24) {
-                        accountShortcuts
                         hero
                             .zIndex(0)
-                        counters
                         quickActions
+                        accountShortcuts
+                        counters
                         if !session.accountWatchHistory.isEmpty { historyRail }
                         if !session.continueWatching.isEmpty { continueWatchingRail }
                         if !trendingSeries.isEmpty { customSeriesRail("In tendenza", trendingSeries) }
@@ -313,7 +318,8 @@ struct HomeView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("ATLANTIX")
-                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .foregroundStyle(atlantiXRed)
+                    .font(.system(size: 20, weight: .black, design: .rounded))
                     .tracking(1.4)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -340,7 +346,7 @@ struct HomeView: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.primary)
                         .frame(width: 38, height: 38)
-                        .background(Color(uiColor: .secondarySystemBackground))
+                        .background(atlantiXCard)
                         .clipShape(Circle())
                         .overlay(Circle().stroke(Color.primary.opacity(0.08)))
                 }
@@ -350,8 +356,8 @@ struct HomeView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color(uiColor: .systemBackground))
-        .overlay(alignment: .bottom) { Divider().opacity(0.22) }
+        .background(atlantiXBlack.opacity(0.97))
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5) }
         .contentShape(Rectangle())
     }
 
@@ -421,9 +427,9 @@ struct HomeView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 76)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.primary.opacity(0.07)))
+        .background(atlantiXCard)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.primary.opacity(0.07)))
     }
 
     private func toolButton(title: String, icon: String, action: @escaping () -> Void) -> some View {
@@ -440,7 +446,7 @@ struct HomeView: View {
                     .font(.headline.bold())
                     .foregroundStyle(icon == "heart.fill" ? Color.pink : Color.primary)
                     .frame(width: 48, height: 48)
-                    .background(Color(uiColor: .secondarySystemBackground))
+                    .background(atlantiXCard)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(Color.primary.opacity(0.08)))
                 if badge > 0 {
@@ -467,7 +473,7 @@ struct HomeView: View {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .bold))
                 .frame(width: 38, height: 38)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(atlantiXCard)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Color.primary.opacity(0.08)))
         }
@@ -479,7 +485,7 @@ struct HomeView: View {
         Button(action: action) {
             Image(systemName: icon).font(.headline.bold())
                 .frame(width: 48, height: 48)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(atlantiXCard)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Color.primary.opacity(0.08)))
         }
@@ -495,14 +501,14 @@ struct HomeView: View {
                     if let image = phase.image { image.resizable().scaledToFill() }
                     else { heroFallback }
                 }
-                .frame(maxWidth: .infinity).frame(height: 310).clipped()
+                .frame(maxWidth: .infinity).frame(height: 430).clipped()
 
                 LinearGradient(colors: [.clear, .black.opacity(0.15), .black.opacity(0.96)], startPoint: .top, endPoint: .bottom)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(featured.kind).font(.caption2.bold()).tracking(2).foregroundStyle(.cyan)
+                    Text("ATLANTIX  •  " + featured.kind.uppercased()).font(.caption2.bold()).tracking(2).foregroundStyle(atlantiXRed)
                     Text(featured.title)
-                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .font(.system(size: 34, weight: .black, design: .default))
                         .foregroundStyle(.white)
                         .lineLimit(2)
                     Text(featured.subtitle)
@@ -546,11 +552,10 @@ struct HomeView: View {
                     }
                 }.padding(22)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .padding(.horizontal, 20)
+            .contentShape(Rectangle())
+            .clipShape(Rectangle())
         } else {
-            heroFallback.frame(height: 280).clipShape(RoundedRectangle(cornerRadius: 28)).padding(.horizontal, 20)
+            heroFallback.frame(height: 390).clipShape(Rectangle())
         }
     }
 
@@ -571,7 +576,7 @@ struct HomeView: View {
     }
 
     private var heroFallback: some View {
-        LinearGradient(colors: [.indigo, .purple, Color(red: 0.04, green: 0.05, blue: 0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(colors: [Color.black, atlantiXRed.opacity(0.65), Color.black], startPoint: .topLeading, endPoint: .bottomTrailing)
             .overlay(Image(systemName: "play.circle.fill").font(.system(size: 82)).foregroundStyle(.white.opacity(0.2)))
     }
 
@@ -589,7 +594,7 @@ struct HomeView: View {
             Text(value.formatted()).font(.title3.bold())
             Text(title).font(.caption).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity).padding(.vertical, 16)
-            .background(Color(uiColor: .secondarySystemBackground))
+            .background(atlantiXCard)
             .overlay(RoundedRectangle(cornerRadius: 21).stroke(Color.primary.opacity(0.06)))
             .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
     }
@@ -623,10 +628,10 @@ struct HomeView: View {
                     Image(systemName: "arrow.right.circle.fill").font(.system(size: 34))
                     Text("Vedi tutti").font(.subheadline.bold())
                 }
-                .foregroundStyle(.purple)
+                .foregroundStyle(atlantiXRed)
                 .frame(width: 138, height: 205)
-                .background(Color(uiColor: .secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(atlantiXCard)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
         }
@@ -666,8 +671,8 @@ struct HomeView: View {
                 }
                 .foregroundStyle(.primary)
                 .frame(width: 120, height: 176)
-                .background(Color(uiColor: .secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(atlantiXCard)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
     }
@@ -819,16 +824,16 @@ struct ContentBrowser: View {
             ZStack { RoundedRectangle(cornerRadius: 18).fill(brandGradient); Image(systemName: icon).font(.title2.bold()).foregroundStyle(.white) }
                 .frame(width: 58, height: 58)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 27, weight: .bold))
+                Text(title).font(.system(size: 30, weight: .black))
                 Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
-                Text("\(totalCount.formatted()) contenuti").font(.caption.bold()).foregroundStyle(.purple)
+                Text("\(totalCount.formatted()) contenuti").font(.caption.bold()).foregroundStyle(atlantiXRed)
             }
             Spacer()
             Button {
                 Task { await session.reloadSection(type) }
             } label: {
                 ZStack {
-                    Circle().fill(Color(uiColor: .secondarySystemBackground))
+                    Circle().fill(atlantiXCard)
                     if session.isRefreshing {
                         ProgressView().tint(.primary)
                     } else {
@@ -853,7 +858,7 @@ struct ContentBrowser: View {
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) } }
         }
         .padding(.horizontal, 16).frame(height: 50)
-        .background(Color(uiColor: .secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .background(atlantiXCard).clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
         .padding(.horizontal, 16)
     }
@@ -876,7 +881,7 @@ struct ContentBrowser: View {
     private func categoryTile(_ title: String, _ icon: String, _ count: Int, featured: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                ZStack { RoundedRectangle(cornerRadius: 14).fill(featured ? brandGradient : LinearGradient(colors: [.purple.opacity(0.85), .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)); Image(systemName: icon).foregroundStyle(.white) }
+                ZStack { RoundedRectangle(cornerRadius: 14).fill(featured ? brandGradient : LinearGradient(colors: [atlantiXRed.opacity(0.95), Color.black], startPoint: .topLeading, endPoint: .bottomTrailing)); Image(systemName: icon).foregroundStyle(.white) }
                     .frame(width: 46, height: 46)
                 Spacer()
                 Image(systemName: "arrow.up.right").font(.caption.bold()).foregroundStyle(.secondary)
@@ -888,9 +893,9 @@ struct ContentBrowser: View {
         }
         .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
         .padding(16)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(atlantiXCard)
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.primary.opacity(0.06)))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
@@ -942,7 +947,7 @@ struct ItemGrid: View {
         HStack(spacing: 12) {
             Button { dismiss() } label: {
                 Image(systemName: "chevron.left").font(.title3.bold()).frame(width: 46, height: 46)
-                    .background(Color(uiColor: .secondarySystemBackground)).clipShape(Circle())
+                    .background(atlantiXCard).clipShape(Circle())
             }.buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
                 Text(category?.categoryName ?? "Tutti i contenuti").font(.headline.bold()).lineLimit(1)
@@ -961,7 +966,7 @@ struct ItemGrid: View {
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) } }
         }
         .padding(.horizontal, 16).frame(height: 50)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(atlantiXCard)
         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
         .padding(.horizontal, 16)
@@ -984,7 +989,7 @@ struct ItemGrid: View {
                     Text(newestFirst ? "Ultimi aggiunti" : "Meno recenti")
                     Image(systemName: "chevron.up.chevron.down")
                 }
-                .font(.subheadline.weight(.semibold)).foregroundStyle(.purple)
+                .font(.subheadline.weight(.semibold)).foregroundStyle(atlantiXRed)
             }
         }
         .padding(.horizontal, 18).padding(.top, 12)
@@ -1066,8 +1071,8 @@ struct ModernPosterCard: View {
                 .frame(maxWidth: .infinity).aspectRatio(0.68, contentMode: .fit).clipped()
                 if let badge, !badge.isEmpty { Text(badge).font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 5).background(.black.opacity(0.72)).clipShape(Capsule()).padding(8) }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            Text(typeLabel).font(.caption2.bold()).foregroundStyle(.purple)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Text(typeLabel).font(.caption2.bold()).tracking(1.2).foregroundStyle(atlantiXRed)
             Text(title).font(.subheadline.bold()).lineLimit(2).multilineTextAlignment(.leading)
         }
     }
@@ -1078,14 +1083,14 @@ struct LiveChannelCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack {
-                Color(uiColor: .secondarySystemBackground)
+                atlantiXCard
                 OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFit().padding(16) }
                     else { Image(systemName: "tv.fill").font(.system(size: 42)).foregroundStyle(brandGradient) }
                 }
             }
             .frame(maxWidth: .infinity).aspectRatio(1.35, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(alignment: .topTrailing) { Text("LIVE").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 5).background(.red).clipShape(Capsule()).padding(8) }
             Text(item.name).font(.subheadline.bold()).lineLimit(2).multilineTextAlignment(.leading)
         }
@@ -1106,7 +1111,7 @@ struct PosterCard: View {
                 }
                 .frame(maxWidth: .infinity)
                 .aspectRatio(landscape ? 1.45 : 0.70, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)).clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous)).clipped()
                 if let badge, !badge.isEmpty {
                     Text(badge).font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 5)
                         .background(.black.opacity(0.78)).foregroundStyle(.white).clipShape(Capsule()).padding(8)
@@ -1134,13 +1139,13 @@ struct ContinueWatchingCard: View {
                 VStack(spacing: 0) {
                     Spacer()
                     ProgressView(value: progress.fraction)
-                        .tint(.purple)
+                        .tint(atlantiXRed)
                         .background(Color.white.opacity(0.25))
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 8)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             Text(progress.title).font(.subheadline.bold()).lineLimit(1).foregroundStyle(.primary)
             HStack {
@@ -1214,7 +1219,7 @@ struct MovieDetailView: View {
                                                 .font(.caption.weight(.semibold))
                                                 .foregroundStyle(.primary)
                                                 .padding(.horizontal, 12).frame(height: 38)
-                                                .background(Color(uiColor: .secondarySystemBackground))
+                                                .background(atlantiXCard)
                                                 .clipShape(Capsule())
                                         }.buttonStyle(.plain)
                                     }
@@ -1269,7 +1274,7 @@ struct MovieDetailView: View {
                     else { ZStack { brandGradient; Image(systemName: "film.fill").font(.largeTitle).foregroundStyle(.white) } }
                 }
                 .frame(width: 142, height: 214)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .clipped()
                 .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
 
@@ -1305,7 +1310,7 @@ struct MovieDetailView: View {
                         Label("Trailer", systemImage: "play.rectangle.fill")
                             .font(.headline.bold()).foregroundStyle(.primary)
                             .frame(maxWidth: .infinity).padding(.vertical, 16)
-                            .background(Color(uiColor: .secondarySystemBackground))
+                            .background(atlantiXCard)
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                     }.buttonStyle(.plain)
                 }
@@ -1428,13 +1433,13 @@ struct LiveDetailView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 220)
-            .background(Color(uiColor: .secondarySystemBackground))
+            .background(atlantiXCard)
             .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
 
             Text(item.name).font(.title.bold()).foregroundStyle(.primary)
             if let program = currentProgram {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("IN ONDA", systemImage: "livephoto").font(.caption.bold()).foregroundStyle(.purple)
+                    Label("IN ONDA", systemImage: "livephoto").font(.caption.bold()).foregroundStyle(atlantiXRed)
                     Text(program.title ?? "Programma in corso").font(.title3.bold()).foregroundStyle(.primary)
                     Text(timeRange(program)).font(.subheadline).foregroundStyle(.secondary)
                     if let description = program.description, !description.isEmpty {
@@ -1507,14 +1512,14 @@ struct EPGProgramRow: View {
             .frame(width: 54, alignment: .leading)
 
             RoundedRectangle(cornerRadius: 2)
-                .fill(isCurrent ? Color.purple : Color.secondary.opacity(0.25))
+                .fill(isCurrent ? atlantiXRed : Color.secondary.opacity(0.25))
                 .frame(width: 4)
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
                     Text(program.title ?? "Programma").font(.headline).foregroundStyle(.primary).lineLimit(2)
                     Spacer()
-                    if isCurrent { Text("ORA").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 4).background(Color.purple).clipShape(Capsule()) }
+                    if isCurrent { Text("ORA").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 4).background(atlantiXRed).clipShape(Capsule()) }
                 }
                 if let description = program.description, !description.isEmpty {
                     Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
@@ -1522,9 +1527,9 @@ struct EPGProgramRow: View {
             }
         }
         .padding(14)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(isCurrent ? Color.purple.opacity(0.45) : Color.primary.opacity(0.05)))
+        .background(atlantiXCard)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(isCurrent ? atlantiXRed.opacity(0.45) : Color.primary.opacity(0.05)))
     }
 
     private var startTime: String { format(program.startTimestamp, fallback: program.start) }
@@ -1669,7 +1674,7 @@ struct SeriesDetailView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .padding(.horizontal, 12).frame(height: 38)
-                                .background(Color(uiColor: .secondarySystemBackground))
+                                .background(atlantiXCard)
                                 .clipShape(Capsule())
                         }.buttonStyle(.plain)
                     }
@@ -1719,7 +1724,7 @@ struct SeriesDetailView: View {
                 .frame(height: 44)
                 .background(
                     LinearGradient(
-                        colors: [Color.cyan, Color.purple, Color.indigo],
+                        colors: [Color.cyan, atlantiXRed, Color.indigo],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
@@ -1728,10 +1733,10 @@ struct SeriesDetailView: View {
             }
         }
         .padding(16)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(atlantiXCard)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .padding(.horizontal)
@@ -1753,7 +1758,7 @@ struct SeriesDetailView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.purple)
+            .tint(atlantiXRed)
             .disabled(selectedSeasonIndex == nil || selectedSeasonIndex == seasons.count - 1)
         }
         .padding(.horizontal)
@@ -1807,7 +1812,7 @@ struct SeriesHeader: View {
                     }
                 }
                 .frame(width: 142, height: 214)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .clipped()
                 .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
 
@@ -1821,7 +1826,7 @@ struct SeriesHeader: View {
                     if let genre, !genre.isEmpty {
                         Label(genre, systemImage: "theatermasks.fill")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(atlantiXRed)
                             .lineLimit(3)
                     }
 
@@ -1869,7 +1874,7 @@ struct EpisodeRow: View {
                 if let image = phase.image { image.resizable().scaledToFill() } else { ZStack { brandGradient; Image(systemName: "play.fill").foregroundStyle(.primary) } }
             }.frame(width: 126, height: 76).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
             VStack(alignment: .leading, spacing: 5) {
-                Text("Episodio \(episode.episodeNum)").font(.caption.bold()).foregroundStyle(.purple)
+                Text("Episodio \(episode.episodeNum)").font(.caption.bold()).foregroundStyle(atlantiXRed)
                 Text(episode.title).font(.headline).foregroundStyle(.primary).lineLimit(2)
                 HStack(spacing: 8) {
                     if let duration = episode.info?.duration, !duration.isEmpty { Label(duration, systemImage: "clock").font(.caption2).foregroundStyle(.secondary) }
@@ -1878,11 +1883,11 @@ struct EpisodeRow: View {
                 if let date = episode.info?.releaseDate, !date.isEmpty { Text(date).font(.caption2).foregroundStyle(.secondary) }
                 if let plot = episode.info?.plot, !plot.isEmpty { Text(plot).font(.caption2).foregroundStyle(.secondary).lineLimit(2) }
                 if let progress {
-                    ProgressView(value: progress.fraction).tint(.purple)
-                    Text("Riprendi da \(formatTime(progress.position))").font(.caption2).foregroundStyle(.purple)
+                    ProgressView(value: progress.fraction).tint(atlantiXRed)
+                    Text("Riprendi da \(formatTime(progress.position))").font(.caption2).foregroundStyle(atlantiXRed)
                 }
             }; Spacer(); Image(systemName: progress == nil ? "play.circle.fill" : "arrow.clockwise.circle.fill").font(.title2).foregroundStyle(.primary)
-        }.padding(12).background(Color(uiColor: .secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 20))
+        }.padding(12).background(atlantiXCard).clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
     private func formatTime(_ seconds: Double) -> String {
@@ -1927,7 +1932,7 @@ struct MediaDetailLayout<Action: View>: View {
                             }
                         }
                         .frame(width: 142, height: 214)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .clipped()
                         .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
 
@@ -1941,7 +1946,7 @@ struct MediaDetailLayout<Action: View>: View {
                             ForEach(Array(metadata.enumerated()), id: \.offset) { _, value in
                                 Text(value)
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.purple)
+                                    .foregroundStyle(atlantiXRed)
                                     .lineLimit(3)
                             }
 
@@ -2160,7 +2165,7 @@ struct PlayerScreen: View {
                             .foregroundStyle(.white)
                     }
                     .padding(24)
-                    .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             } else if failed || currentURL == nil {
                 EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.primary)
@@ -2234,14 +2239,14 @@ struct PlayerScreen: View {
                 .font(.title2.bold())
                 .foregroundStyle(.white)
             ProgressView(value: Double(3 - nextEpisodeCountdown), total: 3)
-                .tint(.purple)
+                .tint(atlantiXRed)
             HStack(spacing: 10) {
                 Button { playNextEpisodeIfAvailable() } label: {
                     Label("Riproduci ora", systemImage: "play.fill")
                         .font(.subheadline.bold())
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(Color.purple, in: Capsule())
+                        .background(atlantiXRed, in: Capsule())
                 }
                 Button("Annulla") {
                     autoAdvanceCancelled = true
@@ -2256,8 +2261,8 @@ struct PlayerScreen: View {
         }
         .padding(18)
         .frame(maxWidth: 350, alignment: .leading)
-        .background(.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.purple.opacity(0.8), lineWidth: 1))
+        .background(.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(atlantiXRed.opacity(0.8), lineWidth: 1))
         .shadow(color: .black.opacity(0.5), radius: 18)
     }
 
@@ -2526,7 +2531,7 @@ struct GlobalSearchView: View {
                                 HStack {
                                     Text("Ricerche recenti").font(.title3.bold())
                                     Spacer()
-                                    Button("Cancella") { recentSearchesData = "" }.font(.caption.bold()).foregroundStyle(.purple)
+                                    Button("Cancella") { recentSearchesData = "" }.font(.caption.bold()).foregroundStyle(atlantiXRed)
                                 }
                                 .padding(.horizontal)
                                 FlowLayout(spacing: 8) {
@@ -2535,7 +2540,7 @@ struct GlobalSearchView: View {
                                             Label(value, systemImage: "clock")
                                                 .font(.caption.weight(.semibold))
                                                 .padding(.horizontal, 12).frame(height: 36)
-                                                .background(Color(uiColor: .secondarySystemBackground))
+                                                .background(atlantiXCard)
                                                 .clipShape(Capsule())
                                         }.buttonStyle(.plain)
                                     }
@@ -2584,7 +2589,7 @@ struct GlobalSearchView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity).frame(height: 88)
             .background(accentGradient(for: title))
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }.buttonStyle(.plain)
     }
 
@@ -2624,7 +2629,7 @@ struct SearchResultRow: View {
         HStack(spacing: 14) {
             OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }
                 .frame(width: 70, height: 70).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
-            VStack(alignment: .leading) { Text(title).font(.headline).foregroundStyle(.primary).lineLimit(2); Text(subtitle).font(.caption).foregroundStyle(.purple) }
+            VStack(alignment: .leading) { Text(title).font(.headline).foregroundStyle(.primary).lineLimit(2); Text(subtitle).font(.caption).foregroundStyle(atlantiXRed) }
             Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary)
         }.padding(.horizontal)
     }
@@ -2698,13 +2703,13 @@ struct FavoritesView: View {
 
     private func summaryItem(_ title: String, _ count: Int, _ icon: String) -> some View {
         VStack(spacing: 5) {
-            Image(systemName: icon).foregroundStyle(.purple)
+            Image(systemName: icon).foregroundStyle(atlantiXRed)
             Text("\(count)").font(.headline.bold())
             Text(title).font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(atlantiXCard)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
@@ -2763,7 +2768,7 @@ struct FavoriteRowContent: View {
                     image.resizable().scaledToFill()
                 } else {
                     ZStack {
-                        Color(uiColor: .secondarySystemBackground)
+                        atlantiXCard
                         Image(systemName: icon).foregroundStyle(.secondary)
                     }
                 }
@@ -2866,7 +2871,7 @@ struct HistoryRowContent: View {
         HStack(spacing: 12) {
             OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() }
-                else { ZStack { Color(uiColor: .secondarySystemBackground); Image(systemName: "play.rectangle.fill").foregroundStyle(.secondary) } }
+                else { ZStack { atlantiXCard; Image(systemName: "play.rectangle.fill").foregroundStyle(.secondary) } }
             }
             .frame(width: 70, height: 58)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -2878,7 +2883,7 @@ struct HistoryRowContent: View {
                     Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Text(item.watchedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption2).foregroundStyle(.purple)
+                    .font(.caption2).foregroundStyle(atlantiXRed)
             }
             Spacer()
         }
@@ -2920,7 +2925,7 @@ struct HistoryPosterCard: View {
                 else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").foregroundStyle(.white) } }
             }
             .frame(width: 120, height: 145)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .clipped()
             Text(item.title).font(.caption.bold()).lineLimit(2).frame(width: 120, alignment: .leading)
         }
@@ -2976,10 +2981,10 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             HStack(spacing: 15) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(brandGradient)
                         .frame(width: 72, height: 72)
-                        .shadow(color: Color.purple.opacity(0.28), radius: 18, y: 8)
+                        .shadow(color: atlantiXRed.opacity(0.28), radius: 18, y: 8)
                     BrandMark(size: 50)
                 }
 
@@ -3135,9 +3140,9 @@ struct SettingsView: View {
             .foregroundStyle(.red)
             .padding(15)
             .frame(maxWidth: .infinity)
-            .background(Color.red.opacity(colorScheme == .dark ? 0.10 : 0.07), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(Color.red.opacity(colorScheme == .dark ? 0.10 : 0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Color.red.opacity(0.20), lineWidth: 1)
             }
         }
@@ -3187,9 +3192,9 @@ struct SettingsView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 78)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.primary.opacity(0.055), lineWidth: 1)
         }
     }
@@ -3287,9 +3292,9 @@ private extension View {
     func settingsCard() -> some View {
         self
             .padding(0)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Color.primary.opacity(0.055), lineWidth: 1)
             }
     }
@@ -3673,7 +3678,7 @@ private struct DownloadContentCard: View {
 
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: 29))
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(atlantiXRed)
                 }
                 .padding(12)
                 .contentShape(Rectangle())
@@ -3701,7 +3706,7 @@ private struct DownloadContentCard: View {
             .accessibilityLabel("Elimina download")
         }
         .background(Color(uiColor: .systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.07)))
         .confirmationDialog(
             "Eliminare questo download?",
@@ -3819,7 +3824,7 @@ struct DownloadsView: View {
     private var downloadsHeader: some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.title2.bold())
@@ -3856,7 +3861,7 @@ struct DownloadsView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 50)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(atlantiXCard)
         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
     }
@@ -3881,7 +3886,7 @@ struct DownloadsView: View {
                     .foregroundStyle(selectedSection == section ? Color.white : Color.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .background(selectedSection == section ? Color.purple : Color(uiColor: .secondarySystemBackground))
+                    .background(selectedSection == section ? atlantiXRed : atlantiXCard)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -3900,13 +3905,13 @@ struct DownloadsView: View {
                         Spacer()
                         Text("\(Int(center.progress(for: title) * 100))%")
                             .font(.caption.bold())
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(atlantiXRed)
                     }
                     ProgressView(value: center.progress(for: title))
-                        .tint(.purple)
+                        .tint(atlantiXRed)
                 }
                 .padding(14)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(atlantiXCard)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -3927,7 +3932,7 @@ struct DownloadsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "rectangle.stack.fill")
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(atlantiXRed)
                         Text(group.name)
                             .font(.headline.bold())
                         Spacer()
@@ -3940,8 +3945,8 @@ struct DownloadsView: View {
                     }
                 }
                 .padding(14)
-                .background(Color(uiColor: .secondarySystemBackground).opacity(0.72))
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(atlantiXCard.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
     }
