@@ -83,7 +83,7 @@ private struct OptimizedAsyncImage<Content: View>: View {
 }
 
 private let brandGradient = LinearGradient(colors: [.cyan, .purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
-private let pageBackground = Color(uiColor: .systemBackground)
+private let pageBackground = Color(red: 0.018, green: 0.022, blue: 0.045)
 
 private func accentGradient(for seed: String) -> LinearGradient {
     let palettes: [[Color]] = [
@@ -181,13 +181,15 @@ struct MainTabView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 26).stroke(Color.white.opacity(0.10)))
+            .background(Color.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 26).stroke(brandGradient.opacity(0.28), lineWidth: 1))
             .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
             .padding(.horizontal, 12)
             .padding(.bottom, 6)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .preferredColorScheme(.dark)
+        .tint(.cyan)
     }
 }
 
@@ -343,11 +345,11 @@ struct HomeView: View {
                 NavigationLink { SettingsView() } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.white)
                         .frame(width: 38, height: 38)
-                        .background(Color(uiColor: .secondarySystemBackground))
+                        .background(Color.white.opacity(0.075))
                         .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                        .overlay(Circle().stroke(Color.white.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
                 .contentShape(Circle())
@@ -412,7 +414,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.caption2)
@@ -422,11 +424,11 @@ struct HomeView: View {
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
                 .font(.caption.bold())
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.white.opacity(0.38))
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 76)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color.white.opacity(0.075))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.primary.opacity(0.07)))
     }
@@ -445,9 +447,9 @@ struct HomeView: View {
                     .font(.headline.bold())
                     .foregroundStyle(icon == "heart.fill" ? Color.pink : Color.primary)
                     .frame(width: 48, height: 48)
-                    .background(Color(uiColor: .secondarySystemBackground))
+                    .background(Color.white.opacity(0.075))
                     .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                    .overlay(Circle().stroke(Color.white.opacity(0.12)))
                 if badge > 0 {
                     Text("\(min(badge, 99))")
                         .font(.system(size: 9, weight: .bold))
@@ -472,9 +474,9 @@ struct HomeView: View {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .bold))
                 .frame(width: 38, height: 38)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(Color.white.opacity(0.075))
                 .clipShape(Circle())
-                .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                .overlay(Circle().stroke(Color.white.opacity(0.12)))
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
@@ -484,9 +486,9 @@ struct HomeView: View {
         Button(action: action) {
             Image(systemName: icon).font(.headline.bold())
                 .frame(width: 48, height: 48)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(Color.white.opacity(0.075))
                 .clipShape(Circle())
-                .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                .overlay(Circle().stroke(Color.white.opacity(0.12)))
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
@@ -503,7 +505,7 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity).frame(height: 430).clipped()
 
                 LinearGradient(
-                    colors: [.black.opacity(0.05), .clear, .black.opacity(0.48), Color(uiColor: .systemBackground)],
+                    colors: [.black.opacity(0.05), .clear, .black.opacity(0.48), Color(red: 0.018, green: 0.022, blue: 0.045)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -593,8 +595,8 @@ struct HomeView: View {
             Text(value.formatted()).font(.title3.bold())
             Text(title).font(.caption).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity).padding(.vertical, 16)
-            .background(Color(uiColor: .secondarySystemBackground))
-            .overlay(RoundedRectangle(cornerRadius: 21).stroke(Color.primary.opacity(0.06)))
+            .background(Color.white.opacity(0.075))
+            .overlay(RoundedRectangle(cornerRadius: 21).stroke(Color.white.opacity(0.10)))
             .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
     }
 
@@ -608,10 +610,10 @@ struct HomeView: View {
                     quickLink("Serie TV", "rectangle.stack.fill", .series)
                     NavigationLink { FavoritesView() } label: {
                         Label("La mia lista", systemImage: "heart.fill")
-                            .font(.subheadline.bold()).foregroundStyle(.primary)
+                            .font(.subheadline.bold()).foregroundStyle(.white)
                             .padding(.horizontal, 16).frame(height: 44)
-                            .background(Color(uiColor: .secondarySystemBackground))
-                            .clipShape(Capsule()).overlay(Capsule().stroke(Color.primary.opacity(0.08)))
+                            .background(Color.white.opacity(0.075))
+                            .clipShape(Capsule()).overlay(Capsule().stroke(Color.white.opacity(0.12)))
                     }.buttonStyle(.plain)
                 }.padding(.horizontal, 20)
             }
@@ -639,7 +641,7 @@ struct HomeView: View {
                 }
                 .foregroundStyle(.purple)
                 .frame(width: 138, height: 205)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(Color.white.opacity(0.075))
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -678,9 +680,9 @@ struct HomeView: View {
                     Image(systemName: "clock.arrow.circlepath").font(.title)
                     Text("Vedi tutto").font(.caption.bold())
                 }
-                .foregroundStyle(.primary)
+                .foregroundStyle(.white)
                 .frame(width: 120, height: 176)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(Color.white.opacity(0.075))
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
         }
@@ -734,7 +736,7 @@ struct HomeView: View {
     private func sectionTitle(_ title: String) -> some View { HStack(spacing: 6) { Text(title).font(.title3.bold()); Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary) }.padding(.horizontal, 20) }
     private var loadingOverlay: some View {
         Color.black.opacity(0.42).ignoresSafeArea().overlay(
-            VStack(spacing: 14) { ProgressView().scaleEffect(1.25).tint(.white); Text("Aggiornamento playlist…").font(.headline).foregroundStyle(.primary) }
+            VStack(spacing: 14) { ProgressView().scaleEffect(1.25).tint(.white); Text("Aggiornamento playlist…").font(.headline).foregroundStyle(.white) }
                 .padding(26).background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 24))
         )
     }
@@ -780,7 +782,7 @@ struct MediaRail<Content: View>: View {
     init(title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack(spacing: 6) { Text(title).font(.title3.bold()); Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary) }.foregroundStyle(.primary).padding(.horizontal, 20)
+            HStack(spacing: 6) { Text(title).font(.title3.bold()); Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary) }.foregroundStyle(.white).padding(.horizontal, 20)
             ScrollView(.horizontal, showsIndicators: false) { LazyHStack(spacing: 10) { content }.padding(.horizontal, 20) }
         }
     }
@@ -842,7 +844,7 @@ struct ContentBrowser: View {
                 Task { await session.reloadSection(type) }
             } label: {
                 ZStack {
-                    Circle().fill(Color(uiColor: .secondarySystemBackground))
+                    Circle().fill(Color.white.opacity(0.075))
                     if session.isRefreshing {
                         ProgressView().tint(.primary)
                     } else {
@@ -850,7 +852,7 @@ struct ContentBrowser: View {
                     }
                 }
                 .frame(width: 50, height: 50)
-                .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                .overlay(Circle().stroke(Color.white.opacity(0.12)))
                 .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -867,8 +869,8 @@ struct ContentBrowser: View {
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) } }
         }
         .padding(.horizontal, 16).frame(height: 50)
-        .background(Color(uiColor: .secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
+        .background(Color.white.opacity(0.075)).clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.white.opacity(0.10)))
         .padding(.horizontal, 16)
     }
 
@@ -902,8 +904,8 @@ struct ContentBrowser: View {
         }
         .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
         .padding(16)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.primary.opacity(0.06)))
+        .background(Color.white.opacity(0.075))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.10)))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
@@ -956,7 +958,7 @@ struct ItemGrid: View {
         HStack(spacing: 12) {
             Button { dismiss() } label: {
                 Image(systemName: "chevron.left").font(.title3.bold()).frame(width: 46, height: 46)
-                    .background(Color(uiColor: .secondarySystemBackground)).clipShape(Circle())
+                    .background(Color.white.opacity(0.075)).clipShape(Circle())
             }.buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
                 Text(category?.categoryName ?? "Tutti i contenuti").font(.headline.bold()).lineLimit(1)
@@ -975,9 +977,9 @@ struct ItemGrid: View {
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) } }
         }
         .padding(.horizontal, 16).frame(height: 50)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color.white.opacity(0.075))
         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.white.opacity(0.10)))
         .padding(.horizontal, 16)
     }
 
@@ -1091,7 +1093,7 @@ struct LiveChannelCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack {
-                Color(uiColor: .secondarySystemBackground)
+                Color.white.opacity(0.075)
                 OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFit().padding(16) }
                     else { Image(systemName: "tv.fill").font(.system(size: 42)).foregroundStyle(brandGradient) }
@@ -1125,7 +1127,7 @@ struct PosterCard: View {
                         .background(.black.opacity(0.78)).foregroundStyle(.white).clipShape(Capsule()).padding(8)
                 }
             }
-            Text(title).font(.subheadline.weight(.semibold)).lineLimit(2).multilineTextAlignment(.leading).foregroundStyle(.primary)
+            Text(title).font(.subheadline.weight(.semibold)).lineLimit(2).multilineTextAlignment(.leading).foregroundStyle(.white)
         }
         .contentShape(Rectangle())
     }
@@ -1155,7 +1157,7 @@ struct ContinueWatchingCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            Text(progress.title).font(.subheadline.bold()).lineLimit(1).foregroundStyle(.primary)
+            Text(progress.title).font(.subheadline.bold()).lineLimit(1).foregroundStyle(.white)
             HStack {
                 Text(progress.subtitle ?? "Riprendi la visione").lineLimit(1)
                 Spacer()
@@ -1225,9 +1227,9 @@ struct MovieDetailView: View {
                                         NavigationLink { ActorView(name: actor) } label: {
                                             Label(actor, systemImage: "person.crop.circle.fill")
                                                 .font(.caption.weight(.semibold))
-                                                .foregroundStyle(.primary)
+                                                .foregroundStyle(.white)
                                                 .padding(.horizontal, 12).frame(height: 38)
-                                                .background(Color(uiColor: .secondarySystemBackground))
+                                                .background(Color.white.opacity(0.075))
                                                 .clipShape(Capsule())
                                         }.buttonStyle(.plain)
                                     }
@@ -1316,9 +1318,9 @@ struct MovieDetailView: View {
                 if trailerURL != nil {
                     Button { showTrailer = true } label: {
                         Label("Trailer", systemImage: "play.rectangle.fill")
-                            .font(.headline.bold()).foregroundStyle(.primary)
+                            .font(.headline.bold()).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).padding(.vertical, 16)
-                            .background(Color(uiColor: .secondarySystemBackground))
+                            .background(Color.white.opacity(0.075))
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                     }.buttonStyle(.plain)
                 }
@@ -1408,7 +1410,7 @@ struct LiveDetailView: View {
                         playButton("Guarda in diretta")
                     }
 
-                    Text("Guida TV").font(.title2.bold()).foregroundStyle(.primary)
+                    Text("Guida TV").font(.title2.bold()).foregroundStyle(.white)
                     epgSection
                 }
                 .padding(18)
@@ -1441,14 +1443,14 @@ struct LiveDetailView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 220)
-            .background(Color(uiColor: .secondarySystemBackground))
+            .background(Color.white.opacity(0.075))
             .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
 
-            Text(item.name).font(.title.bold()).foregroundStyle(.primary)
+            Text(item.name).font(.title.bold()).foregroundStyle(.white)
             if let program = currentProgram {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("IN ONDA", systemImage: "livephoto").font(.caption.bold()).foregroundStyle(.purple)
-                    Text(program.title ?? "Programma in corso").font(.title3.bold()).foregroundStyle(.primary)
+                    Text(program.title ?? "Programma in corso").font(.title3.bold()).foregroundStyle(.white)
                     Text(timeRange(program)).font(.subheadline).foregroundStyle(.secondary)
                     if let description = program.description, !description.isEmpty {
                         Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(4)
@@ -1525,7 +1527,7 @@ struct EPGProgramRow: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text(program.title ?? "Programma").font(.headline).foregroundStyle(.primary).lineLimit(2)
+                    Text(program.title ?? "Programma").font(.headline).foregroundStyle(.white).lineLimit(2)
                     Spacer()
                     if isCurrent { Text("ORA").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 4).background(Color.purple).clipShape(Capsule()) }
                 }
@@ -1535,7 +1537,7 @@ struct EPGProgramRow: View {
             }
         }
         .padding(14)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color.white.opacity(0.075))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(isCurrent ? Color.purple.opacity(0.45) : Color.primary.opacity(0.05)))
     }
@@ -1591,7 +1593,7 @@ struct SeriesDetailView: View {
                         HStack {
                             Text("Episodi")
                                 .font(.title2.bold())
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(.white)
                             Spacer()
                             Text("\(episodes.count) disponibili")
                                 .font(.subheadline.weight(.semibold))
@@ -1680,9 +1682,9 @@ struct SeriesDetailView: View {
                         NavigationLink { ActorView(name: actor) } label: {
                             Label(actor, systemImage: "person.crop.circle.fill")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(.white)
                                 .padding(.horizontal, 12).frame(height: 38)
-                                .background(Color(uiColor: .secondarySystemBackground))
+                                .background(Color.white.opacity(0.075))
                                 .clipShape(Capsule())
                         }.buttonStyle(.plain)
                     }
@@ -1700,7 +1702,7 @@ struct SeriesDetailView: View {
                     .tracking(1.1)
                 Text("Stagione \(selectedSeason)")
                     .font(.title3.bold())
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
             }
 
             Spacer()
@@ -1741,7 +1743,7 @@ struct SeriesDetailView: View {
             }
         }
         .padding(16)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color.white.opacity(0.075))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -1827,7 +1829,7 @@ struct SeriesHeader: View {
                 VStack(alignment: .leading, spacing: 11) {
                     Text(title)
                         .font(.title2.bold())
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.white)
                         .lineLimit(4)
                         .minimumScaleFactor(0.78)
 
@@ -1859,7 +1861,7 @@ struct SeriesHeader: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Trama")
                         .font(.title3.bold())
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.white)
                     Text(plot)
                         .font(.body)
                         .foregroundStyle(.secondary)
@@ -1879,11 +1881,11 @@ struct EpisodeRow: View {
     var body: some View {
         HStack(spacing: 14) {
             OptimizedAsyncImage(url: URL(string: episode.info?.movieImage ?? fallbackImage ?? "")) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() } else { ZStack { brandGradient; Image(systemName: "play.fill").foregroundStyle(.primary) } }
+                if let image = phase.image { image.resizable().scaledToFill() } else { ZStack { brandGradient; Image(systemName: "play.fill").foregroundStyle(.white) } }
             }.frame(width: 126, height: 76).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
             VStack(alignment: .leading, spacing: 5) {
                 Text("Episodio \(episode.episodeNum)").font(.caption.bold()).foregroundStyle(.purple)
-                Text(episode.title).font(.headline).foregroundStyle(.primary).lineLimit(2)
+                Text(episode.title).font(.headline).foregroundStyle(.white).lineLimit(2)
                 HStack(spacing: 8) {
                     if let duration = episode.info?.duration, !duration.isEmpty { Label(duration, systemImage: "clock").font(.caption2).foregroundStyle(.secondary) }
                     if let rating = episode.info?.rating, !rating.isEmpty { Text("★ \(rating)").font(.caption2.bold()).foregroundStyle(.orange) }
@@ -1894,8 +1896,8 @@ struct EpisodeRow: View {
                     ProgressView(value: progress.fraction).tint(.purple)
                     Text("Riprendi da \(formatTime(progress.position))").font(.caption2).foregroundStyle(.purple)
                 }
-            }; Spacer(); Image(systemName: progress == nil ? "play.circle.fill" : "arrow.clockwise.circle.fill").font(.title2).foregroundStyle(.primary)
-        }.padding(12).background(Color(uiColor: .secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 20))
+            }; Spacer(); Image(systemName: progress == nil ? "play.circle.fill" : "arrow.clockwise.circle.fill").font(.title2).foregroundStyle(.white)
+        }.padding(12).background(Color.white.opacity(0.075)).clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
     private func formatTime(_ seconds: Double) -> String {
@@ -1947,7 +1949,7 @@ struct MediaDetailLayout<Action: View>: View {
                         VStack(alignment: .leading, spacing: 11) {
                             Text(title)
                                 .font(.title2.bold())
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(.white)
                                 .lineLimit(4)
                                 .minimumScaleFactor(0.78)
 
@@ -1969,7 +1971,7 @@ struct MediaDetailLayout<Action: View>: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Trama")
                                 .font(.title3.bold())
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(.white)
                             Text(plot)
                                 .foregroundStyle(.secondary)
                                 .lineSpacing(4)
@@ -1980,7 +1982,7 @@ struct MediaDetailLayout<Action: View>: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(entry.0)
                                 .font(.headline)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(.white)
                             Text(entry.1 ?? "")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -2176,9 +2178,9 @@ struct PlayerScreen: View {
                     .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
             } else if failed || currentURL == nil {
-                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.primary)
+                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.white)
             } else {
-                ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary)
+                ProgressView("Apertura player…").tint(.white).foregroundStyle(.white)
             }
 
             if showNextEpisodeCountdown, let next = nextQueueItem {
@@ -2548,7 +2550,7 @@ struct GlobalSearchView: View {
                                             Label(value, systemImage: "clock")
                                                 .font(.caption.weight(.semibold))
                                                 .padding(.horizontal, 12).frame(height: 36)
-                                                .background(Color(uiColor: .secondarySystemBackground))
+                                                .background(Color.white.opacity(0.075))
                                                 .clipShape(Capsule())
                                         }.buttonStyle(.plain)
                                     }
@@ -2611,7 +2613,7 @@ struct GlobalSearchView: View {
 
     private func resultSection<T: Identifiable, Destination: View>(_ title: String, _ items: [T], @ViewBuilder destination: @escaping (T) -> Destination) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.title2.bold()).foregroundStyle(.primary).padding(.horizontal)
+            Text(title).font(.title2.bold()).foregroundStyle(.white).padding(.horizontal)
             ForEach(items) { item in
                 NavigationLink { destination(item) } label: { SearchResultRow(title: titleFor(item), subtitle: title, imageURL: imageFor(item)) }
                     .simultaneousGesture(TapGesture().onEnded { saveSearch(search) })
@@ -2637,7 +2639,7 @@ struct SearchResultRow: View {
         HStack(spacing: 14) {
             OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }
                 .frame(width: 70, height: 70).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
-            VStack(alignment: .leading) { Text(title).font(.headline).foregroundStyle(.primary).lineLimit(2); Text(subtitle).font(.caption).foregroundStyle(.purple) }
+            VStack(alignment: .leading) { Text(title).font(.headline).foregroundStyle(.white).lineLimit(2); Text(subtitle).font(.caption).foregroundStyle(.purple) }
             Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary)
         }.padding(.horizontal)
     }
@@ -2687,7 +2689,8 @@ struct FavoritesView: View {
                         ForEach(visibleItems) { favorite in favoriteRow(favorite) }
                     }
                 }
-                .listStyle(.insetGrouped)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
         .navigationTitle("La mia lista")
@@ -2717,7 +2720,7 @@ struct FavoritesView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color.white.opacity(0.075))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
@@ -2776,7 +2779,7 @@ struct FavoriteRowContent: View {
                     image.resizable().scaledToFill()
                 } else {
                     ZStack {
-                        Color(uiColor: .secondarySystemBackground)
+                        Color.white.opacity(0.075)
                         Image(systemName: icon).foregroundStyle(.secondary)
                     }
                 }
@@ -2825,7 +2828,8 @@ struct WatchHistoryView: View {
                         }
                     }
                 }
-                .listStyle(.insetGrouped)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
         .navigationTitle("Cronologia")
@@ -2879,7 +2883,7 @@ struct HistoryRowContent: View {
         HStack(spacing: 12) {
             OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() }
-                else { ZStack { Color(uiColor: .secondarySystemBackground); Image(systemName: "play.rectangle.fill").foregroundStyle(.secondary) } }
+                else { ZStack { Color.white.opacity(0.075); Image(systemName: "play.rectangle.fill").foregroundStyle(.secondary) } }
             }
             .frame(width: 70, height: 58)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -2971,9 +2975,7 @@ struct SettingsView: View {
         }
     }
 
-    private var settingsBackground: Color {
-        colorScheme == .dark ? Color.black : Color(.systemGroupedBackground)
-    }
+    private var settingsBackground: Color { pageBackground }
 
     private var pageHeader: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -3050,7 +3052,7 @@ struct SettingsView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
+                .fill(Color.white.opacity(0.075))
         )
         .overlay {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -3143,7 +3145,7 @@ struct SettingsView: View {
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption.bold())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.white.opacity(0.38))
             }
             .foregroundStyle(.red)
             .padding(15)
@@ -3174,7 +3176,7 @@ struct SettingsView: View {
                 }
             }
             VStack(spacing: 0) { content() }
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .background(Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
                         .stroke(Color.primary.opacity(0.055), lineWidth: 1)
@@ -3193,14 +3195,14 @@ struct SettingsView: View {
                     .foregroundStyle(brandGradient)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.subheadline.bold()).foregroundStyle(.primary)
+                Text(title).font(.subheadline.bold()).foregroundStyle(.white)
                 Text(subtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 78)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color.primary.opacity(0.055), lineWidth: 1)
@@ -3263,13 +3265,13 @@ private struct SettingsNavigationRow: View {
         HStack(spacing: 13) {
             SettingsIcon(icon: icon)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.caption.bold())
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.white.opacity(0.38))
         }
         .padding(.vertical, 13)
         .padding(.horizontal, 14)
@@ -3300,7 +3302,7 @@ private extension View {
     func settingsCard() -> some View {
         self
             .padding(0)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(Color.primary.opacity(0.055), lineWidth: 1)
@@ -3671,7 +3673,7 @@ private struct DownloadContentCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(item.title)
                             .font(.headline)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.white)
                             .lineLimit(2)
                         Text(subtitle)
                             .font(.caption)
@@ -3713,7 +3715,7 @@ private struct DownloadContentCard: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Elimina download")
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(pageBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.07)))
         .confirmationDialog(
@@ -3869,9 +3871,9 @@ struct DownloadsView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 50)
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(Color.white.opacity(0.075))
         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.white.opacity(0.10)))
     }
 
     private var sectionPicker: some View {
@@ -3894,7 +3896,7 @@ struct DownloadsView: View {
                     .foregroundStyle(selectedSection == section ? Color.white : Color.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .background(selectedSection == section ? Color.purple : Color(uiColor: .secondarySystemBackground))
+                    .background(selectedSection == section ? Color.purple : Color.white.opacity(0.075))
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -3919,7 +3921,7 @@ struct DownloadsView: View {
                         .tint(.purple)
                 }
                 .padding(14)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(Color.white.opacity(0.075))
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -3953,7 +3955,7 @@ struct DownloadsView: View {
                     }
                 }
                 .padding(14)
-                .background(Color(uiColor: .secondarySystemBackground).opacity(0.72))
+                .background(Color.white.opacity(0.075).opacity(0.72))
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
         }
