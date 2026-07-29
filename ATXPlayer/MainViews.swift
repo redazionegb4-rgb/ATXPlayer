@@ -259,7 +259,7 @@ struct HomeView: View {
                         if !recentSeries.isEmpty { seriesRail }
                         updateStatus
                     }
-                    .padding(.top, 12)
+                    .padding(.top, 0)
                     .padding(.bottom, 110)
                 }
                 
@@ -943,33 +943,201 @@ struct ItemGrid: View {
     @State private var visibleLive: [LiveStream] = []
     @State private var visibleVOD: [VODStream] = []
     @State private var visibleSeries: [SeriesItem] = []
-    private var columns: [GridItem] { type == .live ? [GridItem(.flexible(), spacing: 14)] : [GridItem(.adaptive(minimum: 160), spacing: 14)] }
+    private var columns: [GridItem] {
+        type == .live
+        ? [GridItem(.flexible(), spacing: 14)]
+        : [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+    }
 
     var body: some View {
         ZStack {
             StreamingBackdrop()
-            VStack(spacing: 0) {
-                itemHeader
-                inlineSearch
-                if type != .live { sortControl }
-                Group {
-                    if loading { Spacer(); ProgressView("Caricamento…"); Spacer() }
-                    else if let error { Spacer(); EmptyStateView(title: "Errore", icon: "wifi.exclamationmark", message: error); Spacer() }
-                    else if resultCount == 0 { Spacer(); EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Prova con un altro termine di ricerca."); Spacer() }
-                    else {
-                        ScrollView(showsIndicators: false) {
-                            LazyVGrid(columns: columns, spacing: 18) { contentCards }
-                                .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 125)
+            if type == .live {
+                VStack(spacing: 0) {
+                    itemHeader
+                    inlineSearch
+                    gridContent(topPadding: 16)
+                }
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        catalogHero
+                        catalogControls
+
+                        if loading {
+                            ProgressView("Caricamento…")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 80)
+                        } else if let error {
+                            EmptyStateView(title: "Errore", icon: "wifi.exclamationmark", message: error)
+                                .padding(.vertical, 45)
+                        } else if resultCount == 0 {
+                            EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Prova con un altro termine di ricerca.")
+                                .padding(.vertical, 45)
+                        } else {
+                            HStack {
+                                Text(search.isEmpty ? "Tutti i titoli" : "Risultati")
+                                    .font(.title3.weight(.black))
+                                Spacer()
+                                Text("\(resultCount.formatted())")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.primary.opacity(0.07), in: Capsule())
+                            }
+                            .padding(.horizontal, 18)
+                            .padding(.top, 22)
+                            .padding(.bottom, 14)
+
+                            LazyVGrid(columns: columns, spacing: 22) { contentCards }
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 125)
                         }
-                        
                     }
                 }
+                .ignoresSafeArea(edges: .top)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await load(forceNetwork: false) }
         .onChange(of: search) { _ in rebuildVisibleItems() }
         .onChange(of: newestFirst) { _ in rebuildVisibleItems() }
+    }
+
+    @ViewBuilder
+    private func gridContent(topPadding: CGFloat) -> some View {
+        Group {
+            if loading { Spacer(); ProgressView("Caricamento…"); Spacer() }
+            else if let error { Spacer(); EmptyStateView(title: "Errore", icon: "wifi.exclamationmark", message: error); Spacer() }
+            else if resultCount == 0 { Spacer(); EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Prova con un altro termine di ricerca."); Spacer() }
+            else {
+                ScrollView(showsIndicators: false) {
+                    LazyVGrid(columns: columns, spacing: 18) { contentCards }
+                        .padding(.horizontal, 16)
+                        .padding(.top, topPadding)
+                        .padding(.bottom, 125)
+                }
+            }
+        }
+    }
+
+    private var catalogHeroImage: String? {
+        if type == .movies { return visibleVOD.first?.streamIcon ?? vod.first?.streamIcon }
+        return visibleSeries.first?.cover ?? series.first?.cover
+    }
+
+    private var catalogHero: some View {
+        ZStack(alignment: .bottomLeading) {
+            OptimizedAsyncImage(url: URL(string: catalogHeroImage ?? "")) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFill()
+                } else {
+                    ZStack {
+                        accentGradient(for: category?.categoryName ?? "AtlantiX")
+                        Image(systemName: type == .movies ? "film.stack.fill" : "rectangle.stack.fill")
+                            .font(.system(size: 82, weight: .black))
+                            .foregroundStyle(.white.opacity(0.28))
+                    }
+                }
+            }
+            .frame(height: 310)
+            .frame(maxWidth: .infinity)
+            .clipped()
+
+            LinearGradient(
+                colors: [.black.opacity(0.35), .clear, .black.opacity(0.88), Color(uiColor: .systemBackground)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.38), in: Circle())
+                            .overlay(Circle().stroke(.white.opacity(0.18)))
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Image(systemName: type == .movies ? "film.fill" : "rectangle.stack.fill")
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+
+                Spacer()
+
+                Text(type == .movies ? "COLLEZIONE FILM" : "COLLEZIONE SERIE TV")
+                    .font(.caption2.weight(.black))
+                    .tracking(2)
+                    .foregroundStyle(.cyan)
+
+                Text(category?.categoryName ?? "Tutti i contenuti")
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .shadow(color: .black.opacity(0.5), radius: 8)
+
+                Text("\(resultCount.formatted()) titoli disponibili")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.78))
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 54)
+            .padding(.bottom, 20)
+        }
+        .frame(height: 310)
+    }
+
+    private var catalogControls: some View {
+        VStack(spacing: 13) {
+            HStack(spacing: 11) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField(type == .movies ? "Cerca un film" : "Cerca una serie TV", text: $search)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                if !search.isEmpty {
+                    Button { search = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 52)
+            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.07)))
+
+            HStack(spacing: 10) {
+                Label(type == .movies ? "Film" : "Serie", systemImage: type == .movies ? "film.fill" : "rectangle.stack.fill")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 13)
+                    .frame(height: 36)
+                    .background(brandGradient, in: Capsule())
+
+                Menu {
+                    Button { newestFirst = true } label: { Label("Ultimi aggiunti", systemImage: newestFirst ? "checkmark" : "clock.arrow.circlepath") }
+                    Button { newestFirst = false } label: { Label("Meno recenti", systemImage: !newestFirst ? "checkmark" : "clock") }
+                } label: {
+                    Label(newestFirst ? "Più recenti" : "Meno recenti", systemImage: "arrow.up.arrow.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 13)
+                        .frame(height: 36)
+                        .background(Color.primary.opacity(0.07), in: Capsule())
+                }
+
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
     }
 
     private var itemHeader: some View {
@@ -1084,23 +1252,73 @@ struct ItemGrid: View {
 }
 
 struct ModernPosterCard: View {
-    let title: String; let imageURL: String?; let badge: String?; let typeLabel: String
+    let title: String
+    let imageURL: String?
+    let badge: String?
+    let typeLabel: String
+
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() }
-                else { ZStack { accentGradient(for: title); Image(systemName: typeLabel == "SERIE" ? "rectangle.stack.fill" : "film.fill").font(.system(size: 38, weight: .bold)).foregroundStyle(.white.opacity(0.9)) } }
-            }.frame(maxWidth: .infinity).aspectRatio(0.68, contentMode: .fit).clipped()
-            LinearGradient(colors: [.clear,.black.opacity(0.15),.black.opacity(0.94)], startPoint: .top, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Text(typeLabel).font(.system(size: 9, weight: .black)).tracking(1.1).padding(.horizontal,7).padding(.vertical,4).background(.ultraThinMaterial,in: Capsule())
-                    if let badge, !badge.isEmpty { Text("★ \(badge)").font(.caption2.bold()) }
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        ZStack {
+                            accentGradient(for: title)
+                            Image(systemName: typeLabel == "SERIE" ? "rectangle.stack.fill" : "film.fill")
+                                .font(.system(size: 42, weight: .black))
+                                .foregroundStyle(.white.opacity(0.9))
+                        }
+                    }
                 }
-                Text(title).font(.subheadline.bold()).lineLimit(2)
-                Label("Apri", systemImage: "play.fill").font(.caption2.bold()).foregroundStyle(.white.opacity(0.82))
-            }.foregroundStyle(.white).padding(12)
-        }.clipShape(RoundedRectangle(cornerRadius: 18)).overlay { RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.08)) }.shadow(color:.black.opacity(0.22),radius:12,y:7)
+                .aspectRatio(0.69, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .clipped()
+
+                LinearGradient(colors: [.black.opacity(0.42), .clear], startPoint: .top, endPoint: .center)
+
+                Text(typeLabel)
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(1.2)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(.black.opacity(0.62), in: Capsule())
+                    .padding(9)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 6) {
+                    if let badge, !badge.isEmpty {
+                        Label(badge, systemImage: "star.fill")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.yellow)
+                    } else {
+                        Text(typeLabel == "SERIE" ? "Serie TV" : "Film")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "play.fill")
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(brandGradient, in: Circle())
+                }
+            }
+            .padding(11)
+            .background(Color(uiColor: .secondarySystemBackground))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.primary.opacity(0.07)))
+        .shadow(color: .black.opacity(0.16), radius: 12, y: 7)
     }
 }
 
