@@ -13,8 +13,6 @@ struct RootView: View {
 
             if showSplash { LaunchAnimationView() }
         }
-        .preferredColorScheme(.dark)
-        .tint(.cyan)
         .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.45), value: session.isAuthenticated)
         .task {
             try? await Task.sleep(nanoseconds: reduceMotion ? 250_000_000 : 1_350_000_000)
