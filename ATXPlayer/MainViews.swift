@@ -85,25 +85,6 @@ private struct OptimizedAsyncImage<Content: View>: View {
 private let brandGradient = LinearGradient(colors: [.cyan, .purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
 private let pageBackground = Color(uiColor: .systemBackground)
 
-private struct StreamingBackdrop: View {
-    var body: some View {
-        ZStack {
-            Color(uiColor: .systemBackground)
-            LinearGradient(colors: [Color.purple.opacity(0.18), Color.clear, Color.cyan.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
-        .ignoresSafeArea()
-    }
-}
-
-private extension View {
-    func streamingPanel(radius: CGFloat = 24) -> some View {
-        self
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1))
-            .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
-    }
-}
-
 private func accentGradient(for seed: String) -> LinearGradient {
     let palettes: [[Color]] = [
         [.cyan, .purple, .indigo],
@@ -807,36 +788,38 @@ struct MediaRail<Content: View>: View {
 
 struct ContentBrowser: View {
     @EnvironmentObject var session: AppSession
+    @Environment(\.colorScheme) private var colorScheme
     let type: ContentType
     @State private var search = ""
     @State private var categoryCounts: [String: Int] = [:]
 
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
-    private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
-    private var subtitle: String { type == .live ? "Guarda ora i tuoi canali" : type == .movies ? "Tutto il cinema, in un solo posto" : "Stagioni ed episodi da scoprire" }
+    private var title: String { type == .live ? "TV in diretta" : type == .movies ? "Film" : "Serie TV" }
+    private var subtitle: String { type == .live ? "Canali e programmi live" : type == .movies ? "Sfoglia il catalogo dei film" : "Stagioni ed episodi" }
     private var filtered: [Category] { search.isEmpty ? categories : categories.filter { $0.categoryName.localizedCaseInsensitiveContains(search) } }
     private var icon: String { type == .live ? "dot.radiowaves.left.and.right" : type == .movies ? "film.fill" : "rectangle.stack.fill" }
     private var totalCount: Int { type == .live ? session.allLive.count : type == .movies ? session.allMovies.count : session.allSeries.count }
+    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     var body: some View {
         ZStack {
-            StreamingBackdrop()
-            ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    cinematicHeader
-                    searchBar
-                    NavigationLink { ItemGrid(type: type, category: nil) } label: { allContentHero }
-                        .buttonStyle(.plain)
-                    Text("Categorie").font(.title2.bold()).padding(.horizontal, 18)
-                    LazyVStack(spacing: 12) {
-                        ForEach(Array(filtered.enumerated()), id: \.element.id) { index, category in
+            pageBackground.ignoresSafeArea()
+            VStack(spacing: 0) {
+                browserHeader
+                searchField
+                ScrollView(showsIndicators: false) {
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        NavigationLink { ItemGrid(type: type, category: nil) } label: {
+                            categoryTile("Tutti", "square.grid.2x2.fill", totalCount, featured: true)
+                        }
+                        ForEach(filtered) { category in
                             NavigationLink { ItemGrid(type: type, category: category) } label: {
-                                categoryRow(category, index: index)
+                                categoryTile(category.categoryName, icon, count(for: category), featured: false)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 16)
+                    .padding(.top, 16)
                     .padding(.bottom, 120)
                 }
             }
@@ -845,86 +828,83 @@ struct ContentBrowser: View {
         .task(id: totalCount) { rebuildCategoryCounts() }
     }
 
-    private var cinematicHeader: some View {
-        ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(accentGradient(for: title))
-                .frame(height: 215)
-                .overlay(alignment: .topTrailing) {
-                    Image(systemName: icon).font(.system(size: 86, weight: .black)).foregroundStyle(.white.opacity(0.16)).padding(24)
-                }
-            LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .top, endPoint: .bottom)
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(.system(size: 38, weight: .black, design: .rounded)).foregroundStyle(.white)
-                Text(subtitle).font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.85))
-                HStack(spacing: 8) {
-                    Label("\(totalCount.formatted()) contenuti", systemImage: "play.rectangle.on.rectangle.fill")
-                    Spacer()
-                    Button { Task { await session.reloadSection(type) } } label: {
-                        Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
-                            .font(.headline.bold()).frame(width: 42, height: 42).background(.white.opacity(0.18), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(session.isRefreshing)
-                }
-                .font(.caption.bold()).foregroundStyle(.white)
+    private var browserHeader: some View {
+        HStack(spacing: 14) {
+            ZStack { RoundedRectangle(cornerRadius: 18).fill(brandGradient); Image(systemName: icon).font(.title2.bold()).foregroundStyle(.white) }
+                .frame(width: 58, height: 58)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 27, weight: .bold))
+                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                Text("\(totalCount.formatted()) contenuti").font(.caption.bold()).foregroundStyle(.purple)
             }
-            .padding(22)
+            Spacer()
+            Button {
+                Task { await session.reloadSection(type) }
+            } label: {
+                ZStack {
+                    Circle().fill(Color(uiColor: .secondarySystemBackground))
+                    if session.isRefreshing {
+                        ProgressView().tint(.primary)
+                    } else {
+                        Image(systemName: "arrow.clockwise").font(.headline.bold())
+                    }
+                }
+                .frame(width: 50, height: 50)
+                .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(session.isRefreshing)
+            .zIndex(20)
         }
-        .padding(.horizontal, 16).padding(.top, 10)
-        .shadow(color: .black.opacity(0.26), radius: 22, y: 12)
+        .padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 14)
     }
 
-    private var searchBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass").font(.headline).foregroundStyle(.secondary)
+    private var searchField: some View {
+        HStack(spacing: 11) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("Cerca una categoria", text: $search).textInputAutocapitalization(.never).autocorrectionDisabled()
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) } }
         }
-        .padding(.horizontal, 16).frame(height: 54).streamingPanel(radius: 18).padding(.horizontal, 16)
+        .padding(.horizontal, 16).frame(height: 50)
+        .background(Color(uiColor: .secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
+        .padding(.horizontal, 16)
     }
 
-    private var allContentHero: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(brandGradient).frame(width: 88, height: 88)
-                Image(systemName: "square.grid.2x2.fill").font(.system(size: 32, weight: .bold)).foregroundStyle(.white)
-            }
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Tutto il catalogo").font(.title3.bold()).foregroundStyle(.primary)
-                Text("Esplora tutti i \(totalCount.formatted()) contenuti").font(.subheadline).foregroundStyle(.secondary)
-                Label("Apri catalogo", systemImage: "play.fill").font(.caption.bold()).foregroundStyle(.purple)
-            }
-            Spacer(); Image(systemName: "chevron.right").font(.headline.bold()).foregroundStyle(.secondary)
-        }
-        .padding(14).streamingPanel(radius: 24).padding(.horizontal, 16)
+    private func count(for category: Category) -> Int {
+        categoryCounts[category.categoryID] ?? 0
     }
 
-    private func count(for category: Category) -> Int { categoryCounts[category.categoryID] ?? 0 }
     private func rebuildCategoryCounts() {
         switch type {
-        case .live: categoryCounts = Dictionary(grouping: session.allLive, by: { $0.categoryID ?? "" }).mapValues { $0.count }
-        case .movies: categoryCounts = Dictionary(grouping: session.allMovies, by: { $0.categoryID ?? "" }).mapValues { $0.count }
-        case .series: categoryCounts = Dictionary(grouping: session.allSeries, by: { $0.categoryID ?? "" }).mapValues { $0.count }
+        case .live:
+            categoryCounts = Dictionary(grouping: session.allLive, by: { $0.categoryID ?? "" }).mapValues { $0.count }
+        case .movies:
+            categoryCounts = Dictionary(grouping: session.allMovies, by: { $0.categoryID ?? "" }).mapValues { $0.count }
+        case .series:
+            categoryCounts = Dictionary(grouping: session.allSeries, by: { $0.categoryID ?? "" }).mapValues { $0.count }
         }
     }
 
-    private func categoryRow(_ category: Category, index: Int) -> some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(accentGradient(for: category.categoryName)).frame(height: 118)
-            LinearGradient(colors: [.black.opacity(0.58), .black.opacity(0.12)], startPoint: .leading, endPoint: .trailing)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            HStack(spacing: 16) {
-                Text(String(format: "%02d", index + 1)).font(.system(size: 34, weight: .black, design: .rounded)).foregroundStyle(.white.opacity(0.35)).frame(width: 58)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(category.categoryName).font(.title3.bold()).foregroundStyle(.white).lineLimit(2)
-                    Text("\(count(for: category).formatted()) contenuti").font(.caption.bold()).foregroundStyle(.white.opacity(0.78))
-                }
-                Spacer(); Image(systemName: "play.circle.fill").font(.system(size: 38)).foregroundStyle(.white)
-            }.padding(18)
+    private func categoryTile(_ title: String, _ icon: String, _ count: Int, featured: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                ZStack { RoundedRectangle(cornerRadius: 14).fill(featured ? brandGradient : LinearGradient(colors: [.purple.opacity(0.85), .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)); Image(systemName: icon).foregroundStyle(.white) }
+                    .frame(width: 46, height: 46)
+                Spacer()
+                Image(systemName: "arrow.up.right").font(.caption.bold()).foregroundStyle(.secondary)
+            }
+            Text(title).font(.headline).lineLimit(2).multilineTextAlignment(.leading)
+            Text("\(count.formatted()) contenuti")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(colorScheme == .dark ? Color.white : Color.secondary)
         }
-        .shadow(color: .black.opacity(0.18), radius: 10, y: 6)
+        .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.primary.opacity(0.06)))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 
@@ -943,11 +923,11 @@ struct ItemGrid: View {
     @State private var visibleLive: [LiveStream] = []
     @State private var visibleVOD: [VODStream] = []
     @State private var visibleSeries: [SeriesItem] = []
-    private let columns = [GridItem(.adaptive(minimum: 145), spacing: 12)]
+    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     var body: some View {
         ZStack {
-            StreamingBackdrop()
+            pageBackground.ignoresSafeArea()
             VStack(spacing: 0) {
                 itemHeader
                 inlineSearch
@@ -958,8 +938,17 @@ struct ItemGrid: View {
                     else if resultCount == 0 { Spacer(); EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Prova con un altro termine di ricerca."); Spacer() }
                     else {
                         ScrollView(showsIndicators: false) {
-                            LazyVGrid(columns: columns, spacing: 18) { contentCards }
-                                .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 125)
+                            if type == .live {
+                                LazyVStack(spacing: 14) { contentCards }
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 16)
+                                    .padding(.bottom, 125)
+                            } else {
+                                LazyVGrid(columns: columns, spacing: 18) { contentCards }
+                                    .padding(.horizontal, 14)
+                                    .padding(.top, 16)
+                                    .padding(.bottom, 125)
+                            }
                         }
                         
                     }
@@ -995,7 +984,9 @@ struct ItemGrid: View {
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) } }
         }
         .padding(.horizontal, 16).frame(height: 50)
-        .streamingPanel(radius: 18)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.primary.opacity(0.06)))
         .padding(.horizontal, 16)
     }
 
@@ -1088,38 +1079,93 @@ struct ModernPosterCard: View {
     let imageURL: String?
     let badge: String?
     let typeLabel: String
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ZStack(alignment: .topTrailing) {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .bottomLeading) {
                 OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                     if let image = phase.image { image.resizable().scaledToFill() }
-                    else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.8)) } }
+                    else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.title).foregroundStyle(.white.opacity(0.85)) } }
                 }
-                .frame(maxWidth: .infinity).aspectRatio(0.68, contentMode: .fit).clipped()
-                if let badge, !badge.isEmpty { Text(badge).font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 5).background(.black.opacity(0.72)).clipShape(Capsule()).padding(8) }
+                .frame(maxWidth: .infinity)
+                .aspectRatio(0.67, contentMode: .fit)
+                .clipped()
+
+                LinearGradient(colors: [.clear, .black.opacity(0.88)], startPoint: .center, endPoint: .bottom)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 5) {
+                        Text(typeLabel)
+                            .font(.system(size: 8, weight: .black))
+                            .tracking(1)
+                            .foregroundStyle(.white.opacity(0.9))
+                        if let badge, !badge.isEmpty {
+                            Text("★ \(badge)")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.yellow)
+                        }
+                    }
+                    Text(title)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                .padding(9)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            Text(title).font(.subheadline.bold()).lineLimit(2).multilineTextAlignment(.leading)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                ZStack {
+                    Circle().fill(.black.opacity(0.62))
+                    Image(systemName: "play.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                }
+                .frame(width: 26, height: 26)
+                .padding(7)
+            }
+            .shadow(color: .black.opacity(0.18), radius: 8, y: 5)
         }
+        .contentShape(Rectangle())
     }
 }
 
 struct LiveChannelCard: View {
     let item: LiveStream
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ZStack {
-                Color(uiColor: .secondarySystemBackground)
-                OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
-                    if let image = phase.image { image.resizable().scaledToFit().padding(16) }
-                    else { Image(systemName: "tv.fill").font(.system(size: 42)).foregroundStyle(brandGradient) }
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemBackground))
+
+            HStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                    OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+                        if let image = phase.image { image.resizable().scaledToFit().padding(13) }
+                        else { Image(systemName: "tv.fill").font(.system(size: 36)).foregroundStyle(brandGradient) }
+                    }
                 }
+                .frame(width: 104, height: 76)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 7) {
+                        Circle().fill(.red).frame(width: 7, height: 7)
+                        Text("IN DIRETTA").font(.caption2.weight(.black)).tracking(1).foregroundStyle(.red)
+                    }
+                    Text(item.name).font(.headline.weight(.bold)).lineLimit(2).multilineTextAlignment(.leading)
+                    Text("Tocca per aprire il canale").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 4)
+                ZStack {
+                    Circle().fill(brandGradient)
+                    Image(systemName: "play.fill").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                }
+                .frame(width: 44, height: 44)
             }
-            .frame(maxWidth: .infinity).aspectRatio(1.35, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(alignment: .topTrailing) { Text("LIVE").font(.caption2.bold()).foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 5).background(.red).clipShape(Capsule()).padding(8) }
-            Text(item.name).font(.subheadline.bold()).lineLimit(2).multilineTextAlignment(.leading)
+            .padding(14)
         }
+        .frame(maxWidth: .infinity, minHeight: 108)
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.primary.opacity(0.06)))
+        .shadow(color: .black.opacity(0.08), radius: 10, y: 5)
     }
 }
 
@@ -1931,57 +1977,87 @@ struct MediaDetailLayout<Action: View>: View {
     @ViewBuilder let action: Action
 
     init(title: String, imageURL: String?, plot: String?, metadata: [String], extraInfo: [(String, String?)] = [], @ViewBuilder action: () -> Action) {
-        self.title = title; self.imageURL = imageURL; self.plot = plot; self.metadata = metadata; self.extraInfo = extraInfo; self.action = action()
+        self.title = title
+        self.imageURL = imageURL
+        self.plot = plot
+        self.metadata = metadata
+        self.extraInfo = extraInfo
+        self.action = action()
     }
 
     var body: some View {
         ZStack {
-            StreamingBackdrop()
+            pageBackground.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    hero
-                    VStack(alignment: .leading, spacing: 18) {
-                        action
-                        if let plot, !plot.isEmpty {
-                            VStack(alignment: .leading, spacing: 9) {
-                                Text("Trama").font(.title2.bold())
-                                Text(plot).foregroundStyle(.secondary).lineSpacing(5)
-                            }.padding(18).streamingPanel(radius: 22)
+                LazyVStack(alignment: .leading, spacing: 22) {
+                    HStack(alignment: .top, spacing: 16) {
+                        OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                            if let image = phase.image {
+                                image.resizable().scaledToFill()
+                            } else {
+                                ZStack {
+                                    brandGradient
+                                    Image(systemName: "play.rectangle.fill")
+                                        .font(.system(size: 44, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.9))
+                                }
+                            }
                         }
-                        ForEach(extraInfo.filter { !($0.1 ?? "").isEmpty }, id: \.0) { entry in
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(entry.0.uppercased()).font(.caption.bold()).foregroundStyle(.purple)
-                                Text(entry.1 ?? "").font(.subheadline).foregroundStyle(.secondary).lineSpacing(4)
-                            }.padding(18).streamingPanel(radius: 22)
-                        }
-                    }.padding(.horizontal, 16)
-                }.padding(.bottom, 120)
-            }
-        }
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .navigationBarTitleDisplayMode(.inline)
-    }
+                        .frame(width: 142, height: 214)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .clipped()
+                        .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
 
-    private var hero: some View {
-        ZStack(alignment: .bottomLeading) {
-            OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() }
-                else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").font(.system(size: 72)).foregroundStyle(.white.opacity(0.75)) } }
-            }
-            .frame(height: 430).clipped()
-            LinearGradient(colors: [.clear, Color(uiColor: .systemBackground).opacity(0.35), Color(uiColor: .systemBackground)], startPoint: .top, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 10) {
-                Text(title).font(.system(size: 32, weight: .black, design: .rounded)).lineLimit(3).minimumScaleFactor(0.75)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(metadata.enumerated()), id: \.offset) { _, value in
-                            Text(value).font(.caption.bold()).padding(.horizontal, 11).padding(.vertical, 7)
-                                .background(.ultraThinMaterial, in: Capsule()).foregroundStyle(.primary)
+                        VStack(alignment: .leading, spacing: 11) {
+                            Text(title)
+                                .font(.title2.bold())
+                                .foregroundStyle(.primary)
+                                .lineLimit(4)
+                                .minimumScaleFactor(0.78)
+
+                            ForEach(Array(metadata.enumerated()), id: \.offset) { _, value in
+                                Text(value)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.purple)
+                                    .lineLimit(3)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 214, alignment: .topLeading)
+                    }
+
+                    action
+
+                    if let plot, !plot.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Trama")
+                                .font(.title3.bold())
+                                .foregroundStyle(.primary)
+                            Text(plot)
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(4)
+                        }
+                    }
+
+                    ForEach(extraInfo.filter { !($0.1 ?? "").isEmpty }, id: \.0) { entry in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(entry.0)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Text(entry.1 ?? "")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(3)
                         }
                     }
                 }
-            }.padding(.horizontal, 18).padding(.bottom, 18)
+                .padding(18)
+                .padding(.bottom, 120)
+            }
         }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -2512,7 +2588,7 @@ struct GlobalSearchView: View {
 
     var body: some View {
         ZStack {
-            StreamingBackdrop()
+            pageBackground.ignoresSafeArea()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     Picker("Tipo", selection: $selectedType) {
@@ -2624,10 +2700,10 @@ struct SearchResultRow: View {
     var body: some View {
         HStack(spacing: 14) {
             OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in if let image = phase.image { image.resizable().scaledToFill() } else { brandGradient } }
-                .frame(width: 104, height: 66).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)).clipped()
-            VStack(alignment: .leading, spacing: 5) { Text(title).font(.headline).foregroundStyle(.primary).lineLimit(2); Text(subtitle.uppercased()).font(.caption2.bold()).foregroundStyle(.purple) }
-            Spacer(); Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(.secondary)
-        }.padding(12).streamingPanel(radius: 18).padding(.horizontal, 16)
+                .frame(width: 70, height: 70).clipShape(RoundedRectangle(cornerRadius: 14)).clipped()
+            VStack(alignment: .leading) { Text(title).font(.headline).foregroundStyle(.primary).lineLimit(2); Text(subtitle).font(.caption).foregroundStyle(.purple) }
+            Spacer(); Image(systemName: "chevron.right").foregroundStyle(.secondary)
+        }.padding(.horizontal)
     }
 }
 
@@ -2786,37 +2862,52 @@ struct WatchHistoryView: View {
     @EnvironmentObject var session: AppSession
     @State private var showClearConfirmation = false
     @State private var selectedFilter = "Tutti"
-    @State private var sortAlphabetically = false
+
+    private var filteredItems: [WatchHistoryItem] {
+        guard selectedFilter != "Tutti" else { return session.accountWatchHistory }
+        return session.accountWatchHistory.filter { item in
+            selectedFilter == "Film" ? item.kind == ContentType.movies.rawValue : item.kind == ContentType.series.rawValue
+        }
+    }
 
     var body: some View {
-        Group {
-            if session.accountWatchHistory.isEmpty {
-                EmptyStateView(title: "Cronologia vuota", icon: "clock.arrow.circlepath", message: "I film e gli episodi avviati compariranno qui.")
-            } else {
-                List {
-                    ForEach(session.accountWatchHistory) { item in
-                        HStack(spacing: 8) {
-                            HistoryNavigation(item: item)
-                            Button(role: .destructive) { session.removeHistory(id: item.id) } label: {
-                                Image(systemName: "trash.fill")
-                                    .foregroundStyle(.red)
-                                    .frame(width: 38, height: 38)
-                                    .background(Color.red.opacity(0.1))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) { session.removeHistory(id: item.id) } label: {
-                                Label("Rimuovi", systemImage: "trash")
+        ZStack {
+            pageBackground.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
+                    historyHero
+                    filterBar
+                    if filteredItems.isEmpty {
+                        EmptyStateView(title: "Nessun contenuto", icon: "clock.arrow.circlepath", message: "I contenuti riprodotti compariranno qui.")
+                            .padding(.top, 50)
+                    } else {
+                        LazyVStack(spacing: 14) {
+                            ForEach(filteredItems) { item in
+                                HStack(spacing: 10) {
+                                    HistoryNavigation(item: item)
+                                    Button(role: .destructive) { session.removeHistory(id: item.id) } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.caption.bold())
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 34, height: 34)
+                                            .background(Color.primary.opacity(0.06))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(10)
+                                .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.primary.opacity(0.05)))
                             }
                         }
                     }
                 }
-                .listStyle(.insetGrouped)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 120)
             }
         }
         .navigationTitle("Cronologia")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !session.accountWatchHistory.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -2827,8 +2918,42 @@ struct WatchHistoryView: View {
         .alert("Cancellare la cronologia?", isPresented: $showClearConfirmation) {
             Button("Annulla", role: .cancel) { }
             Button("Cancella tutto", role: .destructive) { session.clearAccountWatchHistory() }
-        } message: {
-            Text("Verranno rimossi tutti i contenuti visti da questo account.")
+        } message: { Text("Verranno rimossi tutti i contenuti visti da questo account.") }
+    }
+
+    private var historyHero: some View {
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(brandGradient)
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 100, weight: .black))
+                .foregroundStyle(.white.opacity(0.12))
+                .offset(x: 220, y: 20)
+            VStack(alignment: .leading, spacing: 7) {
+                Text("RIPRENDI DA DOVE ERI")
+                    .font(.caption.weight(.black)).tracking(1.5).foregroundStyle(.white.opacity(0.8))
+                Text("La tua cronologia")
+                    .font(.system(size: 29, weight: .bold)).foregroundStyle(.white)
+                Text("\(session.accountWatchHistory.count) contenuti visti")
+                    .font(.subheadline).foregroundStyle(.white.opacity(0.82))
+            }.padding(22)
+        }
+        .frame(height: 155)
+        .clipped()
+        .padding(.top, 8)
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            ForEach(["Tutti", "Film", "Serie"], id: \.self) { filter in
+                Button { withAnimation(.easeInOut(duration: 0.2)) { selectedFilter = filter } } label: {
+                    Text(filter).font(.subheadline.bold())
+                        .foregroundStyle(selectedFilter == filter ? Color.white : Color.primary)
+                        .padding(.horizontal, 17).frame(height: 40)
+                        .background(selectedFilter == filter ? AnyShapeStyle(brandGradient) : AnyShapeStyle(Color(uiColor: .secondarySystemBackground)))
+                        .clipShape(Capsule())
+                }.buttonStyle(.plain)
+            }
+            Spacer()
         }
     }
 }
@@ -2864,26 +2989,32 @@ struct HistoryRowContent: View {
     let item: WatchHistoryItem
 
     var body: some View {
-        HStack(spacing: 12) {
-            OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() }
-                else { ZStack { Color(uiColor: .secondarySystemBackground); Image(systemName: "play.rectangle.fill").foregroundStyle(.secondary) } }
+        HStack(spacing: 13) {
+            ZStack(alignment: .bottomTrailing) {
+                OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { ZStack { brandGradient; Image(systemName: "play.rectangle.fill").foregroundStyle(.white) } }
+                }
+                .frame(width: 112, height: 72)
+                .clipped()
+                ZStack {
+                    Circle().fill(.black.opacity(0.72))
+                    Image(systemName: "play.fill").font(.caption2.bold()).foregroundStyle(.white)
+                }.frame(width: 26, height: 26).padding(6)
             }
-            .frame(width: 70, height: 58)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.title).font(.headline).lineLimit(2)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(item.title).font(.subheadline.bold()).lineLimit(2)
                 if let subtitle = item.subtitle, !subtitle.isEmpty {
                     Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
-                Text(item.watchedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption2).foregroundStyle(.purple)
+                Label(item.watchedAt.formatted(date: .abbreviated, time: .shortened), systemImage: "clock")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.purple)
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
 
@@ -2959,12 +3090,14 @@ struct SettingsView: View {
         }
     }
 
-    private var settingsBackground: Color { Color(uiColor: .systemBackground) }
+    private var settingsBackground: Color {
+        colorScheme == .dark ? Color.black : Color(.systemGroupedBackground)
+    }
 
     private var pageHeader: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("Il tuo AtlantiX")
-                .font(.system(size: 34, weight: .black, design: .rounded))
+            Text("Personalizza AtlantiX")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
             Text("Gestisci account, riproduzione e aspetto dell'app")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -3034,7 +3167,10 @@ struct SettingsView: View {
             }
             .padding(16)
         }
-        .background(LinearGradient(colors: [Color.purple.opacity(0.22), Color.cyan.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .stroke(brandGradient.opacity(colorScheme == .dark ? 0.20 : 0.12), lineWidth: 1)
@@ -3293,20 +3429,11 @@ private extension View {
 
 struct EmptyStateView: View {
     let title: String; let icon: String; let message: String
-    var body: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                Circle().fill(brandGradient).frame(width: 94, height: 94).blur(radius: 0)
-                Circle().stroke(Color.white.opacity(0.30), lineWidth: 1).frame(width: 76, height: 76)
-                Image(systemName: icon).font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
-            }
-            Text(title).font(.title2.bold())
-            Text(message).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(4).frame(maxWidth: 310)
-        }
-        .padding(30).frame(maxWidth: .infinity).streamingPanel(radius: 28).padding(20)
-    }
+    var body: some View { VStack(spacing: 14) { Image(systemName: icon).font(.system(size: 46)).foregroundStyle(.secondary); Text(title).font(.title3.bold()); Text(message).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center) }.frame(maxWidth: .infinity).padding(32) }
 }
 
+
+// MARK: - Offline downloads
 struct OfflineDownload: Identifiable, Codable, Equatable {
     let id: UUID
     let title: String
@@ -3784,7 +3911,7 @@ struct DownloadsView: View {
 
     var body: some View {
         ZStack {
-            StreamingBackdrop()
+            pageBackground.ignoresSafeArea()
             ScrollView {
                 LazyVStack(spacing: 18) {
                     downloadsHeader
