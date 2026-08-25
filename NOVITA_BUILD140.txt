@@ -1,0 +1,8 @@
+ATLANTIX 4.0 — BUILD 140
+
+- Rimossa la voce “Tutti” dai filtri di Diretta, Film e Serie TV.
+- Nuova schermata profilo in stile piattaforma streaming all’avvio dopo il login.
+- Avatar profilo sempre visibile nella Home e accesso rapido al Profilo.
+- Nuovi avatar AtlantiX predefiniti.
+- Possibilità di scegliere una foto personale dalla libreria del dispositivo.
+- Immagine profilo salvata e mantenuta tra gli avvii.

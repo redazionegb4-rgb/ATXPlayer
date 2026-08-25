@@ -1,4 +1,4 @@
-// ATLANTIX 4.0 BUILD 137 — TOTAL STREAMING REBUILD
+// ATLANTIX 4.0 BUILD 140 — PROFILE EXPERIENCE + CATALOG CLEANUP
 import Foundation
 import SwiftUI
 import AVKit
@@ -7,6 +7,7 @@ import UIKit
 import ImageIO
 import SafariServices
 import Combine
+import PhotosUI
 
 
 // MARK: - Image loading optimized for smooth scrolling
@@ -156,7 +157,178 @@ private func seriesSortValue(_ item: SeriesItem) -> Double {
     max(numericDateValue(item.added), numericDateValue(item.lastModified), Double(item.num ?? 0))
 }
 
+
+// MARK: - AtlantiX profile experience
+private let atxProfileAvatarKey = "atlantix.profile.avatar.id"
+private let atxProfileCustomImageKey = "atlantix.profile.avatar.custom.base64"
+
+private struct ATXProfilePreset: Identifiable {
+    let id: String
+    let symbol: String
+    let colors: [Color]
+}
+
+private let atxProfilePresets: [ATXProfilePreset] = [
+    .init(id: "atx", symbol: "a.circle.fill", colors: [Color(red: 0.93, green: 0.03, blue: 0.09), Color(red: 0.45, green: 0.00, blue: 0.03)]),
+    .init(id: "cinema", symbol: "film.fill", colors: [Color(red: 0.18, green: 0.16, blue: 0.75), Color(red: 0.48, green: 0.10, blue: 0.72)]),
+    .init(id: "star", symbol: "star.fill", colors: [Color(red: 0.96, green: 0.54, blue: 0.08), Color(red: 0.78, green: 0.16, blue: 0.12)]),
+    .init(id: "space", symbol: "moon.stars.fill", colors: [Color(red: 0.05, green: 0.42, blue: 0.75), Color(red: 0.12, green: 0.08, blue: 0.35)]),
+    .init(id: "game", symbol: "gamecontroller.fill", colors: [Color(red: 0.05, green: 0.66, blue: 0.44), Color(red: 0.02, green: 0.25, blue: 0.24)]),
+    .init(id: "bolt", symbol: "bolt.fill", colors: [Color(red: 0.84, green: 0.10, blue: 0.52), Color(red: 0.31, green: 0.06, blue: 0.54)])
+]
+
+private struct ATXProfileAvatarView: View {
+    @AppStorage(atxProfileAvatarKey) private var avatarID = "atx"
+    @AppStorage(atxProfileCustomImageKey) private var customImageBase64 = ""
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if avatarID == "custom", let data = Data(base64Encoded: customImageBase64), let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                let preset = atxProfilePresets.first(where: { $0.id == avatarID }) ?? atxProfilePresets[0]
+                ZStack {
+                    LinearGradient(colors: preset.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Image(systemName: preset.symbol)
+                        .font(.system(size: size * 0.42, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: size * 0.18, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: size * 0.18, style: .continuous))
+    }
+}
+
+private struct ATXProfileAvatarEditor: View {
+    @AppStorage(atxProfileAvatarKey) private var avatarID = "atx"
+    @AppStorage(atxProfileCustomImageKey) private var customImageBase64 = ""
+    @State private var selectedPhoto: PhotosPickerItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                ATXProfileAvatarView(size: 78)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Immagine profilo").font(.headline).foregroundStyle(.white)
+                    Text("Scegli un avatar AtlantiX o una tua foto.")
+                        .font(.caption).foregroundStyle(rebornMuted)
+                }
+                Spacer()
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 12) {
+                ForEach(atxProfilePresets) { preset in
+                    Button {
+                        avatarID = preset.id
+                    } label: {
+                        ZStack(alignment: .bottomTrailing) {
+                            LinearGradient(colors: preset.colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                                .frame(height: 72)
+                                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                            Image(systemName: preset.symbol)
+                                .font(.system(size: 27, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            if avatarID == preset.id {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.white, rebornRed)
+                                    .padding(5)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Label("Scegli una foto dal dispositivo", systemImage: "photo.on.rectangle.angled")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            }
+            .onChange(of: selectedPhoto) { newItem in
+                guard let newItem else { return }
+                Task {
+                    guard let data = try? await newItem.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data),
+                          let jpeg = image.jpegData(compressionQuality: 0.72) else { return }
+                    await MainActor.run {
+                        customImageBase64 = jpeg.base64EncodedString()
+                        avatarID = "custom"
+                    }
+                }
+            }
+        }
+        .padding(14)
+    }
+}
+
+private struct ATXProfileChooserView: View {
+    @EnvironmentObject private var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    let onContinue: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                VStack(spacing: 34) {
+                    HStack {
+                        BrandMark(size: 34)
+                        Text("ATLANTIX")
+                            .font(.system(size: 21, weight: .black, design: .rounded))
+                            .tracking(2)
+                            .foregroundStyle(.white)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 10)
+
+                    Spacer()
+                    Text("Chi guarda?")
+                        .font(.system(size: 30, weight: .bold))
+                        .foregroundStyle(.white)
+
+                    Button {
+                        onContinue()
+                        dismiss()
+                    } label: {
+                        VStack(spacing: 12) {
+                            ATXProfileAvatarView(size: 118)
+                            Text(session.username)
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink { RebornProfileView() } label: {
+                        Label("Gestisci profilo", systemImage: "pencil")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.white.opacity(0.82))
+                            .padding(.horizontal, 18)
+                            .frame(height: 42)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.35)))
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        }
+    }
+}
+
 struct MainTabView: View {
+    @EnvironmentObject private var session: AppSession
     enum AppTab: String, CaseIterable {
         case home = "Home"
         case live = "Diretta"
@@ -176,6 +348,7 @@ struct MainTabView: View {
     }
 
     @State private var selectedTab: AppTab = .home
+    @State private var showProfileChooser = true
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -199,6 +372,13 @@ struct MainTabView: View {
         }
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .fullScreenCover(isPresented: $showProfileChooser) {
+            ATXProfileChooserView {
+                selectedTab = .home
+                showProfileChooser = false
+            }
+            .environmentObject(session)
+        }
     }
 }
 
@@ -4260,12 +4440,7 @@ private struct RebornHomeView: View {
             Button { Task { await session.refreshSafely() } } label: { topIcon(session.isRefreshing ? "hourglass" : "arrow.clockwise") }
                 .disabled(session.isRefreshing)
             NavigationLink { RebornProfileView() } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(rebornRed)
-                    Text(String(session.username.prefix(1)).uppercased())
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(.white)
-                }.frame(width: 36, height: 36)
+                ATXProfileAvatarView(size: 36)
             }.buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
@@ -4461,10 +4636,15 @@ private struct RebornCatalogView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 34, weight: .black)).foregroundStyle(.white)
-                Text(type == .live ? "Guarda ora" : type == .movies ? "Tutti i film" : "Tutte le serie")
+                Text(type == .live ? "Canali in diretta" : type == .movies ? "Film" : "Serie TV")
                     .font(.caption).foregroundStyle(rebornMuted)
             }
             Spacer()
+            if selectedCategory != nil {
+                Button { selectedCategory = nil } label: {
+                    Image(systemName: "xmark.circle.fill").font(.headline).foregroundStyle(.white.opacity(0.75)).frame(width: 40, height: 40)
+                }.buttonStyle(.plain)
+            }
             Button { showSearch = true } label: {
                 Image(systemName: "magnifyingglass").font(.headline).foregroundStyle(.white).frame(width: 40, height: 40)
             }.buttonStyle(.plain)
@@ -4475,7 +4655,6 @@ private struct RebornCatalogView: View {
     private var categoryStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button { selectedCategory = nil } label: { categoryChip("Tutti", selected: selectedCategory == nil) }
                 ForEach(categories) { c in
                     Button { selectedCategory = c.categoryID } label: { categoryChip(c.categoryName, selected: selectedCategory == c.categoryID) }
                 }
@@ -4672,6 +4851,9 @@ private struct RebornProfileView: View {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     RebornPageHeader(title: "Profilo", onBack: { dismiss() })
                     profileHero
+                    profileSection("Profilo") {
+                        ATXProfileAvatarEditor()
+                    }
                     profileSection("Riproduzione") {
                         toggleRow("Riproduzione automatica", "Avvia automaticamente il contenuto successivo", value: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) }))
                         toggleRow("Aggiorna all'apertura", "Sincronizza la playlist quando avvii l'app", value: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) }))
@@ -4697,8 +4879,11 @@ private struct RebornProfileView: View {
 
     private var profileHero: some View {
         HStack(spacing: 16) {
-            ZStack { RoundedRectangle(cornerRadius: 10).fill(rebornRed); Text(String(session.username.prefix(1)).uppercased()).font(.system(size: 28, weight: .black)).foregroundStyle(.white) }.frame(width: 70, height: 70)
-            VStack(alignment: .leading, spacing: 5) { Text(session.username).font(.title2.weight(.black)).foregroundStyle(.white); Text(session.userInfo?.status ?? "Account attivo").font(.caption).foregroundStyle(rebornMuted) }
+            ATXProfileAvatarView(size: 74)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(session.username).font(.title2.weight(.black)).foregroundStyle(.white)
+                Text(session.userInfo?.status ?? "Account attivo").font(.caption).foregroundStyle(rebornMuted)
+            }
             Spacer()
         }.padding(.horizontal, 16)
     }
