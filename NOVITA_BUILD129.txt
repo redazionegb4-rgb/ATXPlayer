@@ -1,0 +1,8 @@
+ATLANTIX 4.0 — BUILD 129
+
+- Nuova architettura di navigazione: Home, Live, Scopri, Offline e Profilo.
+- Profilo trasformato in tab permanente: si torna alla Home con un tocco.
+- Home completamente ricostruita come hub personale.
+- Nuova area Scopri per Film, Serie, preferiti e cronologia.
+- Barra inferiore completamente nuova.
+- Player, download, PiP e logica account lasciati invariati.

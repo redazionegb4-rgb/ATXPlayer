@@ -1,4 +1,4 @@
-// ATLANTIX 4.0 BUILD 127 — DARK REBORN COMPLETE REDESIGN
+// ATLANTIX 4.0 BUILD 129 — NEW NAVIGATION / COMPLETE STRUCTURAL REDESIGN
 import Foundation
 import SwiftUI
 import AVKit
@@ -159,68 +159,400 @@ private func seriesSortValue(_ item: SeriesItem) -> Double {
 }
 
 struct MainTabView: View {
-    private enum AppTab: String, CaseIterable {
-        case home = "Home", live = "Live", movies = "Film", series = "Serie", downloads = "Offline"
+    enum AppTab: String, CaseIterable {
+        case home = "Home"
+        case live = "Live"
+        case search = "Scopri"
+        case downloads = "Offline"
+        case profile = "Profilo"
+
         var icon: String {
             switch self {
-            case .home: return "house.fill"
+            case .home: return "sparkles.tv.fill"
             case .live: return "dot.radiowaves.left.and.right"
-            case .movies: return "play.rectangle.fill"
-            case .series: return "rectangle.stack.fill"
+            case .search: return "square.grid.2x2.fill"
             case .downloads: return "arrow.down.circle.fill"
+            case .profile: return "person.crop.circle.fill"
             }
         }
     }
+
     @State private var selectedTab: AppTab = .home
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Group {
                 switch selectedTab {
-                case .home: NavigationStack { HomeView() }
-                case .live: NavigationStack { ContentBrowser(type: .live) }
-                case .movies: NavigationStack { ContentBrowser(type: .movies) }
-                case .series: NavigationStack { ContentBrowser(type: .series) }
-                case .downloads: NavigationStack { DownloadsView() }
+                case .home:
+                    NavigationStack { HomeDashboardV4(selectedTab: $selectedTab) }
+                case .live:
+                    NavigationStack { ContentBrowser(type: .live) }
+                case .search:
+                    NavigationStack { DiscoverV4() }
+                case .downloads:
+                    NavigationStack { DownloadsView() }
+                case .profile:
+                    NavigationStack { SettingsView() }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(spacing: 2) {
+            HStack(spacing: 4) {
                 ForEach(AppTab.allCases, id: \.self) { tab in
                     Button {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { selectedTab = tab }
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.82)) { selectedTab = tab }
                     } label: {
-                        VStack(spacing: 4) {
-                            ZStack {
-                                if selectedTab == tab {
-                                    Capsule().fill(brandGradient).frame(width: 42, height: 30)
-                                }
-                                Image(systemName: tab.icon)
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundStyle(selectedTab == tab ? .white : .white.opacity(0.48))
-                            }
+                        VStack(spacing: 5) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 17, weight: .semibold))
                             Text(tab.rawValue)
-                                .font(.system(size: 9, weight: selectedTab == tab ? .bold : .medium))
-                                .foregroundStyle(selectedTab == tab ? .white : .white.opacity(0.42))
+                                .font(.system(size: 9, weight: .semibold))
                         }
+                        .foregroundStyle(selectedTab == tab ? .white : .white.opacity(0.40))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 55)
+                        .frame(height: 52)
+                        .background {
+                            if selectedTab == tab {
+                                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                    .fill(brandGradient.opacity(0.92))
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 7)
-            .background(.ultraThinMaterial)
-            .background(Color.black.opacity(0.74))
-            .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .padding(6)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+            .background(Color.black.opacity(0.76), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 23).stroke(Color.white.opacity(0.09)))
             .padding(.horizontal, 12)
             .padding(.bottom, 7)
         }
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
+    }
+}
+
+private struct HomeDashboardV4: View {
+    @EnvironmentObject var session: AppSession
+    @Binding var selectedTab: MainTabView.AppTab
+    @State private var showSearch = false
+    @State private var feature: FeaturedContent?
+
+    var body: some View {
+        ZStack {
+            StreamingBackdrop()
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    header
+                    featureStage
+                    libraryDeck
+                    if !session.continueWatching.isEmpty { continueDeck }
+                    if !session.accountWatchHistory.isEmpty { historyDeck }
+                    discoveryDeck
+                    updateCard
+                }
+                .padding(.bottom, 110)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showSearch) { NavigationStack { GlobalSearchView() } }
+        .task(id: session.allMovies.count + session.allSeries.count) { pickFeature() }
+    }
+
+    private var header: some View {
+        HStack(spacing: 13) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(brandGradient)
+                    .frame(width: 50, height: 50)
+                BrandMark(size: 30)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text("ATLANTIX")
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .tracking(2.3)
+                Text("Bentornato, \(session.username)")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.48))
+            }
+            Spacer()
+            Button { showSearch = true } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.headline.bold())
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.07), in: Circle())
+            }
+            .buttonStyle(.plain)
+            Button { Task { await session.refreshSafely() } } label: {
+                Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
+                    .font(.headline.bold())
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.07), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(session.isRefreshing)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 12)
+    }
+
+    @ViewBuilder private var featureStage: some View {
+        if let feature {
+            NavigationLink { feature.destination(session: session) } label: {
+                ZStack(alignment: .bottomLeading) {
+                    OptimizedAsyncImage(url: URL(string: feature.imageURL ?? "")) { phase in
+                        if let image = phase.image {
+                            image.resizable().scaledToFill()
+                        } else {
+                            LinearGradient(colors: [atxPrimary.opacity(0.6), atxSurface], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        }
+                    }
+                    .frame(height: 330)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+
+                    LinearGradient(colors: [.clear, atxCanvas.opacity(0.18), atxCanvas.opacity(0.97)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [atxCanvas.opacity(0.52), .clear], startPoint: .leading, endPoint: .trailing)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(feature.kind)
+                            .font(.system(size: 10, weight: .black))
+                            .tracking(1.8)
+                            .foregroundStyle(atxCyan)
+                        Text(feature.title)
+                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                        Text(feature.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.66))
+                            .lineLimit(2)
+                        Label("Apri", systemImage: "play.fill")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 17)
+                            .frame(height: 42)
+                            .background(brandGradient, in: Capsule())
+                    }
+                    .padding(18)
+                }
+                .frame(height: 330)
+                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 30).stroke(Color.white.opacity(0.08)))
+                .padding(.horizontal, 16)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var libraryDeck: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("La tua libreria", "Accesso rapido")
+            HStack(spacing: 10) {
+                NavigationLink { ContentBrowser(type: .movies) } label: {
+                    libraryTile(title: "Film", value: session.allMovies.count, icon: "film.stack.fill", accent: atxSecondary)
+                }
+                NavigationLink { ContentBrowser(type: .series) } label: {
+                    libraryTile(title: "Serie", value: session.allSeries.count, icon: "rectangle.stack.fill", accent: atxPrimary)
+                }
+            }
+            .buttonStyle(.plain)
+            HStack(spacing: 10) {
+                Button { selectedTab = .live } label: {
+                    libraryTile(title: "Live", value: session.allLive.count, icon: "dot.radiowaves.left.and.right", accent: atxCyan)
+                }
+                NavigationLink { FavoritesView() } label: {
+                    libraryTile(title: "La mia lista", value: session.accountFavorites.count, icon: "heart.fill", accent: .pink)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func libraryTile(title: String, value: Int, icon: String, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.headline.bold())
+                    .foregroundStyle(accent)
+                    .frame(width: 42, height: 42)
+                    .background(accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 14))
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white.opacity(0.34))
+            }
+            Text(value.formatted())
+                .font(.system(size: 24, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(.white.opacity(0.58))
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, minHeight: 145, alignment: .leading)
+        .background(atxSurface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.07)))
+    }
+
+    private var continueDeck: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Continua a guardare", "Riprendi da dove eri rimasto")
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 12) {
+                    ForEach(session.continueWatching.prefix(8)) { progress in
+                        if let descriptor = session.descriptor(from: progress) {
+                            NavigationLink {
+                                PlayerScreen(title: descriptor.title, url: session.streamURL(type: descriptor.kind, id: descriptor.streamID, ext: descriptor.fileExtension), isLive: false, resume: descriptor)
+                            } label: {
+                                ContinueWatchingCard(progress: progress).frame(width: 240)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private var historyDeck: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionHeader("Attività recente", "Ultime visualizzazioni")
+                Spacer()
+                NavigationLink { WatchHistoryView() } label: {
+                    Text("Tutto").font(.caption.bold()).foregroundStyle(atxCyan)
+                }
+                .padding(.trailing, 18)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 12) {
+                    ForEach(session.accountWatchHistory.prefix(8)) { item in
+                        HistoryPosterCard(item: item)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private var discoveryDeck: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Scopri", "Trova qualcosa da guardare")
+            HStack(spacing: 10) {
+                Button { selectedTab = .search } label: { actionTile("Esplora", "square.grid.2x2.fill") }
+                Button { showSearch = true } label: { actionTile("Cerca", "magnifyingglass") }
+                Button { selectedTab = .profile } label: { actionTile("Profilo", "person.crop.circle") }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private func actionTile(_ title: String, _ icon: String) -> some View {
+        VStack(spacing: 9) {
+            Image(systemName: icon).font(.title3.bold()).foregroundStyle(.white)
+            Text(title).font(.caption.bold()).foregroundStyle(.white.opacity(0.65))
+        }
+        .frame(maxWidth: .infinity, minHeight: 92)
+        .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.07)))
+    }
+
+    private var updateCard: some View {
+        HStack(spacing: 10) {
+            Circle().fill(atxMint).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Catalogo sincronizzato").font(.caption.bold()).foregroundStyle(.white)
+                Text(session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "Pronto")
+                    .font(.caption2).foregroundStyle(.white.opacity(0.40))
+            }
+            Spacer()
+            Image(systemName: "checkmark.seal.fill").foregroundStyle(atxMint)
+        }
+        .padding(15)
+        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 16)
+    }
+
+    private func sectionHeader(_ title: String, _ subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.title3.weight(.black)).foregroundStyle(.white)
+            Text(subtitle).font(.caption2).foregroundStyle(.white.opacity(0.38))
+        }
+        .padding(.horizontal, 2)
+    }
+
+    @MainActor private func pickFeature() {
+        if let movie = session.allMovies.first(where: { !(($0.streamIcon ?? "").isEmpty) }) {
+            feature = .movie(movie)
+        } else if let series = session.allSeries.first(where: { !(($0.cover ?? "").isEmpty) }) {
+            feature = .series(series)
+        } else {
+            feature = nil
+        }
+    }
+}
+
+private struct DiscoverV4: View {
+    @EnvironmentObject var session: AppSession
+    @State private var showSearch = false
+
+    var body: some View {
+        ZStack {
+            StreamingBackdrop()
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("SCOPRI").font(.caption2.weight(.black)).tracking(1.8).foregroundStyle(atxCyan)
+                        Text("Cosa vuoi guardare?").font(.system(size: 31, weight: .black, design: .rounded)).foregroundStyle(.white)
+                        Text("Tutto il catalogo AtlantiX in un unico posto.").font(.caption).foregroundStyle(.white.opacity(0.46))
+                    }
+                    .padding(.horizontal, 18).padding(.top, 18)
+
+                    Button { showSearch = true } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "magnifyingglass").font(.headline.bold())
+                            Text("Cerca canali, film, serie...").foregroundStyle(.white.opacity(0.42))
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16).frame(height: 54)
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.07)))
+                        .padding(.horizontal, 16)
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink { ContentBrowser(type: .movies) } label: { discoverHero("Film", "film.stack.fill", session.allMovies.count, atxSecondary) }
+                    NavigationLink { ContentBrowser(type: .series) } label: { discoverHero("Serie TV", "rectangle.stack.fill", session.allSeries.count, atxPrimary) }
+                    NavigationLink { FavoritesView() } label: { discoverHero("La mia lista", "heart.fill", session.accountFavorites.count, .pink) }
+                    NavigationLink { WatchHistoryView() } label: { discoverHero("Cronologia", "clock.arrow.circlepath", session.accountWatchHistory.count, atxCyan) }
+                    Spacer(minLength: 110)
+                }
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showSearch) { NavigationStack { GlobalSearchView() } }
+    }
+
+    private func discoverHero(_ title: String, _ icon: String, _ count: Int, _ accent: Color) -> some View {
+        HStack(spacing: 15) {
+            Image(systemName: icon).font(.title2.bold()).foregroundStyle(accent)
+                .frame(width: 58, height: 58).background(accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 18))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.title3.weight(.black)).foregroundStyle(.white)
+                Text("\(count.formatted()) contenuti").font(.caption).foregroundStyle(.white.opacity(0.43))
+            }
+            Spacer()
+            Image(systemName: "chevron.right").font(.headline.bold()).foregroundStyle(.white.opacity(0.24))
+        }
+        .padding(16)
+        .background(atxSurface, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.07)))
+        .padding(.horizontal, 16)
     }
 }
 
