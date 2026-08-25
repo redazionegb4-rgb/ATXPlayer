@@ -4630,6 +4630,13 @@ private struct RebornCatalogView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { RebornSearchView(initialType: type) } }
+        .onAppear { selectFirstCategoryIfNeeded() }
+        .onChange(of: categories.map(\.categoryID)) { _ in selectFirstCategoryIfNeeded() }
+    }
+
+    private func selectFirstCategoryIfNeeded() {
+        guard selectedCategory == nil, let first = categories.first else { return }
+        selectedCategory = first.categoryID
     }
 
     private var header: some View {
@@ -4641,8 +4648,8 @@ private struct RebornCatalogView: View {
             }
             Spacer()
             if selectedCategory != nil {
-                Button { selectedCategory = nil } label: {
-                    Image(systemName: "xmark.circle.fill").font(.headline).foregroundStyle(.white.opacity(0.75)).frame(width: 40, height: 40)
+                Button { selectedCategory = categories.first?.categoryID } label: {
+                    Image(systemName: "arrow.counterclockwise.circle.fill").font(.headline).foregroundStyle(.white.opacity(0.75)).frame(width: 40, height: 40)
                 }.buttonStyle(.plain)
             }
             Button { showSearch = true } label: {
