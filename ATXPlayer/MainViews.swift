@@ -312,7 +312,7 @@ private struct HomeDashboardV4: View {
         .background(Color.black.opacity(0.98))
     }
 
-    // Top filters inspired by modern streaming apps, but using AtlantiX sections.
+    // AtlantiX 4.0 Build 135 — content-first streaming navigation.
     private var filterStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -1233,13 +1233,13 @@ struct ContentBrowser: View {
         ZStack {
             StreamingBackdrop()
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 16) {
                     header
                     searchBar
+                    Text("Sfoglia").font(.system(size: 22, weight: .bold)).foregroundStyle(.white).padding(.horizontal, 16)
                     NavigationLink { ItemGrid(type: type, category: nil) } label: { allCatalog }
                         .buttonStyle(.plain)
-                    Text("Categorie").font(.title2.weight(.black)).foregroundStyle(.white).padding(.horizontal, 16)
-                    LazyVStack(spacing: 10) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                         ForEach(Array(filtered.enumerated()), id: \.element.id) { index, category in
                             NavigationLink { ItemGrid(type: type, category: category) } label: { categoryRow(category, index: index) }
                                 .buttonStyle(.plain)
@@ -1254,25 +1254,25 @@ struct ContentBrowser: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Image(systemName: icon).font(.system(size: 23, weight: .black)).foregroundStyle(.white)
-                    .frame(width: 52, height: 52).background(brandGradient, in: RoundedRectangle(cornerRadius: 17))
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(colors: [atxPrimary.opacity(0.48), Color.black], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .frame(height: 210)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("ATLANTIX").font(.caption2.weight(.black)).tracking(2).foregroundStyle(atxCyan)
+                    Spacer()
+                    Button { Task { await session.reloadSection(type) } } label: {
+                        Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
+                            .font(.headline.bold()).foregroundStyle(.white).frame(width: 42, height: 42)
+                            .background(Color.black.opacity(0.35), in: Circle())
+                    }.buttonStyle(.plain).disabled(session.isRefreshing)
+                }
                 Spacer()
-                Button { Task { await session.reloadSection(type) } } label: {
-                    Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
-                        .font(.headline.bold()).foregroundStyle(.white)
-                        .frame(width: 44, height: 44).background(Color.white.opacity(0.08), in: Circle())
-                }.buttonStyle(.plain).disabled(session.isRefreshing)
-            }
-            Text(title).font(.system(size: 38, weight: .black, design: .rounded)).foregroundStyle(.white)
-            Text(subtitle).font(.subheadline).foregroundStyle(.white.opacity(0.55))
-            HStack(spacing: 16) {
-                Label(totalCount.formatted(), systemImage: "play.square.stack.fill")
-                Label(categories.count.formatted(), systemImage: "square.grid.2x2.fill")
-            }.font(.caption.bold()).foregroundStyle(.white.opacity(0.65))
+                Text(title).font(.system(size: 38, weight: .black)).foregroundStyle(.white)
+                Text("\(totalCount.formatted()) titoli  •  \(categories.count.formatted()) categorie")
+                    .font(.caption.bold()).foregroundStyle(.white.opacity(0.68))
+            }.padding(.horizontal, 18).padding(.vertical, 18)
         }
-        .padding(.horizontal, 18).padding(.top, 18)
     }
 
     private var searchBar: some View {
@@ -1288,15 +1288,14 @@ struct ContentBrowser: View {
     }
 
     private var allCatalog: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "square.grid.2x2.fill").font(.title3.bold()).foregroundStyle(.white)
-                .frame(width: 50, height: 50).background(brandGradient, in: RoundedRectangle(cornerRadius: 15))
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Tutto il catalogo").font(.headline.bold()).foregroundStyle(.white)
-                Text("\(totalCount.formatted()) contenuti").font(.caption).foregroundStyle(.white.opacity(0.45))
+        HStack(spacing: 12) {
+            Image(systemName: "play.rectangle.on.rectangle.fill").font(.title2).foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Tutti").font(.headline.bold()).foregroundStyle(.white)
+                Text("\(totalCount.formatted()) contenuti").font(.caption).foregroundStyle(.white.opacity(0.52))
             }
-            Spacer(); Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.35))
-        }.padding(14).background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 20)).padding(.horizontal, 16)
+            Spacer(); Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.45))
+        }.padding(14).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12)).padding(.horizontal, 16)
     }
 
     private func normalizedCategoryID(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -1309,21 +1308,19 @@ struct ContentBrowser: View {
         }
     }
     private func categoryRow(_ category: Category, index: Int) -> some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16).fill(accentGradient(for: category.categoryName)).frame(width: 58, height: 58)
-                Image(systemName: icon).font(.headline.bold()).foregroundStyle(.white)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(category.categoryName).font(.headline.bold()).foregroundStyle(.white).lineLimit(2)
-                Text("\(count(for: category).formatted()) contenuti").font(.caption).foregroundStyle(.white.opacity(0.42))
-            }
-            Spacer()
-            Text(String(format: "%02d", index + 1)).font(.caption2.weight(.black)).foregroundStyle(.white.opacity(0.25))
-            Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.white.opacity(0.35))
+        ZStack(alignment: .bottomLeading) {
+            accentGradient(for: category.categoryName).opacity(0.75)
+            LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .top, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 5) {
+                Spacer()
+                Text(category.categoryName).font(.subheadline.bold()).foregroundStyle(.white).lineLimit(2)
+                Text("\(count(for: category).formatted()) titoli").font(.caption2.bold()).foregroundStyle(.white.opacity(0.62))
+            }.padding(12)
         }
-        .padding(12).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20)).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.06)))
+        .frame(height: 112)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
+
 }
 
 struct ItemGrid: View {
@@ -1344,7 +1341,7 @@ struct ItemGrid: View {
     private var columns: [GridItem] {
         type == .live
         ? [GridItem(.flexible(), spacing: 14)]
-        : [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+        : [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
     }
 
     var body: some View {
@@ -1577,22 +1574,20 @@ struct ModernPosterCard: View {
     let badge: String?
     let typeLabel: String
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .bottomLeading) {
-                OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
-                    if let image = phase.image { image.resizable().scaledToFill() } else { accentGradient(for: title) }
-                }
-                .aspectRatio(0.68, contentMode: .fit).clipped()
-                LinearGradient(colors: [.clear, Color.black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
-                HStack {
-                    Text(typeLabel).font(.system(size: 8, weight: .black)).tracking(1).foregroundStyle(.white.opacity(0.82))
-                    Spacer()
-                    if let badge, !badge.isEmpty { Text("★ \(badge)").font(.caption2.bold()).foregroundStyle(.white) }
-                }.padding(10)
+        ZStack(alignment: .bottomLeading) {
+            OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() } else { accentGradient(for: title) }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            Text(title).font(.subheadline.bold()).foregroundStyle(.white).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            .aspectRatio(0.67, contentMode: .fit).clipped()
+            LinearGradient(colors: [.clear, .black.opacity(0.76)], startPoint: .center, endPoint: .bottom)
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .padding(8)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .contentShape(Rectangle())
     }
 }
 struct LiveChannelCard: View {
@@ -3334,12 +3329,25 @@ struct HistoryPosterCard: View {
 
 struct SettingsView: View {
     @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
     @State private var showLogout = false
     var body: some View {
         ZStack {
             StreamingBackdrop()
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 22) {
+                    HStack(spacing: 12) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(Color.white.opacity(0.10), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        Text("Il mio AtlantiX").font(.headline.bold()).foregroundStyle(.white)
+                        Spacer()
+                    }
                     VStack(alignment: .leading, spacing: 4) {
                         Text("ATLANTIX").font(.caption2.weight(.black)).tracking(1.6).foregroundStyle(atxCyan)
                         Text("Impostazioni").font(.system(size: 36, weight: .black)).foregroundStyle(.white)
