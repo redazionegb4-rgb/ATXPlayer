@@ -1,0 +1,8 @@
+AtlantiX 4.0 - Build 136
+- Nuova interfaccia content-first in stile piattaforma streaming.
+- Corretto il pulsante La mia lista: ora aggiunge/rimuove il titolo invece di aprire la lista.
+- Home con rail più densi e più contenuti visibili.
+- Categorie ridisegnate come elenco di navigazione essenziale.
+- Cataloghi Film e Serie a poster wall 2 colonne.
+- Cronologia ridisegnata a griglia visuale.
+- Profilo/Impostazioni ricostruiti con navigazione indietro sempre disponibile.

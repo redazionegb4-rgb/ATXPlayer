@@ -210,7 +210,7 @@ struct MainTabView: View {
                         }
                         .foregroundStyle(selectedTab == tab ? .white : .white.opacity(0.45))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 58)
+                        .frame(height: 54)
                         .overlay(alignment: .top) {
                             if selectedTab == tab {
                                 Capsule()
@@ -225,7 +225,7 @@ struct MainTabView: View {
             }
             .padding(.horizontal, 8)
             .padding(.top, 5)
-            .background(Color.black.opacity(0.96))
+            .background(Color.black)
             .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
             .ignoresSafeArea(edges: .bottom)
         }
@@ -252,8 +252,8 @@ private struct HomeDashboardV4: View {
                         filterStrip
                         heroStage
                         if !session.continueWatching.isEmpty { continueRail }
-                        posterRail(title: "Film popolari", movies: Array(session.allMovies.prefix(14)), series: [])
-                        posterRail(title: "Serie TV", movies: [], series: Array(session.allSeries.prefix(14)))
+                        posterRail(title: "Film da non perdere", movies: Array(session.allMovies.prefix(24)), series: [])
+                        posterRail(title: "Serie TV da scoprire", movies: [], series: Array(session.allSeries.prefix(24)))
                         activityRail
                         libraryRail
                     }
@@ -312,7 +312,7 @@ private struct HomeDashboardV4: View {
         .background(Color.black.opacity(0.98))
     }
 
-    // AtlantiX 4.0 Build 135 — content-first streaming navigation.
+    // AtlantiX 4.0 Build 136 — total streaming rebuild.
     private var filterStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -386,8 +386,10 @@ private struct HomeDashboardV4: View {
                         }
                         .buttonStyle(.plain)
 
-                        NavigationLink { FavoritesView() } label: {
-                            Label("La mia lista", systemImage: "plus")
+                        Button {
+                            toggleHeroFavorite()
+                        } label: {
+                            Label(isHeroFavorite ? "Nella mia lista" : "La mia lista", systemImage: isHeroFavorite ? "checkmark" : "plus")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
@@ -441,14 +443,14 @@ private struct HomeDashboardV4: View {
                     ForEach(movies) { movie in
                         NavigationLink { MovieDetailView(item: movie) } label: {
                             ModernPosterCard(title: movie.name, imageURL: movie.streamIcon, badge: movie.rating, typeLabel: "FILM")
-                                .frame(width: 132)
+                                .frame(width: 112)
                         }
                         .buttonStyle(.plain)
                     }
                     ForEach(series) { item in
                         NavigationLink { SeriesDetailView(item: item) } label: {
                             ModernPosterCard(title: item.name, imageURL: item.cover, badge: item.rating, typeLabel: "SERIE")
-                                .frame(width: 132)
+                                .frame(width: 112)
                         }
                         .buttonStyle(.plain)
                     }
@@ -521,6 +523,24 @@ private struct HomeDashboardV4: View {
             .font(.system(size: 20, weight: .bold))
             .foregroundStyle(.white)
             .padding(.horizontal, 16)
+    }
+
+    private var isHeroFavorite: Bool {
+        guard let feature else { return false }
+        switch feature {
+        case .movie(let item): return session.isFavorite(kind: .movies, streamID: item.streamID)
+        case .series(let item): return session.isFavorite(kind: .series, streamID: item.seriesID)
+        }
+    }
+
+    private func toggleHeroFavorite() {
+        guard let feature else { return }
+        switch feature {
+        case .movie(let item):
+            session.toggleFavorite(kind: .movies, streamID: item.streamID, title: item.name, imageURL: item.streamIcon, fileExtension: item.containerExtension)
+        case .series(let item):
+            session.toggleFavorite(kind: .series, streamID: item.seriesID, title: item.name, imageURL: item.cover)
+        }
     }
 
     @MainActor private func pickFeature() {
@@ -1223,28 +1243,39 @@ struct ContentBrowser: View {
     let type: ContentType
     @State private var search = ""
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
-    private var title: String { type == .live ? "Live TV" : type == .movies ? "Film" : "Serie TV" }
-    private var subtitle: String { type == .live ? "Tutto ciò che è in onda, adesso" : type == .movies ? "Cinema, nuove uscite e grandi classici" : "Stagioni, episodi e serie da scoprire" }
+    private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
     private var filtered: [Category] { search.isEmpty ? categories : categories.filter { $0.categoryName.localizedCaseInsensitiveContains(search) } }
-    private var icon: String { type == .live ? "dot.radiowaves.left.and.right" : type == .movies ? "film.fill" : "rectangle.stack.fill" }
     private var totalCount: Int { type == .live ? session.allLive.count : type == .movies ? session.allMovies.count : session.allSeries.count }
 
     var body: some View {
         ZStack {
-            StreamingBackdrop()
+            Color.black.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    header
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    streamingHeader
                     searchBar
-                    Text("Sfoglia").font(.system(size: 22, weight: .bold)).foregroundStyle(.white).padding(.horizontal, 16)
-                    NavigationLink { ItemGrid(type: type, category: nil) } label: { allCatalog }
-                        .buttonStyle(.plain)
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                        ForEach(Array(filtered.enumerated()), id: \.element.id) { index, category in
-                            NavigationLink { ItemGrid(type: type, category: category) } label: { categoryRow(category, index: index) }
-                                .buttonStyle(.plain)
+                    NavigationLink { ItemGrid(type: type, category: nil) } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Tutto il catalogo").font(.title3.bold()).foregroundStyle(.white)
+                                Text("\(totalCount.formatted()) contenuti").font(.caption).foregroundStyle(.white.opacity(0.5))
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.55))
                         }
-                    }.padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                    }.buttonStyle(.plain).padding(.horizontal, 16)
+
+                    Text("Categorie").font(.title2.bold()).foregroundStyle(.white).padding(.horizontal, 16)
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(filtered.enumerated()), id: \.element.id) { index, category in
+                            NavigationLink { ItemGrid(type: type, category: category) } label: {
+                                categoryLine(category, index: index)
+                            }.buttonStyle(.plain)
+                            if index < filtered.count - 1 { Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 16) }
+                        }
+                    }
+                    .background(Color.white.opacity(0.025))
                     Spacer(minLength: 110)
                 }
             }
@@ -1253,74 +1284,52 @@ struct ContentBrowser: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var header: some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(colors: [atxPrimary.opacity(0.48), Color.black], startPoint: .topLeading, endPoint: .bottomTrailing)
-                .frame(height: 210)
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("ATLANTIX").font(.caption2.weight(.black)).tracking(2).foregroundStyle(atxCyan)
-                    Spacer()
-                    Button { Task { await session.reloadSection(type) } } label: {
-                        Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
-                            .font(.headline.bold()).foregroundStyle(.white).frame(width: 42, height: 42)
-                            .background(Color.black.opacity(0.35), in: Circle())
-                    }.buttonStyle(.plain).disabled(session.isRefreshing)
-                }
+    private var streamingHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                BrandMark(size: 24)
+                Text(title).font(.system(size: 30, weight: .black)).foregroundStyle(.white)
                 Spacer()
-                Text(title).font(.system(size: 38, weight: .black)).foregroundStyle(.white)
-                Text("\(totalCount.formatted()) titoli  •  \(categories.count.formatted()) categorie")
-                    .font(.caption.bold()).foregroundStyle(.white.opacity(0.68))
-            }.padding(.horizontal, 18).padding(.vertical, 18)
+                Button { Task { await session.reloadSection(type) } } label: {
+                    Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
+                        .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white).frame(width: 42, height: 42)
+                }.buttonStyle(.plain).disabled(session.isRefreshing)
+            }
+            Text(type == .live ? "Canali in diretta" : type == .movies ? "Film, novità e grandi titoli" : "Serie, stagioni ed episodi")
+                .font(.subheadline).foregroundStyle(.white.opacity(0.52))
+            Text("\(totalCount.formatted()) contenuti • \(categories.count.formatted()) categorie")
+                .font(.caption.weight(.semibold)).foregroundStyle(atxCyan)
         }
+        .padding(.horizontal, 16).padding(.top, 12)
     }
 
     private var searchBar: some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.45))
+            Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.48))
             TextField("Cerca categorie", text: $search).foregroundStyle(.white).textInputAutocapitalization(.never).autocorrectionDisabled()
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.4)) } }
         }
-        .padding(.horizontal, 15).frame(height: 50)
-        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.07)))
+        .padding(.horizontal, 14).frame(height: 46)
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
         .padding(.horizontal, 16)
     }
 
-    private var allCatalog: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "play.rectangle.on.rectangle.fill").font(.title2).foregroundStyle(.white)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Tutti").font(.headline.bold()).foregroundStyle(.white)
-                Text("\(totalCount.formatted()) contenuti").font(.caption).foregroundStyle(.white.opacity(0.52))
+    private func categoryLine(_ category: Category, index: Int) -> some View {
+        HStack(spacing: 13) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6).fill(accentGradient(for: category.categoryName)).frame(width: 52, height: 52)
+                Image(systemName: type == .live ? "dot.radiowaves.left.and.right" : type == .movies ? "film.fill" : "rectangle.stack.fill")
+                    .foregroundStyle(.white).font(.headline)
             }
-            Spacer(); Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.45))
-        }.padding(14).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12)).padding(.horizontal, 16)
-    }
-
-    private func normalizedCategoryID(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
-    private func count(for category: Category) -> Int {
-        let targetID = normalizedCategoryID(category.categoryID)
-        switch type {
-        case .live: return session.allLive.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
-        case .movies: return session.allMovies.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
-        case .series: return session.allSeries.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
+            VStack(alignment: .leading, spacing: 3) {
+                Text(category.categoryName).font(.headline).foregroundStyle(.white).lineLimit(1)
+                Text("Apri categoria").font(.caption).foregroundStyle(.white.opacity(0.42))
+            }
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.white.opacity(0.35))
         }
+        .padding(.horizontal, 16).frame(height: 72)
     }
-    private func categoryRow(_ category: Category, index: Int) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            accentGradient(for: category.categoryName).opacity(0.75)
-            LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .top, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 5) {
-                Spacer()
-                Text(category.categoryName).font(.subheadline.bold()).foregroundStyle(.white).lineLimit(2)
-                Text("\(count(for: category).formatted()) titoli").font(.caption2.bold()).foregroundStyle(.white.opacity(0.62))
-            }.padding(12)
-        }
-        .frame(height: 112)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
 }
 
 struct ItemGrid: View {
@@ -1341,7 +1350,7 @@ struct ItemGrid: View {
     private var columns: [GridItem] {
         type == .live
         ? [GridItem(.flexible(), spacing: 14)]
-        : [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+        : [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
     }
 
     var body: some View {
@@ -1578,15 +1587,27 @@ struct ModernPosterCard: View {
             OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() } else { accentGradient(for: title) }
             }
-            .aspectRatio(0.67, contentMode: .fit).clipped()
-            LinearGradient(colors: [.clear, .black.opacity(0.76)], startPoint: .center, endPoint: .bottom)
-            Text(title)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white)
-                .lineLimit(2)
-                .padding(8)
+            .aspectRatio(0.66, contentMode: .fit).clipped()
+            LinearGradient(colors: [.clear, .black.opacity(0.16), .black.opacity(0.92)], startPoint: .top, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(typeLabel)
+                    .font(.system(size: 8, weight: .black))
+                    .tracking(0.8)
+                    .foregroundStyle(atxCyan)
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+            }
+            .padding(9)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(alignment: .topTrailing) {
+            if let badge, !badge.isEmpty {
+                Text(badge).font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 4).background(.black.opacity(0.68), in: Capsule()).padding(6)
+            }
+        }
         .contentShape(Rectangle())
     }
 }
@@ -3206,38 +3227,51 @@ struct FavoriteRowContent: View {
 
 struct WatchHistoryView: View {
     @EnvironmentObject var session: AppSession
-    @Environment(\.dismiss) private var dismiss
     @State private var showClearConfirmation = false
     @State private var selectedFilter = "Tutti"
     private var filtered: [WatchHistoryItem] { selectedFilter == "Tutti" ? session.accountWatchHistory : session.accountWatchHistory.filter { selectedFilter == "Film" ? $0.kind == ContentType.movies.rawValue : $0.kind == ContentType.series.rawValue } }
+    private let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
     var body: some View {
         ZStack {
-            StreamingBackdrop()
+            Color.black.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("LA TUA ATTIVITÀ").font(.caption2.weight(.black)).tracking(1.5).foregroundStyle(atxCyan)
-                            Text("Cronologia").font(.system(size: 34, weight: .black)).foregroundStyle(.white)
-                            Text("Riprendi da dove avevi lasciato").font(.caption).foregroundStyle(.white.opacity(0.45))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Cronologia").font(.system(size: 32, weight: .black)).foregroundStyle(.white)
+                            Text("Continua da dove eri rimasto").font(.subheadline).foregroundStyle(.white.opacity(0.48))
                         }
                         Spacer()
                         if !session.accountWatchHistory.isEmpty {
-                            Button { showClearConfirmation = true } label: { Image(systemName: "trash").foregroundStyle(.red).frame(width: 44, height: 44).background(Color.red.opacity(0.12), in: Circle()) }.buttonStyle(.plain)
+                            Button { showClearConfirmation = true } label: { Image(systemName: "trash").foregroundStyle(.white).frame(width: 42, height: 42).background(Color.white.opacity(0.08), in: Circle()) }.buttonStyle(.plain)
                         }
+                    }.padding(.horizontal, 16).padding(.top, 18)
+                    filters.padding(.horizontal, 16)
+                    if filtered.isEmpty {
+                        EmptyStateView(title: "Cronologia vuota", icon: "clock.arrow.circlepath", message: "I contenuti avviati compariranno qui.").padding(.top, 50)
+                    } else {
+                        LazyVGrid(columns: cols, spacing: 18) {
+                            ForEach(filtered) { item in
+                                VStack(alignment: .leading, spacing: 7) {
+                                    HistoryNavigation(item: item)
+                                    HStack {
+                                        Text(item.watchedAt.formatted(date: .abbreviated, time: .omitted)).font(.caption2).foregroundStyle(.white.opacity(0.42))
+                                        Spacer()
+                                        Button(role: .destructive) { withAnimation { session.removeHistory(id: item.id) } } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.42)) }.buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }.padding(.horizontal, 16)
                     }
-                    filters
-                    if filtered.isEmpty { EmptyStateView(title: "Cronologia vuota", icon: "clock.arrow.circlepath", message: "I contenuti avviati compariranno qui.").padding(.top, 50) }
-                    else { LazyVStack(spacing: 10) { ForEach(filtered) { item in HStack(spacing: 8) { HistoryNavigation(item: item); Button(role: .destructive) { withAnimation { session.removeHistory(id: item.id) } } label: { Image(systemName: "xmark").font(.caption.bold()).foregroundStyle(.white.opacity(0.35)).frame(width: 34, height: 34) }.buttonStyle(.plain) } } } }
                     Spacer(minLength: 110)
-                }.padding(.horizontal, 16).padding(.top, 18)
+                }
             }
         }
         .preferredColorScheme(.dark).toolbar(.hidden, for: .navigationBar)
         .alert("Cancellare la cronologia?", isPresented: $showClearConfirmation) { Button("Annulla", role: .cancel) {}; Button("Cancella tutto", role: .destructive) { session.clearAccountWatchHistory() } }
     }
     private var filters: some View {
-        HStack(spacing: 8) { ForEach(["Tutti", "Film", "Serie"], id: \.self) { f in Button { withAnimation { selectedFilter = f } } label: { Text(f).font(.subheadline.bold()).foregroundStyle(selectedFilter == f ? .white : .white.opacity(0.42)).padding(.horizontal, 16).frame(height: 38).background(selectedFilter == f ? AnyShapeStyle(brandGradient) : AnyShapeStyle(Color.white.opacity(0.06)), in: Capsule()) }.buttonStyle(.plain) } }
+        HStack(spacing: 8) { ForEach(["Tutti", "Film", "Serie"], id: \.self) { f in Button { withAnimation { selectedFilter = f } } label: { Text(f).font(.subheadline.bold()).foregroundStyle(selectedFilter == f ? .black : .white).padding(.horizontal, 16).frame(height: 36).background(selectedFilter == f ? Color.white : Color.white.opacity(0.08), in: Capsule()) }.buttonStyle(.plain) } }
     }
 }
 
@@ -3274,14 +3308,12 @@ struct HistoryRowContent: View {
         HStack(spacing: 13) {
             OptimizedAsyncImage(url: URL(string: item.imageURL ?? "")) { phase in
                 if let image = phase.image { image.resizable().scaledToFill() } else { accentGradient(for: item.title) }
-            }.frame(width: 112, height: 70).clipped().clipShape(RoundedRectangle(cornerRadius: 14))
-            VStack(alignment: .leading, spacing: 5) {
-                Text(item.title).font(.headline.bold()).foregroundStyle(.white).lineLimit(2)
-                if let subtitle = item.subtitle, !subtitle.isEmpty { Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.42)).lineLimit(1) }
-                Text(item.watchedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(atxCyan)
+            }.frame(maxWidth: .infinity).aspectRatio(0.70, contentMode: .fit).clipped().clipShape(RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title).font(.subheadline.bold()).foregroundStyle(.white).lineLimit(2)
+                if let subtitle = item.subtitle, !subtitle.isEmpty { Text(subtitle).font(.caption2).foregroundStyle(.white.opacity(0.42)).lineLimit(1) }
             }
-            Spacer(); Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(.white.opacity(0.82))
-        }.padding(10).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18)).overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.06)))
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
 }
@@ -3333,79 +3365,63 @@ struct SettingsView: View {
     @State private var showLogout = false
     var body: some View {
         ZStack {
-            StreamingBackdrop()
+            Color.black.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 12) {
-                        Button { dismiss() } label: {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 44, height: 44)
-                                .background(Color.white.opacity(0.10), in: Circle())
-                        }
-                        .buttonStyle(.plain)
-                        Text("Il mio AtlantiX").font(.headline.bold()).foregroundStyle(.white)
+                    HStack {
+                        Button { dismiss() } label: { Image(systemName: "chevron.left").font(.headline.bold()).foregroundStyle(.white).frame(width: 44, height: 44) }.buttonStyle(.plain)
                         Spacer()
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("ATLANTIX").font(.caption2.weight(.black)).tracking(1.6).foregroundStyle(atxCyan)
-                        Text("Impostazioni").font(.system(size: 36, weight: .black)).foregroundStyle(.white)
-                        Text("Il tuo spazio, le tue preferenze").font(.caption).foregroundStyle(.white.opacity(0.44))
-                    }
-                    accountCard
-                    shortcutStrip
-                    settingsGroup("Riproduzione", icon: "play.fill") {
-                        SettingsToggleRow(title: "Riproduzione automatica", subtitle: "Avvia il contenuto successivo", icon: "play.circle.fill", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) }))
+                        Text("Profilo").font(.headline.bold()).foregroundStyle(.white)
+                        Spacer()
+                        Color.clear.frame(width: 44, height: 44)
+                    }.padding(.horizontal, 10)
+                    VStack(spacing: 12) {
+                        ZStack { Circle().fill(brandGradient).frame(width: 82, height: 82); Text(String(session.username.prefix(1)).uppercased()).font(.system(size: 32, weight: .black)).foregroundStyle(.white) }
+                        Text(session.username).font(.title2.weight(.black)).foregroundStyle(.white)
+                        Text(expiry).font(.caption).foregroundStyle(.white.opacity(0.48))
+                    }.frame(maxWidth: .infinity)
+                    accountLinks
+                    sectionTitle("Riproduzione")
+                    settingSurface {
+                        SettingsToggleRow(title: "Riproduzione automatica", subtitle: "Avvia automaticamente il contenuto successivo", icon: "play.fill", isOn: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) }))
                         SettingsDivider()
-                        SettingsToggleRow(title: "Aggiorna all'apertura", subtitle: "Sincronizza la playlist all'avvio", icon: "arrow.triangle.2.circlepath", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) }))
+                        SettingsToggleRow(title: "Aggiorna all'apertura", subtitle: "Sincronizza la playlist all'avvio", icon: "arrow.clockwise", isOn: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) }))
                         SettingsDivider()
                         SettingsInfoRow(title: "Picture in Picture", subtitle: "Continua mentre usi altre app", icon: "pip.fill")
                         SettingsDivider()
                         SettingsInfoRow(title: "AirPlay", subtitle: "Riproduci sui dispositivi compatibili", icon: "airplayvideo")
                     }
-                    settingsGroup("Aspetto", icon: "circle.lefthalf.filled") {
+                    sectionTitle("Aspetto")
+                    settingSurface {
                         Picker("Tema", selection: Binding(get: { session.appearance }, set: { session.setAppearance($0) })) { Text("Auto").tag("system"); Text("Chiaro").tag("light"); Text("Scuro").tag("dark") }.pickerStyle(.segmented).padding(14)
                         SettingsDivider()
                         SettingsToggleRow(title: "Animazioni", subtitle: "Transizioni dell'interfaccia", icon: "sparkles", isOn: Binding(get: { session.interfaceAnimations }, set: { session.setInterfaceAnimations($0) }))
                     }
-                    settingsGroup("Sicurezza", icon: "lock.shield.fill") {
-                        SettingsToggleRow(title: "Controllo genitori", subtitle: "Proteggi i contenuti con restrizioni", icon: "person.badge.shield.checkmark.fill", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) }))
+                    sectionTitle("Sicurezza")
+                    settingSurface {
+                        SettingsToggleRow(title: "Controllo genitori", subtitle: "Proteggi i contenuti con restrizioni", icon: "lock.shield.fill", isOn: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) }))
                     }
                     Button(role: .destructive) { showLogout = true } label: {
-                        HStack { Image(systemName: "rectangle.portrait.and.arrow.right"); Text("Esci dall'account").fontWeight(.bold); Spacer(); Image(systemName: "chevron.right") }
-                            .foregroundStyle(.red).padding(16).background(Color.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
-                    }.buttonStyle(.plain)
+                        Text("Esci da AtlantiX").font(.headline.bold()).foregroundStyle(.red).frame(maxWidth: .infinity).frame(height: 48).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    }.buttonStyle(.plain).padding(.horizontal, 16)
                     Spacer(minLength: 110)
-                }.padding(.horizontal, 16).padding(.top, 18)
+                }.padding(.top, 8)
             }
         }
         .preferredColorScheme(.dark).toolbar(.hidden, for: .navigationBar)
         .alert("Vuoi uscire dall'account?", isPresented: $showLogout) { Button("Annulla", role: .cancel) {}; Button("Esci", role: .destructive) { session.signOut() } }
     }
-    private var accountCard: some View {
-        HStack(spacing: 14) {
-            ZStack { Circle().fill(brandGradient).frame(width: 64, height: 64); Text(String(session.username.prefix(1)).uppercased()).font(.title.bold()).foregroundStyle(.white) }
-            VStack(alignment: .leading, spacing: 4) { Text(session.username).font(.title3.weight(.black)).foregroundStyle(.white); Text("Account AtlantiX attivo").font(.caption).foregroundStyle(.white.opacity(0.45)); Text(expiry).font(.caption2.bold()).foregroundStyle(atxMint) }
-            Spacer(); Image(systemName: "checkmark.seal.fill").foregroundStyle(atxMint).font(.title2)
-        }.padding(16).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 22)).overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.07)))
-    }
-    private var shortcutStrip: some View {
+    private var accountLinks: some View {
         HStack(spacing: 10) {
-            NavigationLink { FavoritesView() } label: { shortcut("La mia lista", "heart.fill") }
-            NavigationLink { WatchHistoryView() } label: { shortcut("Cronologia", "clock.arrow.circlepath") }
-        }.buttonStyle(.plain)
+            NavigationLink { FavoritesView() } label: { profileShortcut("La mia lista", "plus") }
+            NavigationLink { WatchHistoryView() } label: { profileShortcut("Cronologia", "clock.arrow.circlepath") }
+        }.buttonStyle(.plain).padding(.horizontal, 16)
     }
-    private func shortcut(_ title: String, _ icon: String) -> some View {
-        HStack(spacing: 10) { Image(systemName: icon).foregroundStyle(.white).frame(width: 40, height: 40).background(brandGradient, in: RoundedRectangle(cornerRadius: 13)); Text(title).font(.subheadline.bold()).foregroundStyle(.white); Spacer() }
-            .padding(12).frame(maxWidth: .infinity).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18))
+    private func profileShortcut(_ title: String, _ icon: String) -> some View {
+        VStack(spacing: 8) { Image(systemName: icon).font(.title3.bold()); Text(title).font(.caption.bold()) }.foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 74).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
     }
-    @ViewBuilder private func settingsGroup<Content: View>(_ title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: icon).font(.headline.bold()).foregroundStyle(.white)
-            VStack(spacing: 0) { content() }.background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20)).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.06)))
-        }
-    }
+    private func sectionTitle(_ title: String) -> some View { Text(title).font(.headline.bold()).foregroundStyle(.white).padding(.horizontal, 16) }
+    @ViewBuilder private func settingSurface<Content: View>(@ViewBuilder content: () -> Content) -> some View { VStack(spacing: 0) { content() }.background(Color.white.opacity(0.05)).padding(.horizontal, 16) }
     private var expiry: String {
         guard let timestamp = session.userInfo?.expDate, let seconds = TimeInterval(timestamp) else { return "Nessuna scadenza" }
         return "Scadenza: " + Date(timeIntervalSince1970: seconds).formatted(date: .abbreviated, time: .omitted)
