@@ -1,0 +1,5 @@
+AtlantiX 4.0 Build 139
+- Interfaccia ricostruita completamente in stile piattaforma streaming.
+- Nuova Home cinematografica, cataloghi, ricerca, profilo, lista e cronologia.
+- Nuova navigazione e nuova identità nero/rosso con icona A.
+- Player, API, download e logica account mantenuti.

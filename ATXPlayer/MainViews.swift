@@ -182,50 +182,20 @@ struct MainTabView: View {
             Group {
                 switch selectedTab {
                 case .home:
-                    NavigationStack { HomeDashboardV4(selectedTab: $selectedTab) }
+                    NavigationStack { RebornHomeView(selectedTab: $selectedTab) }
                 case .live:
-                    NavigationStack { ContentBrowser(type: .live) }
+                    NavigationStack { RebornCatalogView(type: .live) }
                 case .movies:
-                    NavigationStack { ContentBrowser(type: .movies) }
+                    NavigationStack { RebornCatalogView(type: .movies) }
                 case .series:
-                    NavigationStack { ContentBrowser(type: .series) }
+                    NavigationStack { RebornCatalogView(type: .series) }
                 case .downloads:
                     NavigationStack { DownloadsView() }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(spacing: 0) {
-                ForEach(AppTab.allCases, id: \.self) { tab in
-                    Button {
-                        withAnimation(.easeOut(duration: 0.18)) { selectedTab = tab }
-                    } label: {
-                        VStack(spacing: 5) {
-                            Image(systemName: tab.icon)
-                                .font(.system(size: 18, weight: selectedTab == tab ? .bold : .medium))
-                            Text(tab.rawValue)
-                                .font(.system(size: 9, weight: selectedTab == tab ? .bold : .medium))
-                        }
-                        .foregroundStyle(selectedTab == tab ? .white : .white.opacity(0.45))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .overlay(alignment: .top) {
-                            if selectedTab == tab {
-                                Capsule()
-                                    .fill(atxPrimary)
-                                    .frame(width: 28, height: 3)
-                                    .padding(.top, 1)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 5)
-            .background(Color.black)
-            .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
-            .ignoresSafeArea(edges: .bottom)
+            RebornTabBar(selectedTab: $selectedTab)
         }
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -4203,3 +4173,558 @@ struct DownloadsView: View {
     }
 }
 
+
+
+// MARK: - AtlantiX 4.0 Total Streaming Rebuild (Build 139)
+
+private let rebornRed = Color(red: 0.90, green: 0.03, blue: 0.08)
+private let rebornCard = Color(red: 0.075, green: 0.075, blue: 0.085)
+private let rebornMuted = Color.white.opacity(0.58)
+
+private struct RebornTabBar: View {
+    @Binding var selectedTab: MainTabView.AppTab
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(MainTabView.AppTab.allCases, id: \.self) { tab in
+                Button {
+                    withAnimation(.easeOut(duration: 0.16)) { selectedTab = tab }
+                } label: {
+                    VStack(spacing: 5) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 19, weight: selectedTab == tab ? .bold : .regular))
+                        Text(tab.rawValue)
+                            .font(.system(size: 9, weight: selectedTab == tab ? .bold : .medium))
+                    }
+                    .foregroundStyle(selectedTab == tab ? Color.white : Color.white.opacity(0.46))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 58)
+                    .overlay(alignment: .top) {
+                        if selectedTab == tab { Rectangle().fill(rebornRed).frame(height: 3) }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 2)
+        .background(.ultraThinMaterial)
+        .background(Color.black.opacity(0.92))
+        .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5) }
+        .ignoresSafeArea(edges: .bottom)
+    }
+}
+
+private struct RebornHomeView: View {
+    @EnvironmentObject var session: AppSession
+    @Binding var selectedTab: MainTabView.AppTab
+    @State private var showSearch = false
+    @State private var heroMovie: VODStream?
+
+    private var movies: [VODStream] { Array(session.allMovies.prefix(40)) }
+    private var series: [SeriesItem] { Array(session.allSeries.prefix(40)) }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 28) {
+                    hero
+                    if !session.continueWatching.isEmpty { continueWatching }
+                    movieRail(title: "Film popolari", items: movies)
+                    seriesRail(title: "Serie TV da guardare", items: series)
+                    if !session.accountWatchHistory.isEmpty { historyRail }
+                    quickLinks
+                }
+                .padding(.bottom, 105)
+            }
+            .ignoresSafeArea(edges: .top)
+
+            VStack {
+                topBar
+                Spacer()
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showSearch) { NavigationStack { RebornSearchView() } }
+        .task(id: session.allMovies.count) { pickHero() }
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            BrandMark(size: 36)
+            Text("ATLANTIX")
+                .font(.system(size: 20, weight: .black, design: .rounded))
+                .tracking(2)
+                .foregroundStyle(.white)
+            Spacer()
+            Button { showSearch = true } label: { topIcon("magnifyingglass") }
+            Button { Task { await session.refreshSafely() } } label: { topIcon(session.isRefreshing ? "hourglass" : "arrow.clockwise") }
+                .disabled(session.isRefreshing)
+            NavigationLink { RebornProfileView() } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(rebornRed)
+                    Text(String(session.username.prefix(1)).uppercased())
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(.white)
+                }.frame(width: 36, height: 36)
+            }.buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .background(LinearGradient(colors: [Color.black.opacity(0.95), Color.black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom))
+    }
+
+    private func topIcon(_ name: String) -> some View {
+        Image(systemName: name).font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+            .frame(width: 36, height: 36).contentShape(Rectangle())
+    }
+
+    @ViewBuilder private var hero: some View {
+        if let item = heroMovie ?? movies.first {
+            ZStack(alignment: .bottom) {
+                OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { accentGradient(for: item.name) }
+                }
+                .frame(height: 610)
+                .frame(maxWidth: .infinity)
+                .clipped()
+
+                LinearGradient(colors: [.clear, .black.opacity(0.12), .black.opacity(0.82), .black], startPoint: .top, endPoint: .bottom)
+
+                VStack(spacing: 12) {
+                    Spacer()
+                    Text(item.name)
+                        .font(.system(size: 35, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .padding(.horizontal, 22)
+                    HStack(spacing: 7) {
+                        Text("Film")
+                        if let genre = item.genre, !genre.isEmpty { Text("•"); Text(genre.components(separatedBy: ",").first ?? genre) }
+                        if let rating = item.rating, !rating.isEmpty { Text("•"); Text("★ \(rating)") }
+                    }
+                    .font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.75))
+                    HStack(spacing: 10) {
+                        NavigationLink { MovieDetailView(item: item) } label: {
+                            Label("Riproduci", systemImage: "play.fill")
+                                .font(.subheadline.bold()).foregroundStyle(.black)
+                                .frame(maxWidth: .infinity).frame(height: 46)
+                                .background(Color.white, in: RoundedRectangle(cornerRadius: 7))
+                        }
+                        Button {
+                            session.toggleFavorite(kind: .movies, streamID: item.streamID, title: item.name, imageURL: item.streamIcon, fileExtension: item.containerExtension)
+                        } label: {
+                            Label(session.isFavorite(kind: .movies, streamID: item.streamID) ? "Nella lista" : "La mia lista", systemImage: session.isFavorite(kind: .movies, streamID: item.streamID) ? "checkmark" : "plus")
+                                .font(.subheadline.bold()).foregroundStyle(.white)
+                                .frame(maxWidth: .infinity).frame(height: 46)
+                                .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 18)
+                }
+                .padding(.bottom, 16)
+            }
+        } else {
+            Rectangle().fill(Color.black).frame(height: 560)
+        }
+    }
+
+    private var continueWatching: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Continua a guardare")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(session.continueWatching) { progress in
+                        if let descriptor = session.descriptor(from: progress) {
+                            NavigationLink {
+                                PlayerScreen(title: descriptor.title, url: session.streamURL(type: descriptor.kind, id: descriptor.streamID, ext: descriptor.fileExtension), isLive: false, resume: descriptor)
+                            } label: { RebornContinueCard(progress: progress) }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }.padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func movieRail(title: String, items: [VODStream]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle(title)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(items) { item in
+                        NavigationLink { MovieDetailView(item: item) } label: {
+                            RebornPoster(title: item.name, imageURL: item.streamIcon, width: 122, height: 182)
+                        }.buttonStyle(.plain)
+                    }
+                }.padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func seriesRail(title: String, items: [SeriesItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle(title)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(items) { item in
+                        NavigationLink { SeriesDetailView(item: item) } label: {
+                            RebornPoster(title: item.name, imageURL: item.cover, width: 122, height: 182)
+                        }.buttonStyle(.plain)
+                    }
+                }.padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private var historyRail: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionTitle("Visti di recente")
+                Spacer()
+                NavigationLink { RebornHistoryView() } label: { Text("Vedi tutto").font(.caption.bold()).foregroundStyle(rebornMuted) }
+                    .padding(.trailing, 16)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(session.accountWatchHistory.prefix(20))) { item in
+                        RebornHistoryDestination(item: item)
+                    }
+                }.padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private var quickLinks: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("La tua libreria")
+            HStack(spacing: 10) {
+                NavigationLink { RebornMyListView() } label: { RebornQuickTile(icon: "plus", title: "La mia lista") }
+                NavigationLink { RebornHistoryView() } label: { RebornQuickTile(icon: "clock.arrow.circlepath", title: "Cronologia") }
+                Button { selectedTab = .downloads } label: { RebornQuickTile(icon: "arrow.down", title: "Download") }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text).font(.system(size: 21, weight: .bold)).foregroundStyle(.white).padding(.leading, 16)
+    }
+
+    private func pickHero() {
+        guard !session.allMovies.isEmpty else { heroMovie = nil; return }
+        heroMovie = session.allMovies.prefix(18).randomElement()
+    }
+}
+
+private struct RebornCatalogView: View {
+    @EnvironmentObject var session: AppSession
+    let type: ContentType
+    @State private var selectedCategory: String? = nil
+    @State private var search = ""
+    @State private var showSearch = false
+
+    private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
+    private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
+    private let posterCols = [GridItem(.adaptive(minimum: 104, maximum: 150), spacing: 8)]
+
+    private var movies: [VODStream] {
+        session.allMovies.filter { (selectedCategory == nil || $0.categoryID == selectedCategory) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
+    }
+    private var series: [SeriesItem] {
+        session.allSeries.filter { (selectedCategory == nil || $0.categoryID == selectedCategory) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
+    }
+    private var live: [LiveStream] {
+        session.allLive.filter { (selectedCategory == nil || $0.categoryID == selectedCategory) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    header
+                    categoryStrip
+                    if type == .live { liveWall } else { posterWall }
+                }.padding(.bottom, 110)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showSearch) { NavigationStack { RebornSearchView(initialType: type) } }
+    }
+
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 34, weight: .black)).foregroundStyle(.white)
+                Text(type == .live ? "Guarda ora" : type == .movies ? "Tutti i film" : "Tutte le serie")
+                    .font(.caption).foregroundStyle(rebornMuted)
+            }
+            Spacer()
+            Button { showSearch = true } label: {
+                Image(systemName: "magnifyingglass").font(.headline).foregroundStyle(.white).frame(width: 40, height: 40)
+            }.buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16).padding(.top, 10)
+    }
+
+    private var categoryStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button { selectedCategory = nil } label: { categoryChip("Tutti", selected: selectedCategory == nil) }
+                ForEach(categories) { c in
+                    Button { selectedCategory = c.categoryID } label: { categoryChip(c.categoryName, selected: selectedCategory == c.categoryID) }
+                }
+            }.padding(.horizontal, 16)
+        }
+    }
+
+    private func categoryChip(_ text: String, selected: Bool) -> some View {
+        Text(text).font(.caption.weight(.semibold)).lineLimit(1)
+            .foregroundStyle(selected ? Color.black : Color.white)
+            .padding(.horizontal, 13).frame(height: 34)
+            .background(selected ? Color.white : Color.white.opacity(0.09), in: Capsule())
+    }
+
+    private var posterWall: some View {
+        LazyVGrid(columns: posterCols, spacing: 14) {
+            if type == .movies {
+                ForEach(movies) { item in
+                    NavigationLink { MovieDetailView(item: item) } label: { RebornPoster(title: item.name, imageURL: item.streamIcon, width: nil, height: 185) }.buttonStyle(.plain)
+                }
+            } else {
+                ForEach(series) { item in
+                    NavigationLink { SeriesDetailView(item: item) } label: { RebornPoster(title: item.name, imageURL: item.cover, width: nil, height: 185) }.buttonStyle(.plain)
+                }
+            }
+        }.padding(.horizontal, 12)
+    }
+
+    private var liveWall: some View {
+        LazyVStack(spacing: 8) {
+            ForEach(live) { item in
+                NavigationLink { LiveDetailView(item: item) } label: { RebornLiveRow(item: item) }.buttonStyle(.plain)
+            }
+        }.padding(.horizontal, 12)
+    }
+}
+
+private struct RebornPoster: View {
+    let title: String
+    let imageURL: String?
+    let width: CGFloat?
+    let height: CGFloat
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { accentGradient(for: title) }
+            }
+            .frame(width: width, height: height)
+            .frame(maxWidth: width == nil ? .infinity : nil)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.white).lineLimit(2)
+                .frame(width: width, alignment: .leading)
+        }
+    }
+}
+
+private struct RebornContinueCard: View {
+    let progress: PlaybackProgress
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .bottom) {
+                OptimizedAsyncImage(url: URL(string: progress.imageURL ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() } else { accentGradient(for: progress.title) }
+                }
+                .frame(width: 190, height: 108).clipped()
+                ProgressView(value: progress.fraction).tint(rebornRed).padding(.horizontal, 7).padding(.bottom, 5)
+            }.clipShape(RoundedRectangle(cornerRadius: 6))
+            Text(progress.title).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width: 190, alignment: .leading)
+        }
+    }
+}
+
+private struct RebornLiveRow: View {
+    let item: LiveStream
+    var body: some View {
+        HStack(spacing: 12) {
+            OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFit().padding(7) }
+                else { Image(systemName: "tv.fill").foregroundStyle(.white.opacity(0.7)) }
+            }
+            .frame(width: 76, height: 56).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) { Circle().fill(rebornRed).frame(width: 7, height: 7); Text("IN DIRETTA").font(.system(size: 9, weight: .black)).foregroundStyle(rebornRed) }
+                Text(item.name).font(.subheadline.bold()).foregroundStyle(.white).lineLimit(2)
+            }
+            Spacer()
+            Image(systemName: "play.fill").foregroundStyle(.white).frame(width: 36, height: 36).background(Color.white.opacity(0.12), in: Circle())
+        }
+        .padding(10).background(rebornCard, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct RebornQuickTile: View {
+    let icon: String
+    let title: String
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon).font(.title3.bold()).foregroundStyle(.white)
+            Text(title).font(.caption.bold()).foregroundStyle(.white).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity).frame(height: 92)
+        .background(rebornCard, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct RebornSearchView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    var initialType: ContentType? = nil
+    @State private var query = ""
+    private let cols = [GridItem(.adaptive(minimum: 102, maximum: 150), spacing: 8)]
+    private var movieResults: [VODStream] { query.isEmpty ? [] : Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(query) }.prefix(30)) }
+    private var seriesResults: [SeriesItem] { query.isEmpty ? [] : Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(query) }.prefix(30)) }
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Button { dismiss() } label: { Image(systemName: "chevron.left").frame(width: 40, height: 40) }.foregroundStyle(.white)
+                    HStack { Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.55)); TextField("Cerca in AtlantiX", text: $query).foregroundStyle(.white).textInputAutocapitalization(.never) }
+                        .padding(.horizontal, 12).frame(height: 42).background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+                }.padding(12)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 22) {
+                        if !movieResults.isEmpty { Text("Film").font(.title3.bold()).foregroundStyle(.white); LazyVGrid(columns: cols, spacing: 14) { ForEach(movieResults) { item in NavigationLink { MovieDetailView(item: item) } label: { RebornPoster(title: item.name, imageURL: item.streamIcon, width: nil, height: 170) }.buttonStyle(.plain) } } }
+                        if !seriesResults.isEmpty { Text("Serie TV").font(.title3.bold()).foregroundStyle(.white); LazyVGrid(columns: cols, spacing: 14) { ForEach(seriesResults) { item in NavigationLink { SeriesDetailView(item: item) } label: { RebornPoster(title: item.name, imageURL: item.cover, width: nil, height: 170) }.buttonStyle(.plain) } } }
+                    }.padding(14).padding(.bottom, 50)
+                }
+            }
+        }.toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+private struct RebornHistoryView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    private let cols = [GridItem(.adaptive(minimum: 105, maximum: 150), spacing: 8)]
+    var body: some View {
+        ZStack { Color.black.ignoresSafeArea(); ScrollView { LazyVStack(alignment: .leading, spacing: 18) { RebornPageHeader(title: "Cronologia", onBack: { dismiss() }); LazyVGrid(columns: cols, spacing: 14) { ForEach(session.accountWatchHistory) { item in RebornHistoryDestination(item: item) } }.padding(.horizontal, 12) }.padding(.bottom, 50) } }.toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+private struct RebornHistoryDestination: View {
+    @EnvironmentObject var session: AppSession
+    let item: WatchHistoryItem
+    var body: some View {
+        Group {
+            if let kind = ContentType(rawValue: item.kind) {
+                NavigationLink { PlayerScreen(title: item.title, url: session.streamURL(type: kind, id: item.streamID, ext: item.fileExtension), isLive: false, resume: PlaybackDescriptor(kind: kind, streamID: item.streamID, title: item.title, subtitle: item.subtitle, imageURL: item.imageURL, fileExtension: item.fileExtension)) } label: { RebornPoster(title: item.title, imageURL: item.imageURL, width: 116, height: 168) }
+            } else { RebornPoster(title: item.title, imageURL: item.imageURL, width: 116, height: 168) }
+        }.buttonStyle(.plain)
+    }
+}
+
+private struct RebornMyListView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    private let cols = [GridItem(.adaptive(minimum: 105, maximum: 150), spacing: 8)]
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    RebornPageHeader(title: "La mia lista", onBack: { dismiss() })
+                    LazyVGrid(columns: cols, spacing: 14) {
+                        ForEach(session.accountFavorites) { fav in favoriteCard(fav) }
+                    }.padding(.horizontal, 12)
+                }.padding(.bottom, 50)
+            }
+        }.toolbar(.hidden, for: .navigationBar)
+    }
+    @ViewBuilder private func favoriteCard(_ fav: FavoriteItem) -> some View {
+        if fav.kind == ContentType.movies.rawValue, let item = session.allMovies.first(where: { $0.streamID == fav.streamID }) {
+            NavigationLink { MovieDetailView(item: item) } label: { RebornPoster(title: fav.title, imageURL: fav.imageURL, width: nil, height: 170) }.buttonStyle(.plain)
+        } else if fav.kind == ContentType.series.rawValue, let item = session.allSeries.first(where: { $0.seriesID == fav.streamID }) {
+            NavigationLink { SeriesDetailView(item: item) } label: { RebornPoster(title: fav.title, imageURL: fav.imageURL, width: nil, height: 170) }.buttonStyle(.plain)
+        } else {
+            RebornPoster(title: fav.title, imageURL: fav.imageURL, width: nil, height: 170)
+        }
+    }
+}
+
+private struct RebornProfileView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmLogout = false
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    RebornPageHeader(title: "Profilo", onBack: { dismiss() })
+                    profileHero
+                    profileSection("Riproduzione") {
+                        toggleRow("Riproduzione automatica", "Avvia automaticamente il contenuto successivo", value: Binding(get: { session.autoplay }, set: { session.setAutoplay($0) }))
+                        toggleRow("Aggiorna all'apertura", "Sincronizza la playlist quando avvii l'app", value: Binding(get: { session.refreshOnLaunch }, set: { session.setRefreshOnLaunch($0) }))
+                    }
+                    profileSection("Libreria") {
+                        NavigationLink { RebornMyListView() } label: { navRow("La mia lista", "plus") }
+                        NavigationLink { RebornHistoryView() } label: { navRow("Cronologia", "clock.arrow.circlepath") }
+                        NavigationLink { DownloadsView() } label: { navRow("Download", "arrow.down.circle") }
+                    }
+                    profileSection("Applicazione") {
+                        toggleRow("Animazioni", "Transizioni e animazioni dell'interfaccia", value: Binding(get: { session.interfaceAnimations }, set: { session.setInterfaceAnimations($0) }))
+                        toggleRow("Controllo genitori", "Proteggi l'accesso ai contenuti", value: Binding(get: { session.parentalControl }, set: { session.setParentalControl($0) }))
+                    }
+                    Button(role: .destructive) { confirmLogout = true } label: {
+                        Text("Esci dall'account").font(.headline.bold()).foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 50).background(rebornRed, in: RoundedRectangle(cornerRadius: 7))
+                    }.padding(.horizontal, 16)
+                }.padding(.bottom, 70)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .alert("Uscire da AtlantiX?", isPresented: $confirmLogout) { Button("Annulla", role: .cancel) {}; Button("Esci", role: .destructive) { session.signOut() } }
+    }
+
+    private var profileHero: some View {
+        HStack(spacing: 16) {
+            ZStack { RoundedRectangle(cornerRadius: 10).fill(rebornRed); Text(String(session.username.prefix(1)).uppercased()).font(.system(size: 28, weight: .black)).foregroundStyle(.white) }.frame(width: 70, height: 70)
+            VStack(alignment: .leading, spacing: 5) { Text(session.username).font(.title2.weight(.black)).foregroundStyle(.white); Text(session.userInfo?.status ?? "Account attivo").font(.caption).foregroundStyle(rebornMuted) }
+            Spacer()
+        }.padding(.horizontal, 16)
+    }
+
+    private func profileSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased()).font(.caption2.weight(.black)).tracking(1.3).foregroundStyle(rebornMuted).padding(.horizontal, 16)
+            VStack(spacing: 0) { content() }.background(rebornCard, in: RoundedRectangle(cornerRadius: 8)).padding(.horizontal, 16)
+        }
+    }
+    private func toggleRow(_ title: String, _ subtitle: String, value: Binding<Bool>) -> some View {
+        HStack(spacing: 12) { VStack(alignment: .leading, spacing: 3) { Text(title).font(.subheadline.bold()).foregroundStyle(.white); Text(subtitle).font(.caption).foregroundStyle(rebornMuted) }; Spacer(); Toggle("", isOn: value).labelsHidden().tint(rebornRed) }.padding(14)
+    }
+    private func navRow(_ title: String, _ icon: String) -> some View {
+        HStack { Image(systemName: icon).foregroundStyle(.white).frame(width: 28); Text(title).font(.subheadline.bold()).foregroundStyle(.white); Spacer(); Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.35)) }.padding(14)
+    }
+}
+
+private struct RebornPageHeader: View {
+    let title: String
+    let onBack: () -> Void
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onBack) { Image(systemName: "chevron.left").font(.headline.bold()).foregroundStyle(.white).frame(width: 44, height: 44).background(Color.white.opacity(0.09), in: Circle()) }.buttonStyle(.plain)
+            Text(title).font(.system(size: 28, weight: .black)).foregroundStyle(.white)
+            Spacer()
+        }.padding(.horizontal, 12).padding(.top, 8)
+    }
+}
