@@ -1774,7 +1774,7 @@ struct MovieDetailView: View {
     private var plot: String? { info?.plot ?? item.plot }
     private var genre: String? { info?.genre ?? item.genre }
     private var castNames: [String] {
-        Array((info?.cast ?? item.cast ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(10)).map(String.init)
+        Array((info?.cast ?? item.cast ?? "").split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(10))
     }
     private var trailerURL: URL? { normalizedTrailerURL(info?.youtubeTrailer) }
     private var movieID: Int { details?.movieData?.streamID ?? item.streamID }
@@ -2113,7 +2113,7 @@ struct SeriesDetailView: View {
     private var plot: String? { details?.plot ?? item.plot }
     private var genre: String? { details?.genre ?? item.genre }
     private var seriesCast: [String] {
-        Array((details?.cast ?? item.cast ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(10)).map(String.init)
+        Array((details?.cast ?? item.cast ?? "").split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(10))
     }
     private var relatedSeries: [SeriesItem] {
         guard let genre, !genre.isEmpty else { return [] }
