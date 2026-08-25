@@ -821,7 +821,7 @@ struct ContentBrowser: View {
                     searchBar
                     NavigationLink { ItemGrid(type: type, category: nil) } label: { allCatalog }
                         .buttonStyle(.plain)
-                    Text("Categorie").font(.title2.black()).foregroundStyle(.white).padding(.horizontal, 16)
+                    Text("Categorie").font(.title2.weight(.black)).foregroundStyle(.white).padding(.horizontal, 16)
                     LazyVStack(spacing: 10) {
                         ForEach(Array(filtered.enumerated()), id: \.element.id) { index, category in
                             NavigationLink { ItemGrid(type: type, category: category) } label: { categoryRow(category, index: index) }
@@ -902,7 +902,7 @@ struct ContentBrowser: View {
                 Text("\(count(for: category).formatted()) contenuti").font(.caption).foregroundStyle(.white.opacity(0.42))
             }
             Spacer()
-            Text(String(format: "%02d", index + 1)).font(.caption2.black()).foregroundStyle(.white.opacity(0.25))
+            Text(String(format: "%02d", index + 1)).font(.caption2.weight(.black)).foregroundStyle(.white.opacity(0.25))
             Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.white.opacity(0.35))
         }
         .padding(12).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20)).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.06)))
@@ -1019,7 +1019,7 @@ struct ItemGrid: View {
                     Image(systemName: "chevron.left").font(.headline.bold()).foregroundStyle(.white)
                         .frame(width: 48, height: 48).background(Color.black.opacity(0.46), in: Circle())
                 }.buttonStyle(.plain).padding(.bottom, 45)
-                Text(type == .movies ? "FILM" : "SERIE TV").font(.caption2.black()).tracking(1.5).foregroundStyle(atxCyan)
+                Text(type == .movies ? "FILM" : "SERIE TV").font(.caption2.weight(.black)).tracking(1.5).foregroundStyle(atxCyan)
                 Text(category?.categoryName ?? "Tutti i contenuti").font(.system(size: 30, weight: .black, design: .rounded)).foregroundStyle(.white).lineLimit(2)
                 Text("\(resultCount.formatted()) titoli").font(.caption).foregroundStyle(.white.opacity(0.55))
             }.padding(18)
@@ -1053,7 +1053,7 @@ struct ItemGrid: View {
                     .frame(width: 48, height: 48).background(Color.white.opacity(0.08), in: Circle())
             }.buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
-                Text(category?.categoryName ?? "Tutti i canali").font(.title3.black()).foregroundStyle(.white).lineLimit(1)
+                Text(category?.categoryName ?? "Tutti i canali").font(.title3.weight(.black)).foregroundStyle(.white).lineLimit(1)
                 Text("\(resultCount.formatted()) canali live").font(.caption).foregroundStyle(.white.opacity(0.45))
             }
             Spacer(); Circle().fill(Color.red).frame(width: 8, height: 8)
@@ -1372,7 +1372,7 @@ struct MovieDetailView: View {
             .frame(maxWidth: .infinity).frame(height: 360).clipped()
             LinearGradient(colors: [.clear, Color.black.opacity(0.94)], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 9) {
-                Text("FILM").font(.caption2.black()).tracking(1.5).foregroundStyle(atxCyan)
+                Text("FILM").font(.caption2.weight(.black)).tracking(1.5).foregroundStyle(atxCyan)
                 Text(title).font(.system(size: 30, weight: .black, design: .rounded)).foregroundStyle(.white).lineLimit(3)
                 HStack(spacing: 8) {
                     metadataBadge(quality, icon: nil)
@@ -1891,7 +1891,7 @@ struct SeriesHeader: View {
             .frame(maxWidth: .infinity).frame(height: 380).clipped()
             LinearGradient(colors: [.clear, Color.black.opacity(0.94)], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 8) {
-                Text("SERIE TV").font(.caption2.black()).tracking(1.5).foregroundStyle(atxCyan)
+                Text("SERIE TV").font(.caption2.weight(.black)).tracking(1.5).foregroundStyle(atxCyan)
                 Text(title).font(.system(size: 30, weight: .black, design: .rounded)).foregroundStyle(.white).lineLimit(3)
                 if let genre, !genre.isEmpty { Text(genre).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.60)).lineLimit(2) }
                 if let plot, !plot.isEmpty { Text(plot).font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(3) }
@@ -2805,7 +2805,7 @@ struct WatchHistoryView: View {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("LA TUA ATTIVITÀ").font(.caption2.black()).tracking(1.5).foregroundStyle(atxCyan)
+                            Text("LA TUA ATTIVITÀ").font(.caption2.weight(.black)).tracking(1.5).foregroundStyle(atxCyan)
                             Text("Cronologia").font(.system(size: 34, weight: .black)).foregroundStyle(.white)
                             Text("Riprendi da dove avevi lasciato").font(.caption).foregroundStyle(.white.opacity(0.45))
                         }
@@ -2924,7 +2924,7 @@ struct SettingsView: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("ATLANTIX").font(.caption2.black()).tracking(1.6).foregroundStyle(atxCyan)
+                        Text("ATLANTIX").font(.caption2.weight(.black)).tracking(1.6).foregroundStyle(atxCyan)
                         Text("Impostazioni").font(.system(size: 36, weight: .black)).foregroundStyle(.white)
                         Text("Il tuo spazio, le tue preferenze").font(.caption).foregroundStyle(.white.opacity(0.44))
                     }
@@ -2961,7 +2961,7 @@ struct SettingsView: View {
     private var accountCard: some View {
         HStack(spacing: 14) {
             ZStack { Circle().fill(brandGradient).frame(width: 64, height: 64); Text(String(session.username.prefix(1)).uppercased()).font(.title.bold()).foregroundStyle(.white) }
-            VStack(alignment: .leading, spacing: 4) { Text(session.username).font(.title3.black()).foregroundStyle(.white); Text("Account AtlantiX attivo").font(.caption).foregroundStyle(.white.opacity(0.45)); Text(expiry).font(.caption2.bold()).foregroundStyle(atxMint) }
+            VStack(alignment: .leading, spacing: 4) { Text(session.username).font(.title3.weight(.black)).foregroundStyle(.white); Text("Account AtlantiX attivo").font(.caption).foregroundStyle(.white.opacity(0.45)); Text(expiry).font(.caption2.bold()).foregroundStyle(atxMint) }
             Spacer(); Image(systemName: "checkmark.seal.fill").foregroundStyle(atxMint).font(.title2)
         }.padding(16).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 22)).overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.07)))
     }

@@ -1,0 +1,6 @@
+AtlantiX 4.0 - Build 128
+
+Correzioni:
+- Corretti 9 errori SwiftUI nel redesign Dark Reborn.
+- Sostituito l'uso non valido di Font.black() con Font.weight(.black).
+- Grafica e funzionalita della Build 127 mantenute invariate.
