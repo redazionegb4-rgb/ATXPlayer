@@ -1,0 +1,9 @@
+AtlantiX 4.0 – Build 144
+
+Home:
+- Aggiunte due sezioni dinamiche prese da categorie reali del catalogo: una Film e una Serie TV.
+- Le categorie vengono scelte casualmente tra quelle che contengono contenuti.
+- Ogni riga mostra al massimo 14 titoli per non appesantire la Home.
+- La selezione resta stabile durante la sessione e viene aggiornata solo quando cambia il catalogo disponibile.
+
+Invariati player, Download, Live dinamica, Profilo e navigazione.

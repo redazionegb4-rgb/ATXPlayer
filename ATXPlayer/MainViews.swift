@@ -4413,6 +4413,8 @@ private struct RebornHomeView: View {
     @Binding var selectedTab: MainTabView.AppTab
     @State private var showSearch = false
     @State private var heroMovie: VODStream?
+    @State private var featuredMovieCategory: Category?
+    @State private var featuredSeriesCategory: Category?
 
     private var movies: [VODStream] { Array(session.allMovies.prefix(40)) }
     private var series: [SeriesItem] { Array(session.allSeries.prefix(40)) }
@@ -4426,6 +4428,14 @@ private struct RebornHomeView: View {
                     if !session.continueWatching.isEmpty { continueWatching }
                     movieRail(title: "Film popolari", items: movies)
                     seriesRail(title: "Serie TV da guardare", items: series)
+                    if let category = featuredMovieCategory {
+                        let items = Array(session.allMovies.filter { $0.categoryID == category.categoryID }.prefix(14))
+                        if !items.isEmpty { movieRail(title: category.categoryName, items: items) }
+                    }
+                    if let category = featuredSeriesCategory {
+                        let items = Array(session.allSeries.filter { $0.categoryID == category.categoryID }.prefix(14))
+                        if !items.isEmpty { seriesRail(title: category.categoryName, items: items) }
+                    }
                     if !session.accountWatchHistory.isEmpty { historyRail }
                     quickLinks
                 }
@@ -4441,6 +4451,9 @@ private struct RebornHomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { RebornSearchView() } }
         .task(id: session.allMovies.count) { pickHero() }
+        .task(id: "\(session.movieCategories.count)-\(session.seriesCategories.count)-\(session.allMovies.count)-\(session.allSeries.count)") {
+            pickFeaturedCategories()
+        }
     }
 
     private var topBar: some View {
@@ -4608,6 +4621,22 @@ private struct RebornHomeView: View {
     private func pickHero() {
         guard !session.allMovies.isEmpty else { heroMovie = nil; return }
         heroMovie = session.allMovies.prefix(18).randomElement()
+    }
+
+    private func pickFeaturedCategories() {
+        let movieCandidates = session.movieCategories.filter { category in
+            session.allMovies.contains { $0.categoryID == category.categoryID }
+        }
+        let seriesCandidates = session.seriesCategories.filter { category in
+            session.allSeries.contains { $0.categoryID == category.categoryID }
+        }
+
+        if featuredMovieCategory == nil || !movieCandidates.contains(featuredMovieCategory!) {
+            featuredMovieCategory = movieCandidates.randomElement()
+        }
+        if featuredSeriesCategory == nil || !seriesCandidates.contains(featuredSeriesCategory!) {
+            featuredSeriesCategory = seriesCandidates.randomElement()
+        }
     }
 }
 
