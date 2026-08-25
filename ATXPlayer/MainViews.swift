@@ -368,10 +368,17 @@ struct MainTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            RebornTabBar(selectedTab: $selectedTab)
+            RebornTabBar(selectedTab: $selectedTab, showsLive: !session.allLive.isEmpty)
         }
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .onChange(of: session.allLive.isEmpty) { _, isEmpty in
+            // Se dopo login/refresh l'account non ha canali Live, evita di lasciare
+            // selezionata una sezione che non deve più essere disponibile.
+            if isEmpty && selectedTab == .live {
+                selectedTab = .home
+            }
+        }
         .fullScreenCover(isPresented: $showProfileChooser) {
             ATXProfileChooserView {
                 selectedTab = .home
@@ -4363,9 +4370,17 @@ private let rebornMuted = Color.white.opacity(0.58)
 
 private struct RebornTabBar: View {
     @Binding var selectedTab: MainTabView.AppTab
+    let showsLive: Bool
+
+    private var visibleTabs: [MainTabView.AppTab] {
+        MainTabView.AppTab.allCases.filter { tab in
+            tab != .live || showsLive
+        }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(MainTabView.AppTab.allCases, id: \.self) { tab in
+            ForEach(visibleTabs, id: \.self) { tab in
                 Button {
                     withAnimation(.easeOut(duration: 0.16)) { selectedTab = tab }
                 } label: {
