@@ -1,0 +1,7 @@
+AtlantiX 2.1 — Build 117
+
+- Corretto il Live che mostrava il primo fotogramma ma restava fermo.
+- Rimosse le chiamate concorrenti e ripetute a play/rate dal controller.
+- AVPlayer attende ora che lo stream sia pronto e verifica l’avanzamento reale.
+- Se necessario esegue al massimo due cicli pausa/play automatici.
+- Buffer Live reso più stabile senza modificare Film, Serie, rotazione o PiP.

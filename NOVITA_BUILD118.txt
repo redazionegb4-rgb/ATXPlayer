@@ -1,0 +1,9 @@
+ATLANTIX 3.0 — BUILD 118
+
+- Interfaccia completamente ridisegnata in stile piattaforma streaming.
+- Colori originali AtlantiX mantenuti.
+- Nuova Home cinematografica con hero a tutta larghezza.
+- Nuove righe orizzontali per Film, Serie, preferiti e contenuti recenti.
+- Nuova barra di navigazione flottante.
+- Card e griglie completamente ridisegnate.
+- Player Live e correzioni PiP/rotazione mantenuti invariati.

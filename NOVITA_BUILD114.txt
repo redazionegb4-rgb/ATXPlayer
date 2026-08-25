@@ -1,0 +1,7 @@
+AtlantiX 2.1 - Build 114
+
+- Ottimizzato l’avvio dei canali Live in formato HLS/m3u8.
+- Ridotto il buffer iniziale della diretta.
+- Aggiunti tentativi automatici di avvio senza pausa/play manuale.
+- Mostrata una schermata di caricamento finché audio e video non sono realmente partiti.
+- Mantenute le correzioni per film, serie TV, rotazione e Picture in Picture.

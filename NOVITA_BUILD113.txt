@@ -1,0 +1,8 @@
+AtlantiX 2.1 - Build 113
+
+- Corretto il blocco del primo fotogramma nei canali Live.
+- Avvio automatico rinforzato senza dover premere Pausa e Play.
+- Ripresa automatica di film ed episodi dopo rotazione dello schermo.
+- Ripresa automatica dopo uscita dal Picture in Picture.
+- Migliorata la gestione del buffering e dello stato di AVPlayer.
+- Mantenute tutte le funzioni e le correzioni della versione 2.0.

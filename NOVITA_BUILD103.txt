@@ -1,0 +1,9 @@
+AtlantiX 2.0 - Build 103
+
+- Icona Impostazioni uniformata alle altre icone della Home.
+- Pagina Download ridisegnata con sezioni Film e Serie TV.
+- Barra di ricerca per filtrare film, serie ed episodi scaricati.
+- Serie TV raggruppate e ordinate per titolo.
+- Card download più moderne e ordinate.
+- Download in corso con percentuale e barra di avanzamento.
+- Testo del totale contenuti nei riquadri categorie bianco in modalità scura.

@@ -1,0 +1,7 @@
+AtlantiX 2.0 - Build 105
+
+- Corretto il margine inferiore della pagina Impostazioni.
+- La voce “Esci dall'account” ora scorre completamente sopra la barra inferiore.
+- Il pulsante resta sempre visibile e cliccabile.
+- Versione mantenuta a 2.0.
+- Numero build aggiornato a 105.

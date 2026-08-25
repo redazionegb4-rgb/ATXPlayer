@@ -1,0 +1,7 @@
+ATLANTIX 2.1 — BUILD 116
+
+- Corretto l'avvio dei canali Live che potevano aprirsi in pausa.
+- AVPlayer ora avvia la riproduzione dopo il collegamento ad AVPlayerViewController e quando lo stream diventa pronto.
+- Retry iniziali limitati ai primi secondi, senza timer permanenti.
+- La pausa manuale resta disponibile dopo l'avvio.
+- Film, Serie, rotazione e Picture in Picture non modificati.

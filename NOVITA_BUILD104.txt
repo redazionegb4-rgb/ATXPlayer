@@ -1,0 +1,6 @@
+AtlantiX 2.0 - Build 104
+
+- Rimossa l’icona Impostazioni dall’intestazione della pagina Download.
+- Le Impostazioni restano accessibili dalla Home.
+- Versione mantenuta a 2.0.
+- Numero build aggiornato a 104.

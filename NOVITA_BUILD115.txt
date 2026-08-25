@@ -1,0 +1,9 @@
+ATLANTIX 2.1 — BUILD 115
+
+• Ottimizzato l'avvio dei canali Live con AVPlayer.
+• Avvio automatico immediato con buffer iniziale ridotto.
+• Retry limitati esclusivamente ai primi secondi della diretta.
+• Eliminato il timer continuo che poteva appesantire l'app.
+• Migliorata la compatibilità con stream HLS più lenti.
+• Invariate le correzioni di Film, Serie, rotazione e Picture in Picture.
+• Nessuna dipendenza esterna: niente VLC, SPM o CocoaPods.

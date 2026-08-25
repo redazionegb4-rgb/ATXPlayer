@@ -1,0 +1,6 @@
+AtlantiX 3.0 — Build 123
+
+- Corretto il contatore presente in ogni singolo riquadro categoria Live, Film e Serie TV.
+- Il numero viene ora calcolato direttamente dai contenuti reali associati alla categoria.
+- Normalizzati gli ID categoria per evitare valori errati dovuti a spazi o formati differenti.
+- Nessuna modifica alla grafica della Home o alle altre funzioni.

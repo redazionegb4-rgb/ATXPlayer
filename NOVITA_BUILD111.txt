@@ -1,0 +1,6 @@
+AtlantiX 2.0 - Build 111
+
+- Eliminazione dei download con swipe verso sinistra.
+- Aggiunto pulsante rosso Elimina con icona cestino.
+- Rimossa la pressione prolungata per eliminare i contenuti.
+- Mantenuta la separazione dei download per ciascun account.

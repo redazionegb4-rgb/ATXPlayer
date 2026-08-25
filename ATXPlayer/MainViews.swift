@@ -1,4 +1,4 @@
-// ATLANTIX 3.0 — COMPLETE STREAMING UI REDESIGN
+// ATLANTIX 4.0 — PANEL-INSPIRED COMPLETE UI REDESIGN
 import Foundation
 import SwiftUI
 import AVKit
@@ -82,14 +82,26 @@ private struct OptimizedAsyncImage<Content: View>: View {
     }
 }
 
-private let brandGradient = LinearGradient(colors: [.cyan, .purple, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
-private let pageBackground = Color(uiColor: .systemBackground)
+// MARK: - AtlantiX 4.0 design system (inspired by the new AtlantiX panel)
+private let atxPrimary = Color(red: 0.38, green: 0.43, blue: 1.00)
+private let atxSecondary = Color(red: 0.57, green: 0.49, blue: 0.98)
+private let atxMint = Color(red: 0.20, green: 0.74, blue: 0.51)
+private let atxOrange = Color(red: 1.00, green: 0.56, blue: 0.14)
+private let atxCanvas = Color(uiColor: .systemGroupedBackground)
+private let atxSurface = Color(uiColor: .secondarySystemGroupedBackground)
+private let atxStroke = Color.primary.opacity(0.075)
+private let brandGradient = LinearGradient(colors: [atxPrimary, atxSecondary], startPoint: .topLeading, endPoint: .bottomTrailing)
+private let pageBackground = atxCanvas
 
 private struct StreamingBackdrop: View {
     var body: some View {
         ZStack {
-            Color(uiColor: .systemBackground)
-            LinearGradient(colors: [Color.purple.opacity(0.18), Color.clear, Color.cyan.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            atxCanvas
+            LinearGradient(
+                colors: [atxPrimary.opacity(0.075), Color.clear, atxSecondary.opacity(0.045)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         }
         .ignoresSafeArea()
     }
@@ -98,9 +110,16 @@ private struct StreamingBackdrop: View {
 private extension View {
     func streamingPanel(radius: CGFloat = 24) -> some View {
         self
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1))
-            .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
+            .background(atxSurface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(atxStroke, lineWidth: 1))
+            .shadow(color: .black.opacity(0.055), radius: 14, y: 7)
+    }
+
+    func atxDashboardCard(radius: CGFloat = 24) -> some View {
+        self
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(atxStroke, lineWidth: 1))
+            .shadow(color: atxPrimary.opacity(0.06), radius: 16, y: 8)
     }
 }
 
@@ -150,7 +169,7 @@ struct MainTabView: View {
 
         var icon: String {
             switch self {
-            case .home: return "house.fill"
+            case .home: return "rectangle.grid.2x2.fill"
             case .live: return "dot.radiowaves.left.and.right"
             case .movies: return "film.fill"
             case .series: return "rectangle.stack.fill"
@@ -174,23 +193,23 @@ struct MainTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(spacing: 2) {
+            HStack(spacing: 6) {
                 ForEach(AppTab.allCases, id: \.self) { tab in
                     Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { selectedTab = tab }
+                        withAnimation(.easeOut(duration: 0.18)) { selectedTab = tab }
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: 5) {
                             ZStack {
-                                if selectedTab == tab {
-                                    Capsule().fill(brandGradient).frame(width: 44, height: 28)
-                                }
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(selectedTab == tab ? AnyShapeStyle(brandGradient) : AnyShapeStyle(Color.clear))
+                                    .frame(width: 42, height: 32)
                                 Image(systemName: tab.icon)
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundStyle(selectedTab == tab ? .white : .secondary)
                             }
                             Text(tab.rawValue)
                                 .font(.system(size: 9, weight: selectedTab == tab ? .bold : .semibold))
-                                .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                                .foregroundStyle(selectedTab == tab ? atxPrimary : .secondary)
                         }
                         .frame(maxWidth: .infinity)
                         .contentShape(Rectangle())
@@ -200,9 +219,9 @@ struct MainTabView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 26).stroke(Color.white.opacity(0.10)))
-            .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(atxStroke))
+            .shadow(color: .black.opacity(0.10), radius: 18, y: 8)
             .padding(.horizontal, 12)
             .padding(.bottom, 6)
         }
@@ -332,27 +351,30 @@ struct HomeView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 8) {
-            BrandMark(size: 42)
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(brandGradient)
+                    .frame(width: 44, height: 44)
+                BrandMark(size: 30)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("ATLANTIX")
-                    .font(.system(size: 18, weight: .black, design: .rounded))
-                    .tracking(1.4)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-
-                Text("Bentornato, \(session.username) · \(lastUpdateCompactText)")
+                Text("PANORAMICA")
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(1.5)
+                    .foregroundStyle(atxPrimary)
+                Text("AtlantiX")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                Text("Bentornato, \(session.username)")
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
             }
             .layoutPriority(1)
 
             Spacer(minLength: 4)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 compactCircleButton("magnifyingglass") { showSearch = true }
                 compactCircleButton(session.isRefreshing ? "hourglass" : "arrow.clockwise") {
                     Task { await session.refreshSafely() }
@@ -361,22 +383,18 @@ struct HomeView: View {
 
                 NavigationLink { SettingsView() } label: {
                     Image(systemName: "gearshape.fill")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.primary)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(atxPrimary)
                         .frame(width: 38, height: 38)
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.primary.opacity(0.08)))
+                        .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .contentShape(Circle())
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) { LinearGradient(colors: [Color.clear, Color.primary.opacity(0.08)], startPoint: .leading, endPoint: .trailing).frame(height: 1) }
-        .contentShape(Rectangle())
+        .padding(.vertical, 12)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .overlay(alignment: .bottom) { Rectangle().fill(atxStroke).frame(height: 1) }
     }
 
     private var lastUpdateText: String {
@@ -514,66 +532,82 @@ struct HomeView: View {
 
     @ViewBuilder private var hero: some View {
         if let featured {
-            ZStack(alignment: .bottomLeading) {
-                OptimizedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
-                    if let image = phase.image { image.resizable().scaledToFill() }
-                    else { heroFallback }
-                }
-                .frame(maxWidth: .infinity).frame(height: 430).clipped()
+            ZStack {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
 
-                LinearGradient(
-                    colors: [.black.opacity(0.05), .clear, .black.opacity(0.48), Color(uiColor: .systemBackground)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                LinearGradient(colors: [.black.opacity(0.65), .clear], startPoint: .leading, endPoint: .trailing)
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("IN EVIDENZA")
+                            .font(.system(size: 9, weight: .black))
+                            .tracking(1.8)
+                            .foregroundStyle(atxPrimary)
 
-                VStack(alignment: .leading, spacing: 11) {
-                    Text("ATLANTIX  •  \(featured.kind.uppercased())")
-                        .font(.caption2.weight(.black)).tracking(2.2).foregroundStyle(.cyan)
-                    Text(featured.title)
-                        .font(.system(size: 34, weight: .black, design: .rounded))
-                        .foregroundStyle(.white).lineLimit(2)
-                        .shadow(color: .black.opacity(0.6), radius: 8)
-                    Text(featured.subtitle)
-                        .font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.84)).lineLimit(2)
+                        Text(featured.title)
+                            .font(.system(size: 29, weight: .black, design: .rounded))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
 
-                    HStack(spacing: 10) {
-                        NavigationLink { featured.destination(session: session) } label: {
-                            Label("Riproduci", systemImage: "play.fill")
-                                .font(.subheadline.bold()).foregroundStyle(.black)
-                                .padding(.horizontal, 20).frame(height: 46)
-                                .background(.white).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-                        NavigationLink { featured.destination(session: session) } label: {
-                            Label("Info", systemImage: "info.circle.fill")
-                                .font(.subheadline.bold()).foregroundStyle(.white)
-                                .padding(.horizontal, 18).frame(height: 46)
-                                .background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-                        Button { toggleFeaturedFavorite(featured) } label: {
-                            Image(systemName: isFeaturedFavorite(featured) ? "checkmark" : "plus")
-                                .font(.headline.bold()).foregroundStyle(.white)
-                                .frame(width: 46, height: 46).background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }.buttonStyle(.plain)
-                    }
+                        Text(featured.subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
 
-                    if features.count > 1 {
-                        HStack(spacing: 5) {
-                            ForEach(0..<min(features.count, 8), id: \.self) { index in
-                                Capsule().fill(index == featuredIndex % features.count ? Color.white : Color.white.opacity(0.28))
-                                    .frame(width: index == featuredIndex % features.count ? 24 : 7, height: 4)
+                        HStack(spacing: 9) {
+                            NavigationLink { featured.destination(session: session) } label: {
+                                Label("Riproduci", systemImage: "play.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 14)
+                                    .frame(height: 40)
+                                    .background(brandGradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
-                        }.padding(.top, 3)
+                            NavigationLink { featured.destination(session: session) } label: {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundStyle(atxPrimary)
+                                    .frame(width: 40, height: 40)
+                                    .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            Button { toggleFeaturedFavorite(featured) } label: {
+                                Image(systemName: isFeaturedFavorite(featured) ? "checkmark" : "plus")
+                                    .foregroundStyle(atxPrimary)
+                                    .frame(width: 40, height: 40)
+                                    .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if features.count > 1 {
+                            HStack(spacing: 5) {
+                                ForEach(0..<min(features.count, 8), id: \.self) { index in
+                                    Capsule()
+                                        .fill(index == featuredIndex % features.count ? atxPrimary : Color.secondary.opacity(0.20))
+                                        .frame(width: index == featuredIndex % features.count ? 22 : 6, height: 4)
+                                }
+                            }
+                        }
                     }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    ZStack {
+                        OptimizedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
+                            if let image = phase.image { image.resizable().scaledToFill() }
+                            else { heroFallback }
+                        }
+                        LinearGradient(colors: [Color(uiColor: .secondarySystemGroupedBackground), .clear], startPoint: .leading, endPoint: .center)
+                    }
+                    .frame(width: 150, height: 250)
+                    .clipped()
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 22)
             }
-            .frame(maxWidth: .infinity)
+            .frame(height: 250)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28).stroke(atxStroke))
+            .shadow(color: atxPrimary.opacity(0.08), radius: 18, y: 9)
+            .padding(.horizontal, 16)
         } else {
-            heroFallback.frame(height: 390)
+            heroFallback.frame(height: 230).clipShape(RoundedRectangle(cornerRadius: 28)).padding(.horizontal, 16)
         }
     }
 
@@ -607,14 +641,18 @@ struct HomeView: View {
     }
 
     private func stat(_ title: String, _ value: Int, _ icon: String) -> some View {
-        VStack(spacing: 7) {
-            Image(systemName: icon).font(.title3).foregroundStyle(brandGradient)
-            Text(value.formatted()).font(.title3.bold())
-            Text(title).font(.caption).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity).padding(.vertical, 16)
-            .background(Color(uiColor: .secondarySystemBackground))
-            .overlay(RoundedRectangle(cornerRadius: 21).stroke(Color.primary.opacity(0.06)))
-            .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon).font(.subheadline.bold()).foregroundStyle(atxPrimary)
+                Spacer()
+                Image(systemName: "chart.line.uptrend.xyaxis").font(.caption2).foregroundStyle(.secondary)
+            }
+            Text(value.formatted()).font(.system(size: 24, weight: .black, design: .rounded))
+            Text(title.uppercased()).font(.system(size: 9, weight: .black)).tracking(1).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(atxStroke))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private var quickActions: some View {
@@ -812,25 +850,40 @@ struct ContentBrowser: View {
 
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
     private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
-    private var subtitle: String { type == .live ? "Guarda ora i tuoi canali" : type == .movies ? "Tutto il cinema, in un solo posto" : "Stagioni ed episodi da scoprire" }
+    private var subtitle: String { type == .live ? "Canali e programmi in tempo reale" : type == .movies ? "Il tuo catalogo cinema" : "Stagioni, episodi e nuove serie" }
     private var filtered: [Category] { search.isEmpty ? categories : categories.filter { $0.categoryName.localizedCaseInsensitiveContains(search) } }
     private var icon: String { type == .live ? "dot.radiowaves.left.and.right" : type == .movies ? "film.fill" : "rectangle.stack.fill" }
     private var totalCount: Int { type == .live ? session.allLive.count : type == .movies ? session.allMovies.count : session.allSeries.count }
+    private var columns: [GridItem] { [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)] }
 
     var body: some View {
         ZStack {
             StreamingBackdrop()
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    cinematicHeader
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    dashboardHeader
                     searchBar
                     NavigationLink { ItemGrid(type: type, category: nil) } label: { allContentHero }
                         .buttonStyle(.plain)
-                    Text("Categorie").font(.title2.bold()).padding(.horizontal, 18)
-                    LazyVStack(spacing: 12) {
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("CATALOGO").font(.system(size: 9, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
+                            Text("Categorie").font(.title2.bold())
+                        }
+                        Spacer()
+                        Text("\(filtered.count)")
+                            .font(.caption.bold())
+                            .foregroundStyle(atxPrimary)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(atxPrimary.opacity(0.10), in: Capsule())
+                    }
+                    .padding(.horizontal, 16)
+
+                    LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(Array(filtered.enumerated()), id: \.element.id) { index, category in
                             NavigationLink { ItemGrid(type: type, category: category) } label: {
-                                categoryRow(category, index: index)
+                                categoryTile(category, index: index)
                             }
                             .buttonStyle(.plain)
                         }
@@ -838,40 +891,43 @@ struct ContentBrowser: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 120)
                 }
+                .padding(.top, 10)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var cinematicHeader: some View {
-        ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(accentGradient(for: title))
-                .frame(height: 215)
-                .overlay(alignment: .topTrailing) {
-                    Image(systemName: icon).font(.system(size: 86, weight: .black)).foregroundStyle(.white.opacity(0.16)).padding(24)
-                }
-            LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .top, endPoint: .bottom)
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(.system(size: 38, weight: .black, design: .rounded)).foregroundStyle(.white)
-                Text(subtitle).font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.85))
-                HStack(spacing: 8) {
-                    Label("\(totalCount.formatted()) contenuti", systemImage: "play.rectangle.on.rectangle.fill")
-                    Spacer()
-                    Button { Task { await session.reloadSection(type) } } label: {
-                        Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
-                            .font(.headline.bold()).frame(width: 42, height: 42).background(.white.opacity(0.18), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(session.isRefreshing)
-                }
-                .font(.caption.bold()).foregroundStyle(.white)
+    private var dashboardHeader: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(brandGradient)
+                    .frame(width: 64, height: 64)
+                Image(systemName: icon)
+                    .font(.system(size: 24, weight: .black))
+                    .foregroundStyle(.white)
             }
-            .padding(22)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("PANORAMICA")
+                    .font(.system(size: 9, weight: .black)).tracking(1.5).foregroundStyle(atxPrimary)
+                Text(title).font(.system(size: 30, weight: .black, design: .rounded))
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(totalCount.formatted()).font(.system(size: 22, weight: .black, design: .rounded))
+                Text("CONTENUTI").font(.system(size: 8, weight: .black)).tracking(1).foregroundStyle(.secondary)
+                Button { Task { await session.reloadSection(type) } } label: {
+                    Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
+                        .font(.caption.bold()).foregroundStyle(atxPrimary)
+                        .frame(width: 32, height: 32)
+                        .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                }.buttonStyle(.plain).disabled(session.isRefreshing)
+            }
         }
-        .padding(.horizontal, 16).padding(.top, 10)
-        .shadow(color: .black.opacity(0.26), radius: 22, y: 12)
+        .padding(18)
+        .atxDashboardCard(radius: 26)
+        .padding(.horizontal, 16)
     }
 
     private var searchBar: some View {
@@ -880,56 +936,61 @@ struct ContentBrowser: View {
             TextField("Cerca una categoria", text: $search).textInputAutocapitalization(.never).autocorrectionDisabled()
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) } }
         }
-        .padding(.horizontal, 16).frame(height: 54).streamingPanel(radius: 18).padding(.horizontal, 16)
+        .padding(.horizontal, 16).frame(height: 52).streamingPanel(radius: 16).padding(.horizontal, 16)
     }
 
     private var allContentHero: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(brandGradient).frame(width: 88, height: 88)
-                Image(systemName: "square.grid.2x2.fill").font(.system(size: 32, weight: .bold)).foregroundStyle(.white)
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(atxPrimary.opacity(0.11)).frame(width: 58, height: 58)
+                Image(systemName: "square.grid.2x2.fill").font(.system(size: 21, weight: .bold)).foregroundStyle(atxPrimary)
             }
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Tutto il catalogo").font(.title3.bold()).foregroundStyle(.primary)
-                Text("Esplora tutti i \(totalCount.formatted()) contenuti").font(.subheadline).foregroundStyle(.secondary)
-                Label("Apri catalogo", systemImage: "play.fill").font(.caption.bold()).foregroundStyle(.purple)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tutto il catalogo").font(.headline.bold()).foregroundStyle(.primary)
+                Text("\(totalCount.formatted()) contenuti disponibili").font(.caption).foregroundStyle(.secondary)
             }
-            Spacer(); Image(systemName: "chevron.right").font(.headline.bold()).foregroundStyle(.secondary)
+            Spacer()
+            Image(systemName: "arrow.up.right").font(.caption.bold()).foregroundStyle(atxPrimary)
+                .frame(width: 34, height: 34).background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 11))
         }
-        .padding(14).streamingPanel(radius: 24).padding(.horizontal, 16)
+        .padding(14).atxDashboardCard(radius: 20).padding(.horizontal, 16)
     }
 
     private func count(for category: Category) -> Int {
         let targetID = normalizedCategoryID(category.categoryID)
         switch type {
-        case .live:
-            return session.allLive.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
-        case .movies:
-            return session.allMovies.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
-        case .series:
-            return session.allSeries.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
+        case .live: return session.allLive.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
+        case .movies: return session.allMovies.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
+        case .series: return session.allSeries.lazy.filter { normalizedCategoryID($0.categoryID) == targetID }.count
         }
     }
 
-    private func normalizedCategoryID(_ value: String?) -> String {
-        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    private func normalizedCategoryID(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    private func categoryRow(_ category: Category, index: Int) -> some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(accentGradient(for: category.categoryName)).frame(height: 118)
-            LinearGradient(colors: [.black.opacity(0.58), .black.opacity(0.12)], startPoint: .leading, endPoint: .trailing)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            HStack(spacing: 16) {
-                Text(String(format: "%02d", index + 1)).font(.system(size: 34, weight: .black, design: .rounded)).foregroundStyle(.white.opacity(0.35)).frame(width: 58)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(category.categoryName).font(.title3.bold()).foregroundStyle(.white).lineLimit(2)
-                    Text("\(count(for: category).formatted()) contenuti").font(.caption.bold()).foregroundStyle(.white.opacity(0.78))
+    private func categoryTile(_ category: Category, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(index % 3 == 0 ? atxPrimary.opacity(0.12) : index % 3 == 1 ? atxMint.opacity(0.12) : atxSecondary.opacity(0.12))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: icon).font(.subheadline.bold()).foregroundStyle(index % 3 == 1 ? atxMint : atxPrimary)
                 }
-                Spacer(); Image(systemName: "play.circle.fill").font(.system(size: 38)).foregroundStyle(.white)
-            }.padding(18)
+                Spacer()
+                Text(String(format: "%02d", index + 1)).font(.caption2.bold()).foregroundStyle(.tertiary)
+            }
+            Text(category.categoryName)
+                .font(.subheadline.bold()).foregroundStyle(.primary).lineLimit(2)
+            HStack {
+                Text("\(count(for: category).formatted()) contenuti")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption2.bold()).foregroundStyle(atxPrimary)
+            }
         }
-        .shadow(color: .black.opacity(0.18), radius: 10, y: 6)
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+        .atxDashboardCard(radius: 20)
     }
 }
 
@@ -1033,70 +1094,36 @@ struct ItemGrid: View {
     }
 
     private var catalogHero: some View {
-        ZStack(alignment: .bottomLeading) {
-            OptimizedAsyncImage(url: URL(string: catalogHeroImage ?? "")) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
-                    ZStack {
-                        accentGradient(for: category?.categoryName ?? "AtlantiX")
-                        Image(systemName: type == .movies ? "film.stack.fill" : "rectangle.stack.fill")
-                            .font(.system(size: 82, weight: .black))
-                            .foregroundStyle(.white.opacity(0.28))
-                    }
-                }
+        HStack(spacing: 14) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(atxPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .frame(height: 310)
-            .frame(maxWidth: .infinity)
-            .clipped()
+            .buttonStyle(.plain)
 
-            LinearGradient(
-                colors: [.black.opacity(0.35), .clear, .black.opacity(0.88), Color(uiColor: .systemBackground)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.headline.weight(.black))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(.black.opacity(0.38), in: Circle())
-                            .overlay(Circle().stroke(.white.opacity(0.18)))
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                    Image(systemName: type == .movies ? "film.fill" : "rectangle.stack.fill")
-                        .font(.headline.weight(.black))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.ultraThinMaterial, in: Circle())
-                }
-
-                Spacer()
-
-                Text(type == .movies ? "COLLEZIONE FILM" : "COLLEZIONE SERIE TV")
-                    .font(.caption2.weight(.black))
-                    .tracking(2)
-                    .foregroundStyle(.cyan)
-
+            VStack(alignment: .leading, spacing: 5) {
+                Text(type == .movies ? "CATALOGO FILM" : "CATALOGO SERIE TV")
+                    .font(.system(size: 9, weight: .black)).tracking(1.5).foregroundStyle(atxPrimary)
                 Text(category?.categoryName ?? "Tutti i contenuti")
-                    .font(.system(size: 34, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 25, weight: .black, design: .rounded))
                     .lineLimit(2)
-                    .shadow(color: .black.opacity(0.5), radius: 8)
-
                 Text("\(resultCount.formatted()) titoli disponibili")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.78))
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 54)
-            .padding(.bottom, 20)
+            Spacer()
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(brandGradient).frame(width: 58, height: 58)
+                Image(systemName: type == .movies ? "film.fill" : "rectangle.stack.fill")
+                    .font(.system(size: 21, weight: .black)).foregroundStyle(.white)
+            }
         }
-        .frame(height: 310)
+        .padding(16)
+        .atxDashboardCard(radius: 24)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
     }
 
     private var catalogControls: some View {
@@ -1157,7 +1184,7 @@ struct ItemGrid: View {
             }
             Spacer()
             Image(systemName: type == .live ? "dot.radiowaves.left.and.right" : type == .movies ? "film.fill" : "rectangle.stack.fill")
-                .foregroundStyle(brandGradient).font(.title3)
+                .foregroundStyle(atxPrimary).font(.title3)
         }.padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 12)
     }
 
@@ -1266,14 +1293,12 @@ struct ModernPosterCard: View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
                 OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else {
                         ZStack {
-                            accentGradient(for: title)
+                            atxPrimary.opacity(0.10)
                             Image(systemName: typeLabel == "SERIE" ? "rectangle.stack.fill" : "film.fill")
-                                .font(.system(size: 42, weight: .black))
-                                .foregroundStyle(.white.opacity(0.9))
+                                .font(.system(size: 38, weight: .black)).foregroundStyle(atxPrimary)
                         }
                     }
                 }
@@ -1281,69 +1306,65 @@ struct ModernPosterCard: View {
                 .frame(maxWidth: .infinity)
                 .clipped()
 
-                LinearGradient(colors: [.black.opacity(0.42), .clear], startPoint: .top, endPoint: .center)
-
                 Text(typeLabel)
-                    .font(.system(size: 9, weight: .black))
-                    .tracking(1.2)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(.black.opacity(0.62), in: Capsule())
-                    .padding(9)
+                    .font(.system(size: 8, weight: .black)).tracking(1)
+                    .foregroundStyle(atxPrimary)
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.92), in: Capsule())
+                    .padding(8)
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
+                Text(title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(2)
                 HStack(spacing: 6) {
                     if let badge, !badge.isEmpty {
-                        Label(badge, systemImage: "star.fill")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.yellow)
+                        Label(badge, systemImage: "star.fill").font(.caption2.weight(.bold)).foregroundStyle(atxOrange)
                     } else {
-                        Text(typeLabel == "SERIE" ? "Serie TV" : "Film")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        Text(typeLabel == "SERIE" ? "Serie TV" : "Film").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Image(systemName: "play.fill")
-                        .font(.caption2.weight(.black))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(brandGradient, in: Circle())
+                        .font(.caption2.weight(.black)).foregroundStyle(.white)
+                        .frame(width: 28, height: 28).background(brandGradient, in: RoundedRectangle(cornerRadius: 9))
                 }
             }
             .padding(11)
-            .background(Color(uiColor: .secondarySystemBackground))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.primary.opacity(0.07)))
-        .shadow(color: .black.opacity(0.16), radius: 12, y: 7)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(atxStroke))
+        .shadow(color: .black.opacity(0.06), radius: 10, y: 5)
     }
 }
 
 struct LiveChannelCard: View {
     let item: LiveStream
     var body: some View {
-        HStack(spacing: 15) {
+        HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 18).fill(Color(uiColor:.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: 15, style: .continuous).fill(atxPrimary.opacity(0.08))
                 OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
-                    if let image = phase.image { image.resizable().scaledToFit().padding(14) }
-                    else { Image(systemName:"tv.fill").font(.system(size:38,weight:.bold)).foregroundStyle(brandGradient) }
+                    if let image = phase.image { image.resizable().scaledToFit().padding(12) }
+                    else { Image(systemName: "tv.fill").font(.system(size: 30, weight: .bold)).foregroundStyle(atxPrimary) }
                 }
-            }.frame(width:116,height:78).overlay(alignment:.topLeading) {
-                HStack(spacing:4){ Circle().fill(.red).frame(width:6,height:6); Text("LIVE").font(.system(size:9,weight:.black)) }.foregroundStyle(.white).padding(.horizontal,7).padding(.vertical,5).background(.black.opacity(0.68),in:Capsule()).padding(7)
             }
-            VStack(alignment:.leading,spacing:7){ Text(item.name).font(.headline.bold()).lineLimit(2); Text("Canale in diretta").font(.caption).foregroundStyle(.secondary); Label("Guarda ora",systemImage:"play.fill").font(.caption.bold()).foregroundStyle(brandGradient) }
+            .frame(width: 86, height: 64)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle().fill(Color.red).frame(width: 6, height: 6)
+                    Text("LIVE").font(.system(size: 8, weight: .black)).tracking(1).foregroundStyle(.red)
+                }
+                Text(item.name).font(.subheadline.bold()).lineLimit(2)
+                Text("In diretta ora").font(.caption2).foregroundStyle(.secondary)
+            }
             Spacer()
-            ZStack { Circle().fill(brandGradient).frame(width:44,height:44); Image(systemName:"play.fill").font(.system(size:15,weight:.black)).foregroundStyle(.white).offset(x:1) }
-        }.padding(12).background(LinearGradient(colors:[Color(uiColor:.secondarySystemBackground),Color.purple.opacity(0.08)],startPoint:.leading,endPoint:.trailing),in:RoundedRectangle(cornerRadius:22)).overlay{RoundedRectangle(cornerRadius:22).stroke(Color.primary.opacity(0.06))}
+            Image(systemName: "play.fill")
+                .font(.caption.bold()).foregroundStyle(.white)
+                .frame(width: 38, height: 38).background(brandGradient, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .padding(12)
+        .atxDashboardCard(radius: 18)
     }
 }
 
@@ -3019,7 +3040,27 @@ struct WatchHistoryView: View {
         }.padding(.horizontal,16).padding(.top,10).padding(.bottom,120)}}
         .toolbar(.hidden,for:.navigationBar).alert("Cancellare la cronologia?",isPresented:$showClearConfirmation){Button("Annulla",role:.cancel){};Button("Cancella tutto",role:.destructive){session.clearAccountWatchHistory()}}message:{Text("Verranno rimossi tutti i contenuti visti da questo account.")}
     }
-    private var hero: some View { ZStack(alignment:.bottomLeading){ RoundedRectangle(cornerRadius:30).fill(accentGradient(for:"Cronologia")).frame(height:190); Image(systemName:"clock.arrow.circlepath").font(.system(size:96,weight:.black)).foregroundStyle(.white.opacity(0.14)).frame(maxWidth:.infinity,alignment:.trailing).padding(22); LinearGradient(colors:[.clear,.black.opacity(0.65)],startPoint:.top,endPoint:.bottom).clipShape(RoundedRectangle(cornerRadius:30)); VStack(alignment:.leading,spacing:8){HStack{Button{dismiss()}label:{Image(systemName:"chevron.left").font(.headline.bold()).frame(width:42,height:42).background(.ultraThinMaterial,in:Circle())};Spacer();if !session.accountWatchHistory.isEmpty{Button{showClearConfirmation=true}label:{Image(systemName:"trash").font(.headline.bold()).frame(width:42,height:42).background(.ultraThinMaterial,in:Circle())}}};Spacer();Text("Cronologia").font(.system(size:34,weight:.black,design:.rounded));Text("\(session.accountWatchHistory.count) contenuti visti di recente").font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.82))}.foregroundStyle(.white).padding(18) } }
+    private var hero: some View {
+        HStack(spacing: 14) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left").font(.headline.bold()).foregroundStyle(atxPrimary)
+                    .frame(width: 42, height: 42).background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("ATTIVITÀ RECENTE").font(.system(size: 9, weight: .black)).tracking(1.5).foregroundStyle(atxPrimary)
+                Text("Cronologia").font(.system(size: 28, weight: .black, design: .rounded))
+                Text("\(session.accountWatchHistory.count) contenuti visti").font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !session.accountWatchHistory.isEmpty {
+                Button { showClearConfirmation = true } label: {
+                    Image(systemName: "trash").font(.caption.bold()).foregroundStyle(.red)
+                        .frame(width: 38, height: 38).background(Color.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                }.buttonStyle(.plain)
+            }
+        }
+        .padding(16).atxDashboardCard(radius: 22)
+    }
     private var filters: some View { HStack(spacing:8){ForEach(["Tutti","Film","Serie"],id:\.self){f in Button{withAnimation{selectedFilter=f}}label:{Text(f).font(.subheadline.bold()).foregroundStyle(selectedFilter==f ? Color.white:Color.secondary).frame(maxWidth:.infinity).padding(.vertical,11).background(selectedFilter==f ? AnyShapeStyle(brandGradient):AnyShapeStyle(Color.clear)).clipShape(Capsule())}.buttonStyle(.plain)}}.padding(5).streamingPanel(radius:18) }
 }
 
@@ -3052,7 +3093,7 @@ struct HistoryNavigation: View {
 
 struct HistoryRowContent: View {
     let item: WatchHistoryItem
-    var body: some View { HStack(spacing:14){ ZStack(alignment:.bottomTrailing){ OptimizedAsyncImage(url:URL(string:item.imageURL ?? "")){phase in if let image=phase.image{image.resizable().scaledToFill()}else{ZStack{accentGradient(for:item.title);Image(systemName:"play.rectangle.fill").foregroundStyle(.white)}}}.frame(width:124,height:78).clipped(); Circle().fill(.ultraThinMaterial).frame(width:32,height:32).overlay(Image(systemName:"play.fill").font(.caption.bold()).foregroundStyle(.white).offset(x:1)).padding(7)}.clipShape(RoundedRectangle(cornerRadius:16)); VStack(alignment:.leading,spacing:6){Text(item.title).font(.headline.bold()).lineLimit(2);if let subtitle=item.subtitle,!subtitle.isEmpty{Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)};Label(item.watchedAt.formatted(date:.abbreviated,time:.shortened),systemImage:"clock.fill").font(.caption2.bold()).foregroundStyle(brandGradient)};Spacer();Image(systemName:"chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)}.padding(12).background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:22)).overlay{RoundedRectangle(cornerRadius:22).stroke(Color.primary.opacity(0.06))} }
+    var body: some View { HStack(spacing:14){ ZStack(alignment:.bottomTrailing){ OptimizedAsyncImage(url:URL(string:item.imageURL ?? "")){phase in if let image=phase.image{image.resizable().scaledToFill()}else{ZStack{accentGradient(for:item.title);Image(systemName:"play.rectangle.fill").foregroundStyle(.white)}}}.frame(width:124,height:78).clipped(); Circle().fill(.ultraThinMaterial).frame(width:32,height:32).overlay(Image(systemName:"play.fill").font(.caption.bold()).foregroundStyle(.white).offset(x:1)).padding(7)}.clipShape(RoundedRectangle(cornerRadius:16)); VStack(alignment:.leading,spacing:6){Text(item.title).font(.headline.bold()).lineLimit(2);if let subtitle=item.subtitle,!subtitle.isEmpty{Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)};Label(item.watchedAt.formatted(date:.abbreviated,time:.shortened),systemImage:"clock.fill").font(.caption2.bold()).foregroundStyle(atxPrimary)};Spacer();Image(systemName:"chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)}.padding(12).background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:22)).overlay{RoundedRectangle(cornerRadius:22).stroke(Color.primary.opacity(0.06))} }
 }
 
 struct HistoryPosterCard: View {
@@ -3147,7 +3188,7 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(brandGradient)
                         .frame(width: 76, height: 76)
-                        .shadow(color: Color.purple.opacity(0.28), radius: 18, y: 8)
+                        .shadow(color: atxPrimary.opacity(0.16), radius: 12, y: 6)
                     BrandMark(size: 50)
                 }
 
@@ -3312,11 +3353,11 @@ struct SettingsView: View {
             HStack(spacing: 11) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(brandGradient.opacity(0.16))
+                        .fill(atxPrimary.opacity(0.10))
                         .frame(width: 36, height: 36)
                     Image(systemName: icon)
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(brandGradient)
+                        .foregroundStyle(atxPrimary)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.headline)
@@ -3336,11 +3377,11 @@ struct SettingsView: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(brandGradient.opacity(0.17))
+                    .fill(atxPrimary.opacity(0.10))
                     .frame(width: 48, height: 48)
                 Image(systemName: icon)
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(brandGradient)
+                    .foregroundStyle(atxPrimary)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.subheadline.bold()).foregroundStyle(.primary)
@@ -3431,11 +3472,11 @@ private struct SettingsIcon: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(brandGradient.opacity(0.16))
+                .fill(atxPrimary.opacity(0.10))
                 .frame(width: 38, height: 38)
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(brandGradient)
+                .foregroundStyle(atxPrimary)
         }
     }
 }

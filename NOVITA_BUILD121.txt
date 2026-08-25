@@ -1,0 +1,8 @@
+AtlantiX 3.0 - Build 121
+
+- Home lasciata invariata.
+- Nuova grafica interna delle categorie con card cinema e righe Live panoramiche.
+- Nuova presentazione grafica di canali, film e serie.
+- Cronologia completamente ridisegnata con testata, filtri e schede orizzontali.
+- Impostazioni riorganizzate con sfondo streaming e pannello account cinematografico.
+- Nessuna modifica alla logica del player Live, PiP, rotazione, download e riproduzione.
