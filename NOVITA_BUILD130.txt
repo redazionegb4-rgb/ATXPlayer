@@ -1,0 +1,9 @@
+AtlantiX 4.0 - Build 130
+
+- Home completamente ricostruita con nuova esperienza cinematografica.
+- Barra superiore fissa e separata dallo slider: Cerca e Aggiorna non vengono più intercettati dal banner.
+- Hero più ampio con azioni dedicate, non più cliccabile sull'intera superficie.
+- Nuovi accessi rapidi orizzontali.
+- Nuove sezioni Film da vedere e Serie da iniziare.
+- Continua a guardare e Visti di recente riorganizzati.
+- Navigazione e player invariati.

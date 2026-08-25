@@ -242,17 +242,22 @@ private struct HomeDashboardV4: View {
     var body: some View {
         ZStack {
             StreamingBackdrop()
-            ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    header
-                    featureStage
-                    libraryDeck
-                    if !session.continueWatching.isEmpty { continueDeck }
-                    if !session.accountWatchHistory.isEmpty { historyDeck }
-                    discoveryDeck
-                    updateCard
+            VStack(spacing: 0) {
+                commandBar
+                    .zIndex(100)
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: 26) {
+                        heroStage
+                        quickAccess
+                        if !session.continueWatching.isEmpty { continueRail }
+                        recentMovies
+                        recentSeries
+                        activityRail
+                        syncStatus
+                    }
+                    .padding(.top, 10)
+                    .padding(.bottom, 112)
                 }
-                .padding(.bottom, 110)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -260,155 +265,167 @@ private struct HomeDashboardV4: View {
         .task(id: session.allMovies.count + session.allSeries.count) { pickFeature() }
     }
 
-    private var header: some View {
-        HStack(spacing: 13) {
+    // Fixed above the scroll view so the hero can never steal its taps.
+    private var commandBar: some View {
+        HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(brandGradient)
-                    .frame(width: 50, height: 50)
-                BrandMark(size: 30)
+                    .frame(width: 46, height: 46)
+                BrandMark(size: 27)
             }
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("ATLANTIX")
-                    .font(.system(size: 17, weight: .black, design: .rounded))
-                    .tracking(2.3)
-                Text("Bentornato, \(session.username)")
-                    .font(.caption)
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .tracking(2.1)
+                Text("Ciao, \(session.username)")
+                    .font(.caption2)
                     .foregroundStyle(.white.opacity(0.48))
             }
-            Spacer()
-            Button { showSearch = true } label: {
+            Spacer(minLength: 6)
+            Button {
+                showSearch = true
+            } label: {
                 Image(systemName: "magnifyingglass")
-                    .font(.headline.bold())
-                    .frame(width: 44, height: 44)
-                    .background(Color.white.opacity(0.07), in: Circle())
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(Color.white.opacity(0.09), in: Circle())
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            Button { Task { await session.refreshSafely() } } label: {
+            .contentShape(Circle())
+            .zIndex(101)
+
+            Button {
+                Task { await session.refreshSafely() }
+            } label: {
                 Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
-                    .font(.headline.bold())
-                    .frame(width: 44, height: 44)
-                    .background(Color.white.opacity(0.07), in: Circle())
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(Color.white.opacity(0.09), in: Circle())
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .contentShape(Circle())
             .disabled(session.isRefreshing)
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 12)
-    }
-
-    @ViewBuilder private var featureStage: some View {
-        if let feature {
-            NavigationLink { feature.destination(session: session) } label: {
-                ZStack(alignment: .bottomLeading) {
-                    OptimizedAsyncImage(url: URL(string: feature.imageURL ?? "")) { phase in
-                        if let image = phase.image {
-                            image.resizable().scaledToFill()
-                        } else {
-                            LinearGradient(colors: [atxPrimary.opacity(0.6), atxSurface], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        }
-                    }
-                    .frame(height: 330)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-
-                    LinearGradient(colors: [.clear, atxCanvas.opacity(0.18), atxCanvas.opacity(0.97)], startPoint: .top, endPoint: .bottom)
-                    LinearGradient(colors: [atxCanvas.opacity(0.52), .clear], startPoint: .leading, endPoint: .trailing)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(feature.kind)
-                            .font(.system(size: 10, weight: .black))
-                            .tracking(1.8)
-                            .foregroundStyle(atxCyan)
-                        Text(feature.title)
-                            .font(.system(size: 30, weight: .black, design: .rounded))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                        Text(feature.subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.66))
-                            .lineLimit(2)
-                        Label("Apri", systemImage: "play.fill")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 17)
-                            .frame(height: 42)
-                            .background(brandGradient, in: Capsule())
-                    }
-                    .padding(18)
-                }
-                .frame(height: 330)
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 30).stroke(Color.white.opacity(0.08)))
-                .padding(.horizontal, 16)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var libraryDeck: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("La tua libreria", "Accesso rapido")
-            HStack(spacing: 10) {
-                NavigationLink { ContentBrowser(type: .movies) } label: {
-                    libraryTile(title: "Film", value: session.allMovies.count, icon: "film.stack.fill", accent: atxSecondary)
-                }
-                NavigationLink { ContentBrowser(type: .series) } label: {
-                    libraryTile(title: "Serie", value: session.allSeries.count, icon: "rectangle.stack.fill", accent: atxPrimary)
-                }
-            }
-            .buttonStyle(.plain)
-            HStack(spacing: 10) {
-                Button { selectedTab = .live } label: {
-                    libraryTile(title: "Live", value: session.allLive.count, icon: "dot.radiowaves.left.and.right", accent: atxCyan)
-                }
-                NavigationLink { FavoritesView() } label: {
-                    libraryTile(title: "La mia lista", value: session.accountFavorites.count, icon: "heart.fill", accent: .pink)
-                }
-            }
-            .buttonStyle(.plain)
+            .zIndex(101)
         }
         .padding(.horizontal, 16)
+        .padding(.top, 9)
+        .padding(.bottom, 10)
+        .background(.ultraThinMaterial)
+        .background(Color.black.opacity(0.80))
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1) }
     }
 
-    private func libraryTile(title: String, value: Int, icon: String, accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.headline.bold())
-                    .foregroundStyle(accent)
-                    .frame(width: 42, height: 42)
-                    .background(accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 14))
-                Spacer()
-                Image(systemName: "arrow.up.right")
-                    .font(.caption.bold())
-                    .foregroundStyle(.white.opacity(0.34))
+    @ViewBuilder private var heroStage: some View {
+        if let feature {
+            ZStack(alignment: .bottomLeading) {
+                OptimizedAsyncImage(url: URL(string: feature.imageURL ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { accentGradient(for: feature.title) }
+                }
+                .frame(height: 390)
+                .frame(maxWidth: .infinity)
+                .clipped()
+                .allowsHitTesting(false)
+
+                LinearGradient(colors: [.clear, atxCanvas.opacity(0.20), atxCanvas], startPoint: .top, endPoint: .bottom)
+                    .allowsHitTesting(false)
+                LinearGradient(colors: [atxCanvas.opacity(0.34), .clear], startPoint: .leading, endPoint: .trailing)
+                    .allowsHitTesting(false)
+
+                VStack(alignment: .leading, spacing: 11) {
+                    Text(feature.kind.uppercased())
+                        .font(.system(size: 10, weight: .black))
+                        .tracking(2)
+                        .foregroundStyle(atxCyan)
+                    Text(feature.title)
+                        .font(.system(size: 34, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    Text(feature.subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(2)
+
+                    HStack(spacing: 10) {
+                        NavigationLink { feature.destination(session: session) } label: {
+                            Label("Riproduci", systemImage: "play.fill")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, 18)
+                                .frame(height: 46)
+                                .background(Color.white, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button { selectedTab = .search } label: {
+                            Label("Scopri", systemImage: "sparkles")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 17)
+                                .frame(height: 46)
+                                .background(Color.white.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(20)
             }
-            Text(value.formatted())
-                .font(.system(size: 24, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-            Text(title)
-                .font(.caption.bold())
-                .foregroundStyle(.white.opacity(0.58))
+            .frame(height: 390)
+            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 30).stroke(Color.white.opacity(0.08)))
+            .padding(.horizontal, 14)
+        } else {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+                .frame(height: 260)
+                .overlay(Text("Sincronizza il catalogo per iniziare").font(.headline).foregroundStyle(.white.opacity(0.55)))
+                .padding(.horizontal, 14)
         }
-        .padding(15)
-        .frame(maxWidth: .infinity, minHeight: 145, alignment: .leading)
-        .background(atxSurface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.07)))
     }
 
-    private var continueDeck: some View {
+    private var quickAccess: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Continua a guardare", "Riprendi da dove eri rimasto")
+            homeSectionTitle("Esplora", subtitle: "Tutto a un tocco")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    Button { selectedTab = .live } label: { quickPill("Diretta", "dot.radiowaves.left.and.right", atxCyan) }
+                    NavigationLink { ContentBrowser(type: .movies) } label: { quickPill("Film", "film.stack.fill", atxSecondary) }
+                    NavigationLink { ContentBrowser(type: .series) } label: { quickPill("Serie TV", "rectangle.stack.fill", atxPrimary) }
+                    NavigationLink { FavoritesView() } label: { quickPill("La mia lista", "heart.fill", .pink) }
+                    Button { selectedTab = .downloads } label: { quickPill("Offline", "arrow.down.circle.fill", atxMint) }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func quickPill(_ title: String, _ icon: String, _ accent: Color) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon).font(.subheadline.bold()).foregroundStyle(accent)
+            Text(title).font(.subheadline.bold()).foregroundStyle(.white)
+        }
+        .padding(.horizontal, 15)
+        .frame(height: 48)
+        .background(Color.white.opacity(0.065), in: Capsule())
+        .overlay(Capsule().stroke(Color.white.opacity(0.075)))
+    }
+
+    private var continueRail: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            homeSectionTitle("Continua a guardare", subtitle: "Riprendi da dove eri rimasto")
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 12) {
-                    ForEach(session.continueWatching.prefix(8)) { progress in
+                    ForEach(session.continueWatching.prefix(10)) { progress in
                         if let descriptor = session.descriptor(from: progress) {
                             NavigationLink {
                                 PlayerScreen(title: descriptor.title, url: session.streamURL(type: descriptor.kind, id: descriptor.streamID, ext: descriptor.fileExtension), isLive: false, resume: descriptor)
-                            } label: {
-                                ContinueWatchingCard(progress: progress).frame(width: 240)
-                            }
+                            } label: { ContinueWatchingCard(progress: progress).frame(width: 240) }
                             .buttonStyle(.plain)
                         }
                     }
@@ -418,20 +435,30 @@ private struct HomeDashboardV4: View {
         }
     }
 
-    private var historyDeck: some View {
+    private var recentMovies: some View {
+        posterRail(title: "Film da vedere", subtitle: "Una selezione dal tuo catalogo", movies: Array(session.allMovies.prefix(12)), series: [])
+    }
+
+    private var recentSeries: some View {
+        posterRail(title: "Serie da iniziare", subtitle: "Scopri qualcosa di nuovo", movies: [], series: Array(session.allSeries.prefix(12)))
+    }
+
+    @ViewBuilder private func posterRail(title: String, subtitle: String, movies: [VODStream], series: [SeriesItem]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                sectionHeader("Attività recente", "Ultime visualizzazioni")
-                Spacer()
-                NavigationLink { WatchHistoryView() } label: {
-                    Text("Tutto").font(.caption.bold()).foregroundStyle(atxCyan)
-                }
-                .padding(.trailing, 18)
-            }
+            homeSectionTitle(title, subtitle: subtitle)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 12) {
-                    ForEach(session.accountWatchHistory.prefix(8)) { item in
-                        HistoryPosterCard(item: item)
+                    ForEach(movies) { movie in
+                        NavigationLink { MovieDetailView(movie: movie) } label: {
+                            ModernPosterCard(title: movie.name, imageURL: movie.streamIcon, badge: movie.rating, typeLabel: "FILM")
+                                .frame(width: 150)
+                        }.buttonStyle(.plain)
+                    }
+                    ForEach(series) { item in
+                        NavigationLink { SeriesDetailView(series: item) } label: {
+                            ModernPosterCard(title: item.name, imageURL: item.cover, badge: item.rating, typeLabel: "SERIE")
+                                .frame(width: 150)
+                        }.buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -439,61 +466,59 @@ private struct HomeDashboardV4: View {
         }
     }
 
-    private var discoveryDeck: some View {
+    private var activityRail: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Scopri", "Trova qualcosa da guardare")
-            HStack(spacing: 10) {
-                Button { selectedTab = .search } label: { actionTile("Esplora", "square.grid.2x2.fill") }
-                Button { showSearch = true } label: { actionTile("Cerca", "magnifyingglass") }
-                Button { selectedTab = .profile } label: { actionTile("Profilo", "person.crop.circle") }
+            HStack {
+                homeSectionTitle("Visti di recente", subtitle: "La tua attività")
+                Spacer()
+                NavigationLink { WatchHistoryView() } label: {
+                    Text("Tutto").font(.caption.bold()).foregroundStyle(atxCyan)
+                }
+                .padding(.trailing, 18)
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16)
+            if session.accountWatchHistory.isEmpty {
+                Text("La cronologia comparirà qui dopo la prima visione.")
+                    .font(.caption).foregroundStyle(.white.opacity(0.42)).padding(.horizontal, 18)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 12) {
+                        ForEach(session.accountWatchHistory.prefix(10)) { item in HistoryPosterCard(item: item) }
+                    }.padding(.horizontal, 16)
+                }
+            }
         }
     }
 
-    private func actionTile(_ title: String, _ icon: String) -> some View {
-        VStack(spacing: 9) {
-            Image(systemName: icon).font(.title3.bold()).foregroundStyle(.white)
-            Text(title).font(.caption.bold()).foregroundStyle(.white.opacity(0.65))
-        }
-        .frame(maxWidth: .infinity, minHeight: 92)
-        .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.07)))
-    }
-
-    private var updateCard: some View {
-        HStack(spacing: 10) {
-            Circle().fill(atxMint).frame(width: 8, height: 8)
+    private var syncStatus: some View {
+        HStack(spacing: 11) {
+            Image(systemName: session.isRefreshing ? "arrow.triangle.2.circlepath" : "checkmark.circle.fill")
+                .foregroundStyle(session.isRefreshing ? atxCyan : atxMint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Catalogo sincronizzato").font(.caption.bold()).foregroundStyle(.white)
-                Text(session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "Pronto")
-                    .font(.caption2).foregroundStyle(.white.opacity(0.40))
+                Text(session.isRefreshing ? "Aggiornamento in corso" : "Catalogo pronto")
+                    .font(.caption.bold()).foregroundStyle(.white)
+                Text(session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "Tocca ↻ per sincronizzare")
+                    .font(.caption2).foregroundStyle(.white.opacity(0.42))
             }
             Spacer()
-            Image(systemName: "checkmark.seal.fill").foregroundStyle(atxMint)
         }
         .padding(15)
-        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
+        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 19))
+        .overlay(RoundedRectangle(cornerRadius: 19).stroke(Color.white.opacity(0.06)))
         .padding(.horizontal, 16)
     }
 
-    private func sectionHeader(_ title: String, _ subtitle: String) -> some View {
+    private func homeSectionTitle(_ title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.title3.weight(.black)).foregroundStyle(.white)
-            Text(subtitle).font(.caption2).foregroundStyle(.white.opacity(0.38))
+            Text(subtitle).font(.caption2).foregroundStyle(.white.opacity(0.40))
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, 18)
     }
 
     @MainActor private func pickFeature() {
-        if let movie = session.allMovies.first(where: { !(($0.streamIcon ?? "").isEmpty) }) {
-            feature = .movie(movie)
-        } else if let series = session.allSeries.first(where: { !(($0.cover ?? "").isEmpty) }) {
-            feature = .series(series)
-        } else {
-            feature = nil
-        }
+        if let movie = session.allMovies.first(where: { !(($0.streamIcon ?? "").isEmpty) }) { feature = .movie(movie) }
+        else if let series = session.allSeries.first(where: { !(($0.cover ?? "").isEmpty) }) { feature = .series(series) }
+        else { feature = nil }
     }
 }
 
