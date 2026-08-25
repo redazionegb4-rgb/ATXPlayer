@@ -87,9 +87,9 @@ private let atxPrimary = Color(red: 0.38, green: 0.43, blue: 1.00)
 private let atxSecondary = Color(red: 0.57, green: 0.49, blue: 0.98)
 private let atxMint = Color(red: 0.20, green: 0.74, blue: 0.51)
 private let atxOrange = Color(red: 1.00, green: 0.56, blue: 0.14)
-private let atxCanvas = Color(uiColor: .systemGroupedBackground)
-private let atxSurface = Color(uiColor: .secondarySystemGroupedBackground)
-private let atxStroke = Color.primary.opacity(0.075)
+private let atxCanvas = Color(uiColor: .systemBackground)
+private let atxSurface = Color(uiColor: .secondarySystemBackground)
+private let atxStroke = atxPrimary.opacity(0.10)
 private let brandGradient = LinearGradient(colors: [atxPrimary, atxSecondary], startPoint: .topLeading, endPoint: .bottomTrailing)
 private let pageBackground = atxCanvas
 
@@ -98,9 +98,15 @@ private struct StreamingBackdrop: View {
         ZStack {
             atxCanvas
             LinearGradient(
-                colors: [atxPrimary.opacity(0.075), Color.clear, atxSecondary.opacity(0.045)],
+                colors: [atxPrimary.opacity(0.075), Color.clear, atxSecondary.opacity(0.035)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
+            )
+            RadialGradient(
+                colors: [atxPrimary.opacity(0.08), .clear],
+                center: .topTrailing,
+                startRadius: 10,
+                endRadius: 360
             )
         }
         .ignoresSafeArea()
@@ -193,23 +199,20 @@ struct MainTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 ForEach(AppTab.allCases, id: \.self) { tab in
                     Button {
-                        withAnimation(.easeOut(duration: 0.18)) { selectedTab = tab }
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.82)) { selectedTab = tab }
                     } label: {
-                        VStack(spacing: 5) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(selectedTab == tab ? AnyShapeStyle(brandGradient) : AnyShapeStyle(Color.clear))
-                                    .frame(width: 42, height: 32)
-                                Image(systemName: tab.icon)
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundStyle(selectedTab == tab ? .white : .secondary)
-                            }
+                        VStack(spacing: 6) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundStyle(selectedTab == tab ? .white : .secondary)
+                                .frame(width: 42, height: 36)
+                                .background(selectedTab == tab ? AnyShapeStyle(brandGradient) : AnyShapeStyle(Color.clear), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                             Text(tab.rawValue)
                                 .font(.system(size: 9, weight: selectedTab == tab ? .bold : .semibold))
-                                .foregroundStyle(selectedTab == tab ? atxPrimary : .secondary)
+                                .foregroundStyle(selectedTab == tab ? .primary : .secondary)
                         }
                         .frame(maxWidth: .infinity)
                         .contentShape(Rectangle())
@@ -217,13 +220,13 @@ struct MainTabView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24).stroke(atxStroke))
-            .shadow(color: .black.opacity(0.10), radius: 18, y: 8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28).stroke(atxPrimary.opacity(0.10)))
+            .shadow(color: .black.opacity(0.12), radius: 22, y: 9)
             .padding(.horizontal, 12)
-            .padding(.bottom, 6)
+            .padding(.bottom, 8)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
     }
@@ -351,22 +354,23 @@ struct HomeView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
                     .fill(brandGradient)
-                    .frame(width: 44, height: 44)
-                BrandMark(size: 30)
+                    .frame(width: 52, height: 52)
+                BrandMark(size: 35)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("PANORAMICA")
-                    .font(.system(size: 9, weight: .black))
-                    .tracking(1.5)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("ATLANTIX")
+                    .font(.system(size: 10, weight: .black))
+                    .tracking(1.7)
                     .foregroundStyle(atxPrimary)
-                Text("AtlantiX")
-                    .font(.system(size: 20, weight: .black, design: .rounded))
                 Text("Bentornato, \(session.username)")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                Text(lastUpdateCompactText)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
             }
@@ -374,7 +378,7 @@ struct HomeView: View {
 
             Spacer(minLength: 4)
 
-            HStack(spacing: 7) {
+            HStack(spacing: 8) {
                 compactCircleButton("magnifyingglass") { showSearch = true }
                 compactCircleButton(session.isRefreshing ? "hourglass" : "arrow.clockwise") {
                     Task { await session.refreshSafely() }
@@ -383,17 +387,18 @@ struct HomeView: View {
 
                 NavigationLink { SettingsView() } label: {
                     Image(systemName: "gearshape.fill")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(atxPrimary)
-                        .frame(width: 38, height: 38)
-                        .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .frame(width: 42, height: 42)
+                        .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(atxPrimary.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) { Rectangle().fill(atxStroke).frame(height: 1) }
     }
 
@@ -532,82 +537,90 @@ struct HomeView: View {
 
     @ViewBuilder private var hero: some View {
         if let featured {
-            ZStack {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+            ZStack(alignment: .bottomLeading) {
+                OptimizedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { heroFallback }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 390)
+                .clipped()
 
-                HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 12) {
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.15), Color.black.opacity(0.90)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Text("ATLANTIX")
+                            .font(.system(size: 9, weight: .black))
+                            .tracking(1.4)
+                        Circle().fill(.white.opacity(0.55)).frame(width: 4, height: 4)
                         Text("IN EVIDENZA")
                             .font(.system(size: 9, weight: .black))
-                            .tracking(1.8)
-                            .foregroundStyle(atxPrimary)
-
-                        Text(featured.title)
-                            .font(.system(size: 29, weight: .black, design: .rounded))
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-
-                        Text(featured.subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3)
-
-                        HStack(spacing: 9) {
-                            NavigationLink { featured.destination(session: session) } label: {
-                                Label("Riproduci", systemImage: "play.fill")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 14)
-                                    .frame(height: 40)
-                                    .background(brandGradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            NavigationLink { featured.destination(session: session) } label: {
-                                Image(systemName: "info.circle.fill")
-                                    .foregroundStyle(atxPrimary)
-                                    .frame(width: 40, height: 40)
-                                    .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            Button { toggleFeaturedFavorite(featured) } label: {
-                                Image(systemName: isFeaturedFavorite(featured) ? "checkmark" : "plus")
-                                    .foregroundStyle(atxPrimary)
-                                    .frame(width: 40, height: 40)
-                                    .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        if features.count > 1 {
-                            HStack(spacing: 5) {
-                                ForEach(0..<min(features.count, 8), id: \.self) { index in
-                                    Capsule()
-                                        .fill(index == featuredIndex % features.count ? atxPrimary : Color.secondary.opacity(0.20))
-                                        .frame(width: index == featuredIndex % features.count ? 22 : 6, height: 4)
-                                }
-                            }
-                        }
+                            .tracking(1.4)
                     }
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(atxPrimary)
 
-                    ZStack {
-                        OptimizedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
-                            if let image = phase.image { image.resizable().scaledToFill() }
-                            else { heroFallback }
+                    Text(featured.title)
+                        .font(.system(size: 34, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+
+                    Text(featured.subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.80))
+                        .lineLimit(3)
+
+                    HStack(spacing: 10) {
+                        NavigationLink { featured.destination(session: session) } label: {
+                            Label("Riproduci", systemImage: "play.fill")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 18)
+                                .frame(height: 46)
+                                .background(brandGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
-                        LinearGradient(colors: [Color(uiColor: .secondarySystemGroupedBackground), .clear], startPoint: .leading, endPoint: .center)
+                        NavigationLink { featured.destination(session: session) } label: {
+                            Label("Dettagli", systemImage: "info.circle.fill")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 16)
+                                .frame(height: 46)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        Button { toggleFeaturedFavorite(featured) } label: {
+                            Image(systemName: isFeaturedFavorite(featured) ? "checkmark" : "plus")
+                                .font(.headline.bold())
+                                .foregroundStyle(.white)
+                                .frame(width: 46, height: 46)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .frame(width: 150, height: 250)
-                    .clipped()
+
+                    if features.count > 1 {
+                        HStack(spacing: 6) {
+                            ForEach(0..<min(features.count, 8), id: \.self) { index in
+                                Capsule()
+                                    .fill(index == featuredIndex % features.count ? atxPrimary : Color.white.opacity(0.32))
+                                    .frame(width: index == featuredIndex % features.count ? 28 : 7, height: 5)
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
                 }
+                .padding(22)
             }
-            .frame(height: 250)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 28).stroke(atxStroke))
-            .shadow(color: atxPrimary.opacity(0.08), radius: 18, y: 9)
-            .padding(.horizontal, 16)
+            .frame(height: 390)
+            .clipShape(RoundedRectangle(cornerRadius: 0, style: .continuous))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(atxPrimary.opacity(0.10)).frame(height: 1)
+            }
         } else {
-            heroFallback.frame(height: 230).clipShape(RoundedRectangle(cornerRadius: 28)).padding(.horizontal, 16)
+            heroFallback.frame(height: 330)
         }
     }
 
@@ -898,36 +911,70 @@ struct ContentBrowser: View {
     }
 
     private var dashboardHeader: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(brandGradient)
-                    .frame(width: 64, height: 64)
-                Image(systemName: icon)
-                    .font(.system(size: 24, weight: .black))
-                    .foregroundStyle(.white)
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(LinearGradient(colors: [atxPrimary.opacity(0.18), atxSecondary.opacity(0.07), atxSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
+
+            Circle()
+                .fill(atxPrimary.opacity(0.09))
+                .frame(width: 190, height: 190)
+                .offset(x: 235, y: -55)
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(brandGradient)
+                            .frame(width: 58, height: 58)
+                        Image(systemName: icon)
+                            .font(.system(size: 22, weight: .black))
+                            .foregroundStyle(.white)
+                    }
+                    Spacer()
+                    Button { Task { await session.reloadSection(type) } } label: {
+                        Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(atxPrimary)
+                            .frame(width: 42, height: 42)
+                            .background(atxSurface, in: RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(atxPrimary.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(session.isRefreshing)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("PANORAMICA")
+                        .font(.system(size: 9, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
+                    Text(title)
+                        .font(.system(size: 34, weight: .black, design: .rounded))
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 10) {
+                    dashboardMetric(value: totalCount.formatted(), label: "CONTENUTI")
+                    dashboardMetric(value: categories.count.formatted(), label: "CATEGORIE")
+                }
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("PANORAMICA")
-                    .font(.system(size: 9, weight: .black)).tracking(1.5).foregroundStyle(atxPrimary)
-                Text(title).font(.system(size: 30, weight: .black, design: .rounded))
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(totalCount.formatted()).font(.system(size: 22, weight: .black, design: .rounded))
-                Text("CONTENUTI").font(.system(size: 8, weight: .black)).tracking(1).foregroundStyle(.secondary)
-                Button { Task { await session.reloadSection(type) } } label: {
-                    Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
-                        .font(.caption.bold()).foregroundStyle(atxPrimary)
-                        .frame(width: 32, height: 32)
-                        .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
-                }.buttonStyle(.plain).disabled(session.isRefreshing)
-            }
+            .padding(22)
         }
-        .padding(18)
-        .atxDashboardCard(radius: 26)
+        .frame(height: 250)
+        .atxDashboardCard(radius: 30)
         .padding(.horizontal, 16)
+    }
+
+    private func dashboardMetric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value).font(.system(size: 22, weight: .black, design: .rounded))
+            Text(label).font(.system(size: 8, weight: .black)).tracking(1).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(atxSurface.opacity(0.92), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(atxPrimary.opacity(0.08)))
     }
 
     private var searchBar: some View {
@@ -968,30 +1015,68 @@ struct ContentBrowser: View {
     private func normalizedCategoryID(_ value: String?) -> String { (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private func categoryTile(_ category: Category, index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(index % 3 == 0 ? atxPrimary.opacity(0.12) : index % 3 == 1 ? atxMint.opacity(0.12) : atxSecondary.opacity(0.12))
-                        .frame(width: 42, height: 42)
-                    Image(systemName: icon).font(.subheadline.bold()).foregroundStyle(index % 3 == 1 ? atxMint : atxPrimary)
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(LinearGradient(
+                    colors: [
+                        (index % 3 == 0 ? atxPrimary : index % 3 == 1 ? atxMint : atxSecondary).opacity(0.18),
+                        atxSurface
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+
+            Circle()
+                .fill((index % 3 == 0 ? atxPrimary : index % 3 == 1 ? atxMint : atxSecondary).opacity(0.10))
+                .frame(width: 110, height: 110)
+                .offset(x: 70, y: -70)
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill((index % 3 == 0 ? atxPrimary : index % 3 == 1 ? atxMint : atxSecondary).opacity(0.14))
+                            .frame(width: 46, height: 46)
+                        Image(systemName: icon)
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(index % 3 == 1 ? atxMint : atxPrimary)
+                    }
+                    Spacer()
+                    Text(String(format: "%02d", index + 1))
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(.secondary)
                 }
-                Spacer()
-                Text(String(format: "%02d", index + 1)).font(.caption2.bold()).foregroundStyle(.tertiary)
+
+                Spacer(minLength: 2)
+
+                Text(category.categoryName)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(count(for: category).formatted())
+                            .font(.system(size: 20, weight: .black, design: .rounded))
+                        Text("CONTENUTI")
+                            .font(.system(size: 8, weight: .black))
+                            .tracking(1)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(atxPrimary)
+                        .frame(width: 34, height: 34)
+                        .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 11))
+                }
             }
-            Text(category.categoryName)
-                .font(.subheadline.bold()).foregroundStyle(.primary).lineLimit(2)
-            HStack {
-                Text("\(count(for: category).formatted()) contenuti")
-                    .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption2.bold()).foregroundStyle(atxPrimary)
-            }
+            .padding(16)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
-        .atxDashboardCard(radius: 20)
+        .frame(maxWidth: .infinity, minHeight: 176)
+        .atxDashboardCard(radius: 24)
     }
+
 }
 
 struct ItemGrid: View {
@@ -1094,36 +1179,42 @@ struct ItemGrid: View {
     }
 
     private var catalogHero: some View {
-        HStack(spacing: 14) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(atxPrimary)
-                    .frame(width: 44, height: 44)
-                    .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        ZStack(alignment: .bottomLeading) {
+            OptimizedAsyncImage(url: URL(string: catalogHeroImage ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { LinearGradient(colors: [atxPrimary.opacity(0.45), atxSecondary.opacity(0.28), atxCanvas], startPoint: .topLeading, endPoint: .bottomTrailing) }
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .frame(height: 285)
+            .clipped()
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(type == .movies ? "CATALOGO FILM" : "CATALOGO SERIE TV")
-                    .font(.system(size: 9, weight: .black)).tracking(1.5).foregroundStyle(atxPrimary)
+            LinearGradient(colors: [Color.black.opacity(0.08), Color.black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Text(type == .movies ? "FILM" : "SERIE TV")
+                    .font(.system(size: 10, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
                 Text(category?.categoryName ?? "Tutti i contenuti")
-                    .font(.system(size: 25, weight: .black, design: .rounded))
+                    .font(.system(size: 32, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
                     .lineLimit(2)
                 Text("\(resultCount.formatted()) titoli disponibili")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.76))
             }
-            Spacer()
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(brandGradient).frame(width: 58, height: 58)
-                Image(systemName: type == .movies ? "film.fill" : "rectangle.stack.fill")
-                    .font(.system(size: 21, weight: .black)).foregroundStyle(.white)
-            }
+            .padding(20)
         }
-        .padding(16)
-        .atxDashboardCard(radius: 24)
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
+        .frame(height: 285)
     }
 
     private var catalogControls: some View {
@@ -3041,26 +3132,43 @@ struct WatchHistoryView: View {
         .toolbar(.hidden,for:.navigationBar).alert("Cancellare la cronologia?",isPresented:$showClearConfirmation){Button("Annulla",role:.cancel){};Button("Cancella tutto",role:.destructive){session.clearAccountWatchHistory()}}message:{Text("Verranno rimossi tutti i contenuti visti da questo account.")}
     }
     private var hero: some View {
-        HStack(spacing: 14) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left").font(.headline.bold()).foregroundStyle(atxPrimary)
-                    .frame(width: 42, height: 42).background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(LinearGradient(colors: [atxPrimary.opacity(0.18), atxSecondary.opacity(0.07), atxSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
+            Circle().fill(atxPrimary.opacity(0.10)).frame(width: 170, height: 170).offset(x: 230, y: -55)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("ATTIVITÀ")
+                    .font(.system(size: 9, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
+                Text("Cronologia")
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                Text("Ritrova rapidamente tutto ciò che hai guardato su AtlantiX.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    dashboardChip(value: session.accountWatchHistory.count.formatted(), label: "VISTI")
+                    dashboardChip(value: filtered.count.formatted(), label: "VISIBILI")
+                }
+                if !session.accountWatchHistory.isEmpty {
+                    Button(role: .destructive) { showClearConfirmation = true } label: {
+                        Label("Svuota cronologia", systemImage: "trash")
+                            .font(.caption.bold())
+                    }
+                }
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("ATTIVITÀ RECENTE").font(.system(size: 9, weight: .black)).tracking(1.5).foregroundStyle(atxPrimary)
-                Text("Cronologia").font(.system(size: 28, weight: .black, design: .rounded))
-                Text("\(session.accountWatchHistory.count) contenuti visti").font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if !session.accountWatchHistory.isEmpty {
-                Button { showClearConfirmation = true } label: {
-                    Image(systemName: "trash").font(.caption.bold()).foregroundStyle(.red)
-                        .frame(width: 38, height: 38).background(Color.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
-                }.buttonStyle(.plain)
-            }
+            .padding(20)
         }
-        .padding(16).atxDashboardCard(radius: 22)
+        .frame(height: 235)
+        .atxDashboardCard(radius: 28)
     }
+
+    private func dashboardChip(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).font(.headline.bold())
+            Text(label).font(.system(size: 8, weight: .black)).tracking(1).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(atxSurface.opacity(0.9), in: RoundedRectangle(cornerRadius: 13))
+    }
+
     private var filters: some View { HStack(spacing:8){ForEach(["Tutti","Film","Serie"],id:\.self){f in Button{withAnimation{selectedFilter=f}}label:{Text(f).font(.subheadline.bold()).foregroundStyle(selectedFilter==f ? Color.white:Color.secondary).frame(maxWidth:.infinity).padding(.vertical,11).background(selectedFilter==f ? AnyShapeStyle(brandGradient):AnyShapeStyle(Color.clear)).clipShape(Capsule())}.buttonStyle(.plain)}}.padding(5).streamingPanel(radius:18) }
 }
 
@@ -3146,7 +3254,8 @@ struct SettingsView: View {
         ZStack {
             StreamingBackdrop()
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 18) {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    pageHeader
                     accountHero
                     quickActions
                     playbackSection
@@ -3172,81 +3281,81 @@ struct SettingsView: View {
     private var settingsBackground: Color { Color(uiColor: .systemBackground) }
 
     private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Il tuo AtlantiX")
-                .font(.system(size: 34, weight: .black, design: .rounded))
-            Text("Gestisci account, riproduzione e aspetto dell'app")
+        VStack(alignment: .leading, spacing: 7) {
+            Text("PREFERENZE")
+                .font(.system(size: 9, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
+            Text("Impostazioni")
+                .font(.system(size: 36, weight: .black, design: .rounded))
+            Text("Personalizza AtlantiX e gestisci il tuo account da un'unica dashboard.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
     }
 
     private var accountHero: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 15) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(brandGradient)
-                        .frame(width: 76, height: 76)
-                        .shadow(color: atxPrimary.opacity(0.16), radius: 12, y: 6)
-                    BrandMark(size: 50)
+                        .frame(width: 68, height: 68)
+                    BrandMark(size: 45)
                 }
 
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text(session.username.isEmpty ? "Il tuo account" : session.username)
                         .font(.title3.bold())
-                        .lineLimit(1)
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.seal.fill")
-                        Text((session.userInfo?.status ?? "Attivo").capitalized)
-                    }
-                    .font(.caption.bold())
-                    .foregroundStyle(.green)
+                    Label((session.userInfo?.status ?? "Attivo").capitalized, systemImage: "checkmark.seal.fill")
+                        .font(.caption.bold())
+                        .foregroundStyle(.green)
                     Text("Scadenza  •  \(expiry)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 4)
-            }
-            .padding(18)
-
-            Rectangle()
-                .fill(Color.primary.opacity(0.07))
-                .frame(height: 1)
-
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("ULTIMO AGGIORNAMENTO")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
-                    Text(session.lastRefresh?.formatted(date: .abbreviated, time: .shortened) ?? "Mai")
-                        .font(.subheadline.weight(.semibold))
-                }
                 Spacer()
-                Button {
-                    Task { await session.refreshSafely() }
-                } label: {
-                    HStack(spacing: 7) {
-                        if session.isRefreshing {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        Text(session.isRefreshing ? "Aggiorno" : "Aggiorna")
-                    }
-                    .font(.subheadline.bold())
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(brandGradient, in: Capsule())
-                }
-                .disabled(session.isRefreshing)
             }
-            .padding(16)
+
+            HStack(spacing: 10) {
+                settingsMetric(title: "Aggiornato", value: session.lastRefresh?.formatted(date: .omitted, time: .shortened) ?? "Mai", icon: "clock")
+                settingsMetric(title: "Stato", value: "Online", icon: "wifi")
+            }
+
+            Button { Task { await session.refreshSafely() } } label: {
+                HStack {
+                    Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
+                    Text(session.isRefreshing ? "Aggiornamento…" : "Aggiorna playlist")
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
+                .font(.subheadline.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                .background(brandGradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(session.isRefreshing)
         }
-        .background(accentGradient(for: session.username.isEmpty ? "AtlantiX" : session.username), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1) }
-        .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
+        .padding(18)
+        .atxDashboardCard(radius: 26)
+    }
+
+    private func settingsMetric(title: String, value: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.subheadline.bold()).foregroundStyle(atxPrimary)
+                .frame(width: 36, height: 36).background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 11))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title.uppercased()).font(.system(size: 8, weight: .black)).tracking(1).foregroundStyle(.secondary)
+                Text(value).font(.subheadline.bold()).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity)
+        .background(atxSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(atxStroke))
     }
 
     private var quickActions: some View {
