@@ -449,7 +449,7 @@ private struct HomeDashboardV4: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 12) {
                     ForEach(movies) { movie in
-                        NavigationLink { MovieDetailView(movie: movie) } label: {
+                        NavigationLink { MovieDetailView(item: movie) } label: {
                             ModernPosterCard(title: movie.name, imageURL: movie.streamIcon, badge: movie.rating, typeLabel: "FILM")
                                 .frame(width: 150)
                         }.buttonStyle(.plain)
