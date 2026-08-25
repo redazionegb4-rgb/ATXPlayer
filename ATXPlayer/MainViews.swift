@@ -455,7 +455,7 @@ private struct HomeDashboardV4: View {
                         }.buttonStyle(.plain)
                     }
                     ForEach(series) { item in
-                        NavigationLink { SeriesDetailView(series: item) } label: {
+                        NavigationLink { SeriesDetailView(item: item) } label: {
                             ModernPosterCard(title: item.name, imageURL: item.cover, badge: item.rating, typeLabel: "SERIE")
                                 .frame(width: 150)
                         }.buttonStyle(.plain)
