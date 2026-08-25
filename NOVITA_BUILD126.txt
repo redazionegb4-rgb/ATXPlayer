@@ -1,0 +1,10 @@
+ATLANTIX 4.0 — BUILD 126
+
+- Redesign radicale dell’interfaccia ispirato al nuovo pannello AtlantiX.
+- Home ricostruita con header compatto e hero molto più ampio.
+- Navigazione inferiore completamente nuova.
+- Categorie e cataloghi ridisegnati come dashboard mobile.
+- Pagine Film e Serie con layout più pulito e gestionale.
+- Impostazioni e Cronologia riorganizzate in stile pannello.
+- Freccia indietro nelle categorie spostata sotto la safe area e resa più grande e facile da toccare.
+- Logica di player, PiP, download e account invariata.

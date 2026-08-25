@@ -83,13 +83,14 @@ private struct OptimizedAsyncImage<Content: View>: View {
 }
 
 // MARK: - AtlantiX 4.0 design system (inspired by the new AtlantiX panel)
-private let atxPrimary = Color(red: 0.38, green: 0.43, blue: 1.00)
-private let atxSecondary = Color(red: 0.57, green: 0.49, blue: 0.98)
-private let atxMint = Color(red: 0.20, green: 0.74, blue: 0.51)
-private let atxOrange = Color(red: 1.00, green: 0.56, blue: 0.14)
-private let atxCanvas = Color(uiColor: .systemBackground)
-private let atxSurface = Color(uiColor: .secondarySystemBackground)
-private let atxStroke = atxPrimary.opacity(0.10)
+private let atxPrimary = Color(red: 0.39, green: 0.42, blue: 0.98)
+private let atxSecondary = Color(red: 0.52, green: 0.47, blue: 0.98)
+private let atxMint = Color(red: 0.16, green: 0.70, blue: 0.48)
+private let atxOrange = Color(red: 0.98, green: 0.53, blue: 0.12)
+private let atxCanvas = Color(red: 0.965, green: 0.972, blue: 0.992)
+private let atxSurface = Color.white
+private let atxSurfaceSoft = Color(red: 0.985, green: 0.988, blue: 1.0)
+private let atxStroke = Color(red: 0.87, green: 0.89, blue: 0.95)
 private let brandGradient = LinearGradient(colors: [atxPrimary, atxSecondary], startPoint: .topLeading, endPoint: .bottomTrailing)
 private let pageBackground = atxCanvas
 
@@ -98,16 +99,15 @@ private struct StreamingBackdrop: View {
         ZStack {
             atxCanvas
             LinearGradient(
-                colors: [atxPrimary.opacity(0.075), Color.clear, atxSecondary.opacity(0.035)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                colors: [Color.white.opacity(0.80), atxPrimary.opacity(0.045), atxCanvas],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            RadialGradient(
-                colors: [atxPrimary.opacity(0.08), .clear],
-                center: .topTrailing,
-                startRadius: 10,
-                endRadius: 360
-            )
+            Circle()
+                .fill(atxPrimary.opacity(0.055))
+                .frame(width: 340, height: 340)
+                .blur(radius: 8)
+                .offset(x: 180, y: -280)
         }
         .ignoresSafeArea()
     }
@@ -118,12 +118,12 @@ private extension View {
         self
             .background(atxSurface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(atxStroke, lineWidth: 1))
-            .shadow(color: .black.opacity(0.055), radius: 14, y: 7)
+            .shadow(color: Color(red: 0.25, green: 0.30, blue: 0.50).opacity(0.08), radius: 18, y: 8)
     }
 
     func atxDashboardCard(radius: CGFloat = 24) -> some View {
         self
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background(atxSurface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(atxStroke, lineWidth: 1))
             .shadow(color: atxPrimary.opacity(0.06), radius: 16, y: 8)
     }
@@ -167,19 +167,14 @@ private func seriesSortValue(_ item: SeriesItem) -> Double {
 
 struct MainTabView: View {
     private enum AppTab: String, CaseIterable {
-        case home = "Home"
-        case live = "Diretta"
-        case movies = "Film"
-        case series = "Serie"
-        case downloads = "Download"
-
+        case home = "Home", live = "Diretta", movies = "Film", series = "Serie", downloads = "Download"
         var icon: String {
             switch self {
-            case .home: return "rectangle.grid.2x2.fill"
-            case .live: return "dot.radiowaves.left.and.right"
-            case .movies: return "film.fill"
+            case .home: return "square.grid.2x2.fill"
+            case .live: return "antenna.radiowaves.left.and.right"
+            case .movies: return "play.rectangle.fill"
             case .series: return "rectangle.stack.fill"
-            case .downloads: return "arrow.down.circle.fill"
+            case .downloads: return "arrow.down.to.line.compact"
             }
         }
     }
@@ -199,33 +194,32 @@ struct MainTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 ForEach(AppTab.allCases, id: \.self) { tab in
                     Button {
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.82)) { selectedTab = tab }
+                        withAnimation(.snappy(duration: 0.24)) { selectedTab = tab }
                     } label: {
-                        VStack(spacing: 6) {
+                        VStack(spacing: 5) {
                             Image(systemName: tab.icon)
                                 .font(.system(size: 17, weight: .bold))
-                                .foregroundStyle(selectedTab == tab ? .white : .secondary)
-                                .frame(width: 42, height: 36)
-                                .background(selectedTab == tab ? AnyShapeStyle(brandGradient) : AnyShapeStyle(Color.clear), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                                .frame(height: 22)
                             Text(tab.rawValue)
-                                .font(.system(size: 9, weight: selectedTab == tab ? .bold : .semibold))
-                                .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                                .font(.system(size: 9, weight: .bold))
                         }
+                        .foregroundStyle(selectedTab == tab ? .white : Color.secondary)
                         .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(selectedTab == tab ? AnyShapeStyle(brandGradient) : AnyShapeStyle(Color.clear), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 28).stroke(atxPrimary.opacity(0.10)))
-            .shadow(color: .black.opacity(0.12), radius: 22, y: 9)
-            .padding(.horizontal, 12)
+            .padding(8)
+            .background(atxSurface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(atxStroke))
+            .shadow(color: .black.opacity(0.10), radius: 24, y: 10)
+            .padding(.horizontal, 14)
             .padding(.bottom, 8)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -354,51 +348,42 @@ struct HomeView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 13) {
             ZStack {
-                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(brandGradient)
-                    .frame(width: 52, height: 52)
-                BrandMark(size: 35)
+                    .frame(width: 48, height: 48)
+                BrandMark(size: 31)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("ATLANTIX")
-                    .font(.system(size: 10, weight: .black))
-                    .tracking(1.7)
-                    .foregroundStyle(atxPrimary)
-                Text("Bentornato, \(session.username)")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .lineLimit(1)
-                Text(lastUpdateCompactText)
-                    .font(.caption2.weight(.medium))
+                    .font(.system(size: 11, weight: .black))
+                    .tracking(1.5)
+                    .foregroundStyle(.primary)
+                Text("Ciao, \(session.username)")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .layoutPriority(1)
-
-            Spacer(minLength: 4)
-
+            Spacer(minLength: 6)
             HStack(spacing: 8) {
                 compactCircleButton("magnifyingglass") { showSearch = true }
-                compactCircleButton(session.isRefreshing ? "hourglass" : "arrow.clockwise") {
-                    Task { await session.refreshSafely() }
-                }
-                .disabled(session.isRefreshing)
-
+                compactCircleButton(session.isRefreshing ? "hourglass" : "arrow.clockwise") { Task { await session.refreshSafely() } }
+                    .disabled(session.isRefreshing)
                 NavigationLink { SettingsView() } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(atxPrimary)
-                        .frame(width: 42, height: 42)
-                        .background(atxPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(atxPrimary.opacity(0.12)))
+                        .frame(width: 40, height: 40)
+                        .background(atxPrimary.opacity(0.09), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(atxSurface)
         .overlay(alignment: .bottom) { Rectangle().fill(atxStroke).frame(height: 1) }
     }
 
@@ -537,90 +522,91 @@ struct HomeView: View {
 
     @ViewBuilder private var hero: some View {
         if let featured {
-            ZStack(alignment: .bottomLeading) {
-                OptimizedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
-                    if let image = phase.image { image.resizable().scaledToFill() }
-                    else { heroFallback }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 390)
-                .clipped()
-
-                LinearGradient(
-                    colors: [.clear, Color.black.opacity(0.15), Color.black.opacity(0.90)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        Text("ATLANTIX")
-                            .font(.system(size: 9, weight: .black))
-                            .tracking(1.4)
-                        Circle().fill(.white.opacity(0.55)).frame(width: 4, height: 4)
-                        Text("IN EVIDENZA")
-                            .font(.system(size: 9, weight: .black))
-                            .tracking(1.4)
+            VStack(spacing: 0) {
+                ZStack(alignment: .bottomLeading) {
+                    OptimizedAsyncImage(url: URL(string: featured.imageURL ?? "")) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                        else { heroFallback }
                     }
-                    .foregroundStyle(atxPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 430)
+                    .clipped()
 
-                    Text(featured.title)
-                        .font(.system(size: 34, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
+                    LinearGradient(colors: [.clear, Color.black.opacity(0.10), Color.black.opacity(0.78)], startPoint: .top, endPoint: .bottom)
 
-                    Text(featured.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.80))
-                        .lineLimit(3)
-
-                    HStack(spacing: 10) {
-                        NavigationLink { featured.destination(session: session) } label: {
-                            Label("Riproduci", systemImage: "play.fill")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 18)
-                                .frame(height: 46)
-                                .background(brandGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    VStack(alignment: .leading, spacing: 13) {
+                        HStack(spacing: 7) {
+                            Image(systemName: "sparkles")
+                            Text("IN EVIDENZA")
                         }
-                        NavigationLink { featured.destination(session: session) } label: {
-                            Label("Dettagli", systemImage: "info.circle.fill")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 16)
-                                .frame(height: 46)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                        Button { toggleFeaturedFavorite(featured) } label: {
-                            Image(systemName: isFeaturedFavorite(featured) ? "checkmark" : "plus")
-                                .font(.headline.bold())
-                                .foregroundStyle(.white)
-                                .frame(width: 46, height: 46)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                    }
+                        .font(.system(size: 10, weight: .black))
+                        .tracking(1.2)
+                        .foregroundStyle(.white.opacity(0.88))
 
-                    if features.count > 1 {
-                        HStack(spacing: 6) {
-                            ForEach(0..<min(features.count, 8), id: \.self) { index in
-                                Capsule()
-                                    .fill(index == featuredIndex % features.count ? atxPrimary : Color.white.opacity(0.32))
-                                    .frame(width: index == featuredIndex % features.count ? 28 : 7, height: 5)
+                        Text(featured.title)
+                            .font(.system(size: 36, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+
+                        Text(featured.subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.82))
+                            .lineLimit(3)
+
+                        HStack(spacing: 10) {
+                            NavigationLink { featured.destination(session: session) } label: {
+                                Label("Riproduci", systemImage: "play.fill")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 18)
+                                    .frame(height: 48)
+                                    .background(brandGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            }
+                            NavigationLink { featured.destination(session: session) } label: {
+                                Label("Dettagli", systemImage: "info.circle.fill")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 16)
+                                    .frame(height: 48)
+                                    .background(Color.white.opacity(0.17), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
                         }
-                        .padding(.top, 2)
+                    }
+                    .padding(22)
+                }
+                .frame(height: 430)
+
+                HStack(spacing: 8) {
+                    Text("Scopri nuovi contenuti")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if features.count > 1 {
+                        HStack(spacing: 5) {
+                            ForEach(0..<min(features.count, 8), id: \.self) { index in
+                                Capsule()
+                                    .fill(index == featuredIndex % features.count ? atxPrimary : atxStroke)
+                                    .frame(width: index == featuredIndex % features.count ? 24 : 7, height: 5)
+                            }
+                        }
                     }
                 }
-                .padding(22)
+                .padding(.horizontal, 18)
+                .frame(height: 48)
+                .background(atxSurfaceSoft)
             }
-            .frame(height: 390)
-            .clipShape(RoundedRectangle(cornerRadius: 0, style: .continuous))
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(atxPrimary.opacity(0.10)).frame(height: 1)
-            }
+            .background(atxSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28).stroke(atxStroke))
+            .shadow(color: .black.opacity(0.10), radius: 24, y: 10)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
         } else {
-            heroFallback.frame(height: 330)
+            heroFallback
+                .frame(height: 360)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
         }
     }
 
@@ -671,29 +657,50 @@ struct HomeView: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Esplora")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    quickLink("Diretta", "dot.radiowaves.left.and.right", .live)
-                    quickLink("Film", "film.fill", .movies)
-                    quickLink("Serie TV", "rectangle.stack.fill", .series)
-                    NavigationLink { FavoritesView() } label: {
-                        Label("La mia lista", systemImage: "heart.fill")
-                            .font(.subheadline.bold()).foregroundStyle(.primary)
-                            .padding(.horizontal, 16).frame(height: 44)
-                            .background(Color(uiColor: .secondarySystemBackground))
-                            .clipShape(Capsule()).overlay(Capsule().stroke(Color.primary.opacity(0.08)))
-                    }.buttonStyle(.plain)
-                }.padding(.horizontal, 20)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                quickLink("Diretta", "antenna.radiowaves.left.and.right", .live)
+                quickLink("Film", "play.rectangle.fill", .movies)
+                quickLink("Serie TV", "rectangle.stack.fill", .series)
+                NavigationLink { FavoritesView() } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "heart.fill")
+                            .font(.headline.bold())
+                            .foregroundStyle(atxPrimary)
+                            .frame(width: 42, height: 42)
+                            .background(atxPrimary.opacity(0.09), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("La mia lista").font(.subheadline.bold()).foregroundStyle(.primary)
+                            Text("Preferiti").font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(13)
+                    .background(atxSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(atxStroke))
+                }.buttonStyle(.plain)
             }
+            .padding(.horizontal, 16)
         }
     }
 
     private func quickLink(_ title: String, _ icon: String, _ type: ContentType) -> some View {
         NavigationLink { ContentBrowser(type: type) } label: {
-            Label(title, systemImage: icon)
-                .font(.subheadline.bold()).foregroundStyle(.white)
-                .padding(.horizontal, 17).frame(height: 44)
-                .background(brandGradient).clipShape(Capsule())
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.headline.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(brandGradient, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.bold()).foregroundStyle(.primary)
+                    Text(type == .live ? "Canali live" : type == .movies ? "Catalogo cinema" : "Stagioni ed episodi")
+                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+            }
+            .padding(13)
+            .background(atxSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(atxStroke))
         }.buttonStyle(.plain)
     }
 
@@ -1147,7 +1154,6 @@ struct ItemGrid: View {
                         }
                     }
                 }
-                .ignoresSafeArea(edges: .top)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -1179,42 +1185,55 @@ struct ItemGrid: View {
     }
 
     private var catalogHero: some View {
-        ZStack(alignment: .bottomLeading) {
-            OptimizedAsyncImage(url: URL(string: catalogHeroImage ?? "")) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() }
-                else { LinearGradient(colors: [atxPrimary.opacity(0.45), atxSecondary.opacity(0.28), atxCanvas], startPoint: .topLeading, endPoint: .bottomTrailing) }
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 285)
-            .clipped()
-
-            LinearGradient(colors: [Color.black.opacity(0.08), Color.black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
-
-            VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.left")
-                        .font(.headline.weight(.black))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(.primary)
+                        .frame(width: 52, height: 52)
+                        .background(atxSurface, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 17).stroke(atxStroke))
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
 
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(type == .movies ? "FILM" : "SERIE TV")
+                        .font(.system(size: 9, weight: .black)).tracking(1.5).foregroundStyle(atxPrimary)
+                    Text(category?.categoryName ?? "Tutti i contenuti")
+                        .font(.system(size: 24, weight: .black, design: .rounded))
+                        .lineLimit(2)
+                    Text("\(resultCount.formatted()) titoli disponibili")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
-
-                Text(type == .movies ? "FILM" : "SERIE TV")
-                    .font(.system(size: 10, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
-                Text(category?.categoryName ?? "Tutti i contenuti")
-                    .font(.system(size: 32, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                Text("\(resultCount.formatted()) titoli disponibili")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.76))
             }
-            .padding(20)
+
+            ZStack(alignment: .bottomLeading) {
+                OptimizedAsyncImage(url: URL(string: catalogHeroImage ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { brandGradient }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 210)
+                .clipped()
+                LinearGradient(colors: [.clear, Color.black.opacity(0.70)], startPoint: .top, endPoint: .bottom)
+                HStack {
+                    Label(type == .movies ? "Catalogo film" : "Catalogo serie", systemImage: type == .movies ? "play.rectangle.fill" : "rectangle.stack.fill")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text(search.isEmpty ? "TUTTI" : "FILTRATI")
+                        .font(.system(size: 9, weight: .black)).tracking(1)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                .padding(16)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
-        .frame(height: 285)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
     }
 
     private var catalogControls: some View {
@@ -1266,17 +1285,27 @@ struct ItemGrid: View {
     private var itemHeader: some View {
         HStack(spacing: 12) {
             Button { dismiss() } label: {
-                Image(systemName: "chevron.left").font(.title3.bold()).frame(width: 46, height: 46)
-                    .background(Color(uiColor: .secondarySystemBackground)).clipShape(Circle())
-            }.buttonStyle(.plain)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(.primary)
+                    .frame(width: 52, height: 52)
+                    .background(atxSurface, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 17).stroke(atxStroke))
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
             VStack(alignment: .leading, spacing: 2) {
-                Text(category?.categoryName ?? "Tutti i contenuti").font(.headline.bold()).lineLimit(1)
-                Text("\(resultCount.formatted()) risultati").font(.caption).foregroundStyle(.secondary)
+                Text("DIRETTA").font(.system(size: 9, weight: .black)).tracking(1.4).foregroundStyle(atxPrimary)
+                Text(category?.categoryName ?? "Tutti i canali").font(.headline.bold()).lineLimit(1)
+                Text("\(resultCount.formatted()) canali").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Image(systemName: type == .live ? "dot.radiowaves.left.and.right" : type == .movies ? "film.fill" : "rectangle.stack.fill")
+            Image(systemName: "antenna.radiowaves.left.and.right")
                 .foregroundStyle(atxPrimary).font(.title3)
-        }.padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 12)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
     }
 
     private var inlineSearch: some View {
@@ -1628,34 +1657,33 @@ struct MovieDetailView: View {
     }
 
     private var premiumHeader: some View {
-        ZStack(alignment: .bottomLeading) {
-            accentGradient(for: title)
-            HStack(alignment: .top, spacing: 16) {
-                OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
-                    if let image = phase.image { image.resizable().scaledToFill() }
-                    else { ZStack { brandGradient; Image(systemName: "film.fill").font(.largeTitle).foregroundStyle(.white) } }
-                }
-                .frame(width: 142, height: 214)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .clipped()
-                .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(title).font(.title2.bold()).foregroundStyle(.white).lineLimit(4).minimumScaleFactor(0.75)
-                    HStack(spacing: 7) {
-                        metadataBadge(quality, icon: "sparkles.tv")
-                        if let rating = info?.rating ?? item.rating, !rating.isEmpty { metadataBadge("★ \(rating)", icon: nil) }
-                    }
-                    if let date = info?.releaseDate ?? item.releaseDate, !date.isEmpty { Label(date, systemImage: "calendar").font(.caption).foregroundStyle(.white.opacity(0.85)) }
-                    if let duration = info?.duration ?? item.duration, !duration.isEmpty { Label(duration, systemImage: "clock").font(.caption).foregroundStyle(.white.opacity(0.85)) }
-                    if let genre, !genre.isEmpty { Text(genre).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.9)).lineLimit(3) }
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, minHeight: 214, alignment: .topLeading)
+        HStack(alignment: .top, spacing: 16) {
+            OptimizedAsyncImage(url: URL(string: imageURL ?? "")) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else { ZStack { brandGradient; Image(systemName: "film.fill").font(.largeTitle).foregroundStyle(.white) } }
             }
-            .padding(18)
+            .frame(width: 126, height: 188)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipped()
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("FILM").font(.system(size: 9, weight: .black)).tracking(1.4).foregroundStyle(atxPrimary)
+                Text(title).font(.system(size: 25, weight: .black, design: .rounded)).foregroundStyle(.primary).lineLimit(4).minimumScaleFactor(0.75)
+                HStack(spacing: 7) {
+                    metadataBadge(quality, icon: "sparkles.tv")
+                    if let rating = info?.rating ?? item.rating, !rating.isEmpty { metadataBadge("★ \(rating)", icon: nil) }
+                }
+                if let date = info?.releaseDate ?? item.releaseDate, !date.isEmpty { Label(date, systemImage: "calendar").font(.caption).foregroundStyle(.secondary) }
+                if let duration = info?.duration ?? item.duration, !duration.isEmpty { Label(duration, systemImage: "clock").font(.caption).foregroundStyle(.secondary) }
+                if let genre, !genre.isEmpty { Text(genre).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(3) }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 188, alignment: .topLeading)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(16)
+        .background(atxSurface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(atxStroke))
+        .shadow(color: .black.opacity(0.07), radius: 16, y: 7)
     }
 
     private var actionButtons: some View {
@@ -1692,9 +1720,9 @@ struct MovieDetailView: View {
             if let icon { Image(systemName: icon) }
             Text(value)
         }
-        .font(.caption2.bold()).foregroundStyle(.white)
+        .font(.caption2.bold()).foregroundStyle(atxPrimary)
         .padding(.horizontal, 8).padding(.vertical, 5)
-        .background(.black.opacity(0.28)).clipShape(Capsule())
+        .background(atxPrimary.opacity(0.09)).clipShape(Capsule())
     }
 
     private func detailSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -3132,32 +3160,22 @@ struct WatchHistoryView: View {
         .toolbar(.hidden,for:.navigationBar).alert("Cancellare la cronologia?",isPresented:$showClearConfirmation){Button("Annulla",role:.cancel){};Button("Cancella tutto",role:.destructive){session.clearAccountWatchHistory()}}message:{Text("Verranno rimossi tutti i contenuti visti da questo account.")}
     }
     private var hero: some View {
-        ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(LinearGradient(colors: [atxPrimary.opacity(0.18), atxSecondary.opacity(0.07), atxSurface], startPoint: .topLeading, endPoint: .bottomTrailing))
-            Circle().fill(atxPrimary.opacity(0.10)).frame(width: 170, height: 170).offset(x: 230, y: -55)
-            VStack(alignment: .leading, spacing: 10) {
-                Text("ATTIVITÀ")
-                    .font(.system(size: 9, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
-                Text("Cronologia")
-                    .font(.system(size: 34, weight: .black, design: .rounded))
-                Text("Ritrova rapidamente tutto ciò che hai guardato su AtlantiX.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    dashboardChip(value: session.accountWatchHistory.count.formatted(), label: "VISTI")
-                    dashboardChip(value: filtered.count.formatted(), label: "VISIBILI")
-                }
-                if !session.accountWatchHistory.isEmpty {
-                    Button(role: .destructive) { showClearConfirmation = true } label: {
-                        Label("Svuota cronologia", systemImage: "trash")
-                            .font(.caption.bold())
-                    }
-                }
+        HStack(spacing: 14) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 54, height: 54)
+                .background(brandGradient, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("CRONOLOGIA").font(.system(size: 9, weight: .black)).tracking(1.4).foregroundStyle(atxPrimary)
+                Text("La tua attività").font(.title2.bold())
+                Text("Riprendi velocemente ciò che hai guardato").font(.caption).foregroundStyle(.secondary)
             }
-            .padding(20)
+            Spacer()
         }
-        .frame(height: 235)
-        .atxDashboardCard(radius: 28)
+        .padding(16)
+        .background(atxSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(atxStroke))
     }
 
     private func dashboardChip(value: String, label: String) -> some View {
@@ -3281,17 +3299,25 @@ struct SettingsView: View {
     private var settingsBackground: Color { Color(uiColor: .systemBackground) }
 
     private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("PREFERENZE")
-                .font(.system(size: 9, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
-            Text("Impostazioni")
-                .font(.system(size: 36, weight: .black, design: .rounded))
-            Text("Personalizza AtlantiX e gestisci il tuo account da un'unica dashboard.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("ACCOUNT & APP")
+                    .font(.system(size: 9, weight: .black)).tracking(1.6).foregroundStyle(atxPrimary)
+                Text("Impostazioni")
+                    .font(.system(size: 32, weight: .black, design: .rounded))
+                Text("Gestisci riproduzione, aspetto e sicurezza")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(atxPrimary)
+                .frame(width: 48, height: 48)
+                .background(atxPrimary.opacity(0.09), in: RoundedRectangle(cornerRadius: 15))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 8)
+        .padding(16)
+        .background(atxSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(atxStroke))
     }
 
     private var accountHero: some View {
