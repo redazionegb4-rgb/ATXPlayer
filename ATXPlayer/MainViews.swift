@@ -372,7 +372,7 @@ struct MainTabView: View {
         }
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
-        .onChange(of: session.allLive.isEmpty) { _, isEmpty in
+        .onChange(of: session.allLive.isEmpty) { isEmpty in
             // Se dopo login/refresh l'account non ha canali Live, evita di lasciare
             // selezionata una sezione che non deve più essere disponibile.
             if isEmpty && selectedTab == .live {
