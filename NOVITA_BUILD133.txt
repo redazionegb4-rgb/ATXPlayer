@@ -1,0 +1,8 @@
+AtlantiX 4.0 - Build 133
+
+- Nuova navigazione ispirata alle moderne piattaforme streaming.
+- Film e Serie tornano evidenti nella barra inferiore.
+- Rimossa la sezione Scopri dalla navigazione principale.
+- Profilo spostato nella barra superiore dopo Aggiorna.
+- Home con hero a tutta larghezza e libreria personale.
+- Nuova tab bar nera, minimale e più leggibile.

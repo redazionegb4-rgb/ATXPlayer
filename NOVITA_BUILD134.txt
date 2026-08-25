@@ -1,0 +1,10 @@
+AtlantiX 4.0 — Build 134
+
+- Home completamente riprogettata in stile piattaforma streaming moderna.
+- Top bar minimale con Cerca, Refresh e Profilo.
+- Filtri rapidi Serie TV, Film e Categorie in alto.
+- Hero a tutto schermo più grande con Riproduci e La mia lista.
+- Nuove righe orizzontali per Continua a guardare, Film, Serie e Visti di recente.
+- Navigazione inferiore invariata: Home, Diretta, Film, Serie, Download.
+- Profilo resta in alto accanto al Refresh.
+- Identità e colori AtlantiX mantenuti.
