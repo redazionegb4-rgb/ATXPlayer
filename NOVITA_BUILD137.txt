@@ -1,0 +1,16 @@
+AtlantiX 4.0 — Build 137
+TOTAL STREAMING REBUILD
+
+- Nuova identità visiva nero/rosso.
+- Nuova icona AtlantiX con A stilizzata.
+- Home cinematografica con hero, filtri e righe contenuti.
+- Nuova navigazione Home / Diretta / Film / Serie / Download.
+- Categorie Live, Film e Serie completamente ridisegnate a mosaico.
+- Cataloghi ridisegnati in stile poster wall.
+- Nuove schede Film, Serie TV e Live.
+- Nuova gestione stagioni/episodi.
+- Nuova ricerca globale a griglia.
+- Cronologia ridisegnata.
+- Profilo/Impostazioni ridisegnati con navigazione di ritorno sempre visibile.
+- Download riallineati al nuovo design.
+- Player, PiP, download e API mantenuti.

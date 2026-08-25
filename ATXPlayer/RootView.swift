@@ -26,21 +26,22 @@ struct LaunchAnimationView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         ZStack {
-            Color(red: 0.02, green: 0.025, blue: 0.07).ignoresSafeArea()
-            RadialGradient(colors: [.purple.opacity(0.42), .clear], center: .center, startRadius: 20, endRadius: 330).ignoresSafeArea()
-            VStack(spacing: 22) {
-                BrandMark(size: 116)
-                    .scaleEffect(appeared || reduceMotion ? 1 : 0.72)
+            Color.black.ignoresSafeArea()
+            RadialGradient(colors: [Color.red.opacity(0.18), .clear], center: .center, startRadius: 20, endRadius: 360).ignoresSafeArea()
+            VStack(spacing: 20) {
+                BrandMark(size: 118)
+                    .scaleEffect(appeared || reduceMotion ? 1 : 0.78)
                     .opacity(appeared ? 1 : 0)
                 Text("ATLANTIX")
-                    .font(.system(size: 38, weight: .black, design: .rounded))
+                    .font(.system(size: 34, weight: .black, design: .rounded))
                     .tracking(5)
-                    .foregroundStyle(LinearGradient(colors: [.cyan, .white, .purple], startPoint: .leading, endPoint: .trailing))
+                    .foregroundStyle(.white)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared || reduceMotion ? 0 : 12)
+                Capsule().fill(Color.red).frame(width: appeared ? 96 : 20, height: 4)
+                    .animation(.easeOut(duration: 0.55), value: appeared)
             }
         }
-        .onAppear { withAnimation(.spring(response: 0.7, dampingFraction: 0.72)) { appeared = true } }
+        .onAppear { withAnimation(.spring(response: 0.68, dampingFraction: 0.76)) { appeared = true } }
         .transition(.opacity)
     }
 }
@@ -49,13 +50,18 @@ struct BrandMark: View {
     var size: CGFloat = 88
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                .fill(LinearGradient(colors: [Color.cyan, Color.purple, Color.indigo], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .shadow(color: .purple.opacity(0.55), radius: 24, y: 10)
-            Image(systemName: "play.fill")
-                .font(.system(size: size * 0.38, weight: .black))
-                .foregroundStyle(.white)
-                .offset(x: -2)
+            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                .fill(Color(red: 0.035, green: 0.035, blue: 0.04))
+                .overlay {
+                    RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                }
+            Text("A")
+                .font(.system(size: size * 0.62, weight: .black, design: .rounded))
+                .foregroundStyle(
+                    LinearGradient(colors: [Color(red: 1.0, green: 0.10, blue: 0.18), Color(red: 0.68, green: 0.0, blue: 0.06)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .tracking(-3)
         }
         .frame(width: size, height: size)
     }
@@ -71,10 +77,10 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.025, green: 0.03, blue: 0.075).ignoresSafeArea()
-            LinearGradient(colors: [.purple.opacity(0.34), .clear, .cyan.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
-            Circle().fill(.purple.opacity(0.32)).frame(width: 310).blur(radius: 80).offset(x: 155, y: -280)
-            Circle().fill(.cyan.opacity(0.15)).frame(width: 260).blur(radius: 90).offset(x: -170, y: 330)
+            Color.black.ignoresSafeArea()
+            LinearGradient(colors: [Color.red.opacity(0.14), .clear, Color.black], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            Circle().fill(Color.red.opacity(0.18)).frame(width: 310).blur(radius: 80).offset(x: 155, y: -280)
+            Circle().fill(Color.red.opacity(0.08)).frame(width: 260).blur(radius: 90).offset(x: -170, y: 330)
 
             ScrollView {
                 VStack(spacing: 0) {
@@ -85,7 +91,7 @@ struct LoginView: View {
                     Text("ATLANTIX")
                         .font(.system(size: 34, weight: .black, design: .rounded))
                         .tracking(3)
-                        .foregroundStyle(LinearGradient(colors: [.cyan, .white, .purple], startPoint: .leading, endPoint: .trailing))
+                        .foregroundStyle(LinearGradient(colors: [.white, .white], startPoint: .leading, endPoint: .trailing))
                         .padding(.top, 22)
                     Text("Accedi con le credenziali del tuo account esistente")
                         .font(.subheadline.weight(.medium))
@@ -130,9 +136,9 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 17)
                             .foregroundStyle(.white)
-                            .background(LinearGradient(colors: [.purple, .indigo, .cyan.opacity(0.8)], startPoint: .leading, endPoint: .trailing))
+                            .background(LinearGradient(colors: [Color.red, Color(red: 0.72, green: 0.0, blue: 0.05)], startPoint: .leading, endPoint: .trailing))
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .shadow(color: .purple.opacity(0.38), radius: 20, y: 9)
+                            .shadow(color: Color.red.opacity(0.22), radius: 16, y: 8)
                         }
                         .disabled(session.isLoading || session.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || session.password.isEmpty)
                     }
