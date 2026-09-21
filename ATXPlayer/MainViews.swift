@@ -4524,17 +4524,6 @@ private struct RebornHomeView: View {
         guard !session.allMovies.isEmpty else { heroMovie = nil; return }
         heroMovie = session.allMovies.prefix(18).randomElement()
     }
-        let seriesCandidates = session.seriesCategories.filter { category in
-            session.allSeries.contains { $0.categoryID == category.categoryID }
-        }
-
-        if featuredMovieCategory == nil || !movieCandidates.contains(featuredMovieCategory!) {
-            featuredMovieCategory = movieCandidates.randomElement()
-        }
-        if featuredSeriesCategory == nil || !seriesCandidates.contains(featuredSeriesCategory!) {
-            featuredSeriesCategory = seriesCandidates.randomElement()
-        }
-    }
 }
 
 private struct RebornCatalogView: View {
