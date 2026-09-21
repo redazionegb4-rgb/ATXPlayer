@@ -2618,9 +2618,20 @@ private final class ActivePlaybackRegistry {
         activePlayer = player
     }
 
+    func stopCurrent() {
+        guard let current = activePlayer else { return }
+        current.pause()
+        current.replaceCurrentItem(with: nil)
+        activePlayer = nil
+    }
+
     func deactivate(_ player: AVPlayer?) {
         guard let player else { return }
-        if activePlayer === player { activePlayer = nil }
+        if activePlayer === player {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            activePlayer = nil
+        }
     }
 }
 
@@ -2803,6 +2814,10 @@ struct PlayerScreen: View {
         }
 
         if let currentDescriptor { session.recordHistory(for: currentDescriptor) }
+
+        // Chiude completamente un eventuale stream precedente PRIMA di creare
+        // il nuovo asset, evitando due sessioni contemporanee lato provider.
+        ActivePlaybackRegistry.shared.stopCurrent()
 
         let assetOptions: [String: Any] = [
             AVURLAssetPreferPreciseDurationAndTimingKey: false
@@ -4532,9 +4547,11 @@ private struct RebornCatalogView: View {
     @State private var selectedCategory: String? = nil
     @State private var search = ""
     @State private var showSearch = false
+    @State private var showCategories = false
 
     private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
+    private var selectedCategoryName: String { categories.first(where: { $0.categoryID == selectedCategory })?.categoryName ?? "Categorie" }
     private let posterCols = [GridItem(.adaptive(minimum: 104, maximum: 150), spacing: 8)]
 
     private var movies: [VODStream] {
@@ -4553,35 +4570,40 @@ private struct RebornCatalogView: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     header
-                    categoryStrip
+                    categorySelector
                     if type == .live { liveWall } else { posterWall }
                 }.padding(.bottom, 110)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { RebornSearchView(initialType: type) } }
+        .sheet(isPresented: $showCategories) { categorySheet }
         .onAppear { selectFirstCategoryIfNeeded() }
         .onChange(of: categories.map(\.categoryID)) { _ in selectFirstCategoryIfNeeded() }
     }
 
     private func selectFirstCategoryIfNeeded() {
-        guard selectedCategory == nil, let first = categories.first else { return }
-        selectedCategory = first.categoryID
+        if let selectedCategory, categories.contains(where: { $0.categoryID == selectedCategory }) { return }
+        selectedCategory = categories.first?.categoryID
     }
 
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 34, weight: .black)).foregroundStyle(.white)
-                Text(type == .live ? "Canali in diretta" : type == .movies ? "Film" : "Serie TV")
+                Text(type == .live ? "Canali in diretta" : type == .movies ? "Il tuo catalogo film" : "Il tuo catalogo serie")
                     .font(.caption).foregroundStyle(rebornMuted)
             }
             Spacer()
-            if selectedCategory != nil {
-                Button { selectedCategory = categories.first?.categoryID } label: {
-                    Image(systemName: "arrow.counterclockwise.circle.fill").font(.headline).foregroundStyle(.white.opacity(0.75)).frame(width: 40, height: 40)
-                }.buttonStyle(.plain)
-            }
+            Button {
+                Task {
+                    await session.reloadSection(type)
+                    selectFirstCategoryIfNeeded()
+                }
+            } label: {
+                Image(systemName: session.isRefreshing ? "hourglass" : "arrow.clockwise")
+                    .font(.headline).foregroundStyle(.white).frame(width: 40, height: 40)
+            }.buttonStyle(.plain).disabled(session.isRefreshing)
             Button { showSearch = true } label: {
                 Image(systemName: "magnifyingglass").font(.headline).foregroundStyle(.white).frame(width: 40, height: 40)
             }.buttonStyle(.plain)
@@ -4589,21 +4611,47 @@ private struct RebornCatalogView: View {
         .padding(.horizontal, 16).padding(.top, 10)
     }
 
-    private var categoryStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(categories) { c in
-                    Button { selectedCategory = c.categoryID } label: { categoryChip(c.categoryName, selected: selectedCategory == c.categoryID) }
+    private var categorySelector: some View {
+        Button { showCategories = true } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "square.grid.2x2")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CATEGORIA").font(.caption2.weight(.bold)).foregroundStyle(rebornMuted)
+                    Text(selectedCategoryName).font(.subheadline.weight(.bold)).foregroundStyle(.white).lineLimit(1)
                 }
-            }.padding(.horizontal, 16)
-        }
+                Spacer()
+                Image(systemName: "chevron.down").font(.caption.bold()).foregroundStyle(.white.opacity(0.65))
+            }
+            .padding(.horizontal, 14).frame(height: 54)
+            .background(rebornCard, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }.buttonStyle(.plain).padding(.horizontal, 16)
     }
 
-    private func categoryChip(_ text: String, selected: Bool) -> some View {
-        Text(text).font(.caption.weight(.semibold)).lineLimit(1)
-            .foregroundStyle(selected ? Color.black : Color.white)
-            .padding(.horizontal, 13).frame(height: 34)
-            .background(selected ? Color.white : Color.white.opacity(0.09), in: Capsule())
+    private var categorySheet: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(categories) { c in
+                            Button { selectedCategory = c.categoryID; showCategories = false } label: {
+                                HStack {
+                                    Text(c.categoryName).font(.body.weight(selectedCategory == c.categoryID ? .bold : .regular)).foregroundStyle(.white)
+                                    Spacer()
+                                    if selectedCategory == c.categoryID { Image(systemName: "checkmark").foregroundStyle(rebornRed) }
+                                }
+                                .padding(.horizontal, 18).frame(minHeight: 52)
+                                .contentShape(Rectangle())
+                            }.buttonStyle(.plain)
+                            Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 18)
+                        }
+                    }.padding(.vertical, 8)
+                }
+            }
+            .navigationTitle("Categorie \(title)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Chiudi") { showCategories = false } } }
+        }.preferredColorScheme(.dark)
     }
 
     private var posterWall: some View {
