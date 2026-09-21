@@ -1,0 +1,10 @@
+ATX Player 4.0 — Build 150
+
+- Barra inferiore completamente ridisegnata
+- Nuovo stile flottante, compatto e moderno
+- Altezza ridotta e maggiore spazio ai contenuti
+- Effetto vetro scuro con angoli arrotondati
+- Sezione selezionata più elegante e discreta
+- Testo Download completamente leggibile
+- Icone e testi ridimensionati e meglio proporzionati
+- Nessuna modifica alle funzioni delle sezioni

@@ -4309,36 +4309,61 @@ private struct RebornTabBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 3) {
             ForEach(visibleTabs, id: \.self) { tab in
+                let isSelected = selectedTab == tab
+
                 Button {
-                    withAnimation(.easeOut(duration: 0.16)) { selectedTab = tab }
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        selectedTab = tab
+                    }
                 } label: {
-                    VStack(spacing: 5) {
+                    VStack(spacing: 3) {
                         Image(systemName: tab.icon)
-                            .font(.system(size: 19, weight: selectedTab == tab ? .bold : .regular))
+                            .font(.system(size: 17, weight: isSelected ? .semibold : .medium))
+                            .symbolRenderingMode(.monochrome)
+
                         Text(tab.rawValue)
-                            .font(.system(size: 9, weight: selectedTab == tab ? .bold : .medium))
+                            .font(.system(size: 8.5, weight: isSelected ? .semibold : .medium))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.78)
+                            .minimumScaleFactor(0.82)
                             .allowsTightening(true)
                     }
-                    .foregroundStyle(selectedTab == tab ? Color.white : Color.white.opacity(0.46))
+                    .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.50))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 60)
-                    .padding(.horizontal, 2)
-                    .overlay(alignment: .top) {
-                        if selectedTab == tab { Rectangle().fill(rebornRed).frame(height: 3) }
+                    .frame(height: 45)
+                    .background {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.10))
+                                .overlay(alignment: .bottom) {
+                                    Capsule()
+                                        .fill(rebornRed)
+                                        .frame(width: 18, height: 2.5)
+                                        .offset(y: -2)
+                                }
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(tab.rawValue)
             }
         }
-        .padding(.top, 3)
-        .padding(.bottom, 4)
-        .background(.ultraThinMaterial)
-        .background(Color.black.opacity(0.96))
-        .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5) }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 5)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.black.opacity(0.72))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.7)
+        }
+        .shadow(color: Color.black.opacity(0.42), radius: 14, y: 5)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 5)
     }
 }
 
