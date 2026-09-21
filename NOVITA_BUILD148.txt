@@ -1,0 +1,5 @@
+ATX Player 4.0 — Build 148
+
+- Nuovo nome pubblico dell’app: ATX Player.
+- Aggiornati i riferimenti visibili nell’interfaccia da AtlantiX a ATX Player.
+- Funzioni e configurazione della Build 147 mantenute.

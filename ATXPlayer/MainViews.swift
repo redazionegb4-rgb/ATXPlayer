@@ -1,4 +1,4 @@
-// ATLANTIX 4.0 BUILD 140 — PROFILE EXPERIENCE + CATALOG CLEANUP
+// ATX PLAYER 4.0 BUILD 140 — PROFILE EXPERIENCE + CATALOG CLEANUP
 import Foundation
 import SwiftUI
 import AVKit
@@ -83,8 +83,8 @@ private struct OptimizedAsyncImage<Content: View>: View {
     }
 }
 
-// MARK: - AtlantiX 4.0 Build 137 — TOTAL STREAMING DESIGN SYSTEM
-// Deep-black cinema surfaces with a single AtlantiX red accent.
+// MARK: - ATX Player 4.0 Build 137 — TOTAL STREAMING DESIGN SYSTEM
+// Deep-black cinema surfaces with a single ATX Player red accent.
 private let atxPrimary = Color(red: 0.90, green: 0.02, blue: 0.10)
 private let atxSecondary = Color(red: 0.62, green: 0.00, blue: 0.055)
 private let atxCyan = Color.white
@@ -158,7 +158,7 @@ private func seriesSortValue(_ item: SeriesItem) -> Double {
 }
 
 
-// MARK: - AtlantiX profile experience
+// MARK: - ATX Player profile experience
 private let atxProfileAvatarKey = "atlantix.profile.avatar.id"
 private let atxProfileCustomImageKey = "atlantix.profile.avatar.custom.base64"
 
@@ -216,7 +216,7 @@ private struct ATXProfileAvatarEditor: View {
                 ATXProfileAvatarView(size: 78)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Immagine profilo").font(.headline).foregroundStyle(.white)
-                    Text("Scegli un avatar AtlantiX o una tua foto.")
+                    Text("Scegli un avatar ATX Player o una tua foto.")
                         .font(.caption).foregroundStyle(rebornMuted)
                 }
                 Spacer()
@@ -283,7 +283,7 @@ private struct ATXProfileChooserView: View {
                 VStack(spacing: 34) {
                     HStack {
                         BrandMark(size: 34)
-                        Text("ATLANTIX")
+                        Text("ATX PLAYER")
                             .font(.system(size: 21, weight: .black, design: .rounded))
                             .tracking(2)
                             .foregroundStyle(.white)
@@ -463,7 +463,7 @@ private struct HomeDashboardV4: View {
         .background(Color.black.opacity(0.98))
     }
 
-    // AtlantiX 4.0 Build 136 — total streaming rebuild.
+    // ATX Player 4.0 Build 136 — total streaming rebuild.
     private var filterStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -519,7 +519,7 @@ private struct HomeDashboardV4: View {
                     HStack(spacing: 7) {
                         Text(feature.kind)
                         Text("•")
-                        Text("AtlantiX")
+                        Text("ATX Player")
                         Text("•")
                         Text("In evidenza")
                     }
@@ -765,7 +765,7 @@ private struct DiscoverV4: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("SCOPRI").font(.caption2.weight(.black)).tracking(1.8).foregroundStyle(atxCyan)
                         Text("Cosa vuoi guardare?").font(.system(size: 31, weight: .black, design: .rounded)).foregroundStyle(.white)
-                        Text("Tutto il catalogo AtlantiX in un unico posto.").font(.caption).foregroundStyle(.white.opacity(0.46))
+                        Text("Tutto il catalogo ATX Player in un unico posto.").font(.caption).foregroundStyle(.white.opacity(0.46))
                     }
                     .padding(.horizontal, 18).padding(.top, 18)
 
@@ -940,7 +940,7 @@ struct HomeView: View {
                 BrandMark(size: 27)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text("ATLANTIX").font(.system(size: 14, weight: .black)).tracking(2.1).foregroundStyle(.white)
+                Text("ATX PLAYER").font(.system(size: 14, weight: .black)).tracking(2.1).foregroundStyle(.white)
                 Text("Ciao, \(session.username)").font(.caption2.weight(.medium)).foregroundStyle(.white.opacity(0.46)).lineLimit(1)
             }
             Spacer()
@@ -3484,7 +3484,7 @@ struct SettingsView: View {
                     }
 
                     Button(role: .destructive) { showLogout = true } label: {
-                        Text("Esci da AtlantiX").font(.headline.bold()).foregroundStyle(.white)
+                        Text("Esci da ATX Player").font(.headline.bold()).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).frame(height: 48)
                             .background(atxPrimary, in: RoundedRectangle(cornerRadius: 6))
                     }.buttonStyle(.plain).padding(.horizontal, 16)
@@ -3634,7 +3634,7 @@ struct OfflineDownload: Identifiable, Codable, Equatable {
 
     var localURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("AtlantiXDownloads", isDirectory: true)
+            .appendingPathComponent("ATX PlayerDownloads", isDirectory: true)
             .appendingPathComponent(localFilename)
     }
 }
@@ -3686,7 +3686,7 @@ final class DownloadCenter: ObservableObject {
 
     private var downloadsRootDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("AtlantiXDownloads", isDirectory: true)
+            .appendingPathComponent("ATX PlayerDownloads", isDirectory: true)
     }
 
     private var downloadsDirectory: URL {
@@ -4292,7 +4292,7 @@ struct DownloadsView: View {
 
 
 
-// MARK: - AtlantiX 4.0 Total Streaming Rebuild (Build 139)
+// MARK: - ATX Player 4.0 Total Streaming Rebuild (Build 139)
 
 private let rebornRed = Color(red: 0.90, green: 0.03, blue: 0.08)
 private let rebornCard = Color(red: 0.075, green: 0.075, blue: 0.085)
@@ -4376,7 +4376,7 @@ private struct RebornHomeView: View {
     private var topBar: some View {
         HStack(spacing: 12) {
             BrandMark(size: 36)
-            Text("ATLANTIX")
+            Text("ATX PLAYER")
                 .font(.system(size: 20, weight: .black, design: .rounded))
                 .tracking(2)
                 .foregroundStyle(.white)
@@ -4761,7 +4761,7 @@ private struct RebornSearchView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
                     Button { dismiss() } label: { Image(systemName: "chevron.left").frame(width: 40, height: 40) }.foregroundStyle(.white)
-                    HStack { Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.55)); TextField("Cerca in AtlantiX", text: $query).foregroundStyle(.white).textInputAutocapitalization(.never) }
+                    HStack { Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.55)); TextField("Cerca in ATX Player", text: $query).foregroundStyle(.white).textInputAutocapitalization(.never) }
                         .padding(.horizontal, 12).frame(height: 42).background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
                 }.padding(12)
                 ScrollView {
@@ -4859,7 +4859,7 @@ private struct RebornProfileView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .alert("Uscire da AtlantiX?", isPresented: $confirmLogout) { Button("Annulla", role: .cancel) {}; Button("Esci", role: .destructive) { session.signOut() } }
+        .alert("Uscire da ATX Player?", isPresented: $confirmLogout) { Button("Annulla", role: .cancel) {}; Button("Esci", role: .destructive) { session.signOut() } }
     }
 
     private var profileHero: some View {
