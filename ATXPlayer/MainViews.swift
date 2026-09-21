@@ -4319,10 +4319,14 @@ private struct RebornTabBar: View {
                             .font(.system(size: 19, weight: selectedTab == tab ? .bold : .regular))
                         Text(tab.rawValue)
                             .font(.system(size: 9, weight: selectedTab == tab ? .bold : .medium))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                            .allowsTightening(true)
                     }
                     .foregroundStyle(selectedTab == tab ? Color.white : Color.white.opacity(0.46))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 58)
+                    .frame(height: 60)
+                    .padding(.horizontal, 2)
                     .overlay(alignment: .top) {
                         if selectedTab == tab { Rectangle().fill(rebornRed).frame(height: 3) }
                     }
@@ -4330,11 +4334,11 @@ private struct RebornTabBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.top, 2)
+        .padding(.top, 3)
+        .padding(.bottom, 4)
         .background(.ultraThinMaterial)
-        .background(Color.black.opacity(0.92))
+        .background(Color.black.opacity(0.96))
         .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5) }
-        .ignoresSafeArea(edges: .bottom)
     }
 }
 
