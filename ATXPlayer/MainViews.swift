@@ -1392,139 +1392,27 @@ struct MediaRail<Content: View>: View {
 struct ContentBrowser: View {
     @EnvironmentObject var session: AppSession
     let type: ContentType
-    @State private var search = ""
 
     private var categories: [Category] {
         type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories
     }
-    private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
-    private var filtered: [Category] {
-        search.isEmpty ? categories : categories.filter { $0.categoryName.localizedCaseInsensitiveContains(search) }
-    }
-    private var totalCount: Int {
-        type == .live ? session.allLive.count : type == .movies ? session.allMovies.count : session.allSeries.count
-    }
-    private let tiles = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    header
-                    searchField
-
-                    NavigationLink { ItemGrid(type: type, category: nil) } label: {
-                        ZStack(alignment: .bottomLeading) {
-                            Rectangle().fill(LinearGradient(colors: [atxPrimary.opacity(0.82), Color.black], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("TUTTO")
-                                    .font(.caption2.weight(.black)).tracking(1.5).foregroundStyle(.white.opacity(0.72))
-                                Text("Tutto il catalogo")
-                                    .font(.title3.weight(.black)).foregroundStyle(.white)
-                                Text("\(totalCount.formatted()) contenuti")
-                                    .font(.caption).foregroundStyle(.white.opacity(0.62))
-                            }
-                            .padding(16)
-                        }
-                        .frame(height: 118)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 16)
-
-                    Text("Categorie")
-                        .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-
-                    LazyVGrid(columns: tiles, spacing: 10) {
-                        ForEach(Array(filtered.enumerated()), id: \.element.id) { index, category in
-                            NavigationLink { ItemGrid(type: type, category: category) } label: {
-                                categoryTile(category, index: index)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 120)
+        Group {
+            if let first = categories.first {
+                ItemGrid(type: type, category: first)
+            } else {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    EmptyStateView(
+                        title: type == .live ? "Nessun canale" : "Nessun contenuto",
+                        icon: type == .live ? "dot.radiowaves.left.and.right" : "rectangle.stack.badge.minus",
+                        message: "Non ci sono categorie disponibili per questo account."
+                    )
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private var header: some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(colors: [atxPrimary.opacity(0.34), Color.black.opacity(0.94)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                .frame(height: 170)
-            VStack(alignment: .leading, spacing: 7) {
-                BrandMark(size: 34)
-                Text(title)
-                    .font(.system(size: 36, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                Text(type == .live ? "Tutto ciò che è in onda, adesso." : type == .movies ? "Film, novità e titoli da scoprire." : "Serie, stagioni ed episodi in un unico posto.")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.60))
-                Text("\(totalCount.formatted()) contenuti • \(categories.count.formatted()) categorie")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.48))
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
-        }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.50))
-            TextField("Cerca categorie", text: $search)
-                .foregroundStyle(.white)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            if !search.isEmpty {
-                Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.45)) }
-                    .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 46)
-        .background(Color.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
-        .padding(.horizontal, 16)
-    }
-
-    private func categoryCount(_ category: Category) -> Int {
-        if type == .live { return session.allLive.filter { $0.categoryID == category.categoryID }.count }
-        if type == .movies { return session.allMovies.filter { $0.categoryID == category.categoryID }.count }
-        return session.allSeries.filter { $0.categoryID == category.categoryID }.count
-    }
-
-    private func categoryTile(_ category: Category, index: Int) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(
-                colors: index.isMultiple(of: 3) ? [atxPrimary.opacity(0.58), atxSurface] : [atxSurfaceSoft, Color.black],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: type == .live ? "dot.radiowaves.left.and.right" : type == .movies ? "film.fill" : "rectangle.stack.fill")
-                .font(.system(size: 42, weight: .black))
-                .foregroundStyle(.white.opacity(0.10))
-                .offset(x: 76, y: -28)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(category.categoryName)
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                Text("\(categoryCount(category).formatted()) contenuti")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.55))
-            }
-            .padding(14)
-        }
-        .frame(height: 112)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.07), lineWidth: 1))
     }
 }
 
@@ -1533,6 +1421,7 @@ struct ItemGrid: View {
     @Environment(\.dismiss) private var dismiss
     let type: ContentType
     let category: Category?
+    @State private var selectedCategory: Category?
     @State private var live: [LiveStream] = []
     @State private var vod: [VODStream] = []
     @State private var series: [SeriesItem] = []
@@ -1543,6 +1432,16 @@ struct ItemGrid: View {
     @State private var visibleLive: [LiveStream] = []
     @State private var visibleVOD: [VODStream] = []
     @State private var visibleSeries: [SeriesItem] = []
+    init(type: ContentType, category: Category?) {
+        self.type = type
+        self.category = category
+        _selectedCategory = State(initialValue: category)
+    }
+
+    private var availableCategories: [Category] {
+        type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories
+    }
+
     private var columns: [GridItem] {
         type == .live
         ? [GridItem(.flexible(), spacing: 14)]
@@ -1602,6 +1501,9 @@ struct ItemGrid: View {
         .task { await load(forceNetwork: false) }
         .onChange(of: search) { _ in rebuildVisibleItems() }
         .onChange(of: newestFirst) { _ in rebuildVisibleItems() }
+        .onChange(of: selectedCategory?.categoryID) { _ in
+            Task { await load(forceNetwork: false) }
+        }
     }
 
     @ViewBuilder
@@ -1629,7 +1531,7 @@ struct ItemGrid: View {
     private var catalogHero: some View {
         ZStack(alignment: .bottomLeading) {
             OptimizedAsyncImage(url: URL(string: catalogHeroImage ?? "")) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() } else { accentGradient(for: category?.categoryName ?? "Atlantix") }
+                if let image = phase.image { image.resizable().scaledToFill() } else { accentGradient(for: selectedCategory?.categoryName ?? "Atlantix") }
             }
             .frame(maxWidth: .infinity).frame(height: 280).clipped()
             LinearGradient(colors: [Color.black.opacity(0.08), Color.black.opacity(0.96)], startPoint: .top, endPoint: .bottom)
@@ -1639,7 +1541,7 @@ struct ItemGrid: View {
                         .frame(width: 48, height: 48).background(Color.black.opacity(0.46), in: Circle())
                 }.buttonStyle(.plain).padding(.bottom, 45)
                 Text(type == .movies ? "FILM" : "SERIE TV").font(.caption2.weight(.black)).tracking(1.5).foregroundStyle(atxCyan)
-                Text(category?.categoryName ?? "Tutti i contenuti").font(.system(size: 30, weight: .black, design: .rounded)).foregroundStyle(.white).lineLimit(2)
+                Text(selectedCategory?.categoryName ?? "Tutti i contenuti").font(.system(size: 30, weight: .black, design: .rounded)).foregroundStyle(.white).lineLimit(2)
                 Text("\(resultCount.formatted()) titoli").font(.caption).foregroundStyle(.white.opacity(0.55))
             }.padding(18)
         }.frame(height: 280)
@@ -1655,12 +1557,21 @@ struct ItemGrid: View {
             }
             .padding(.horizontal, 14).frame(height: 48).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 15))
             Menu {
-                Button { newestFirst = true } label: { Label("Più recenti", systemImage: newestFirst ? "checkmark" : "clock") }
-                Button { newestFirst = false } label: { Label("Meno recenti", systemImage: !newestFirst ? "checkmark" : "clock.arrow.circlepath") }
+                ForEach(availableCategories) { cat in
+                    Button {
+                        selectedCategory = cat
+                    } label: {
+                        Label(cat.categoryName, systemImage: selectedCategory?.categoryID == cat.categoryID ? "checkmark" : "rectangle.stack")
+                    }
+                }
             } label: {
-                Image(systemName: "arrow.up.arrow.down").font(.headline.bold()).foregroundStyle(.white)
+                Image(systemName: "rectangle.stack.fill").font(.headline.bold()).foregroundStyle(.white)
                     .frame(width: 48, height: 48).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 15))
             }
+            Button { Task { await load(forceNetwork: true) } } label: {
+                Image(systemName: loading ? "hourglass" : "arrow.clockwise").font(.headline.bold()).foregroundStyle(.white)
+                    .frame(width: 48, height: 48).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 15))
+            }.buttonStyle(.plain).disabled(loading)
         }.padding(.horizontal, 16).padding(.top, 14)
     }
 
@@ -1672,10 +1583,24 @@ struct ItemGrid: View {
                     .frame(width: 48, height: 48).background(Color.white.opacity(0.08), in: Circle())
             }.buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
-                Text(category?.categoryName ?? "Tutti i canali").font(.title3.weight(.black)).foregroundStyle(.white).lineLimit(1)
+                Text(selectedCategory?.categoryName ?? "Tutti i canali").font(.title3.weight(.black)).foregroundStyle(.white).lineLimit(1)
                 Text("\(resultCount.formatted()) canali live").font(.caption).foregroundStyle(.white.opacity(0.45))
             }
-            Spacer(); Circle().fill(Color.red).frame(width: 8, height: 8)
+            Spacer()
+            Menu {
+                ForEach(availableCategories) { cat in
+                    Button { selectedCategory = cat } label: {
+                        Label(cat.categoryName, systemImage: selectedCategory?.categoryID == cat.categoryID ? "checkmark" : "rectangle.stack")
+                    }
+                }
+            } label: {
+                Image(systemName: "rectangle.stack.fill").font(.headline).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).background(Color.white.opacity(0.08), in: Circle())
+            }
+            Button { Task { await load(forceNetwork: true) } } label: {
+                Image(systemName: loading ? "hourglass" : "arrow.clockwise").font(.headline).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).background(Color.white.opacity(0.08), in: Circle())
+            }.buttonStyle(.plain).disabled(loading)
         }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
     }
 
@@ -1758,14 +1683,14 @@ struct ItemGrid: View {
         do {
             switch type {
             case .live:
-                live = category == nil ? session.allLive : session.allLive.filter { $0.categoryID == category?.categoryID }
-                if forceNetwork || live.isEmpty { live = try await APIClient.shared.liveStreams(baseURL: session.baseURL, username: session.username, password: session.password, categoryID: category?.categoryID) }
+                live = selectedCategory == nil ? session.allLive : session.allLive.filter { $0.categoryID == selectedCategory?.categoryID }
+                if forceNetwork || live.isEmpty { live = try await APIClient.shared.liveStreams(baseURL: session.baseURL, username: session.username, password: session.password, categoryID: selectedCategory?.categoryID) }
             case .movies:
-                vod = category == nil ? session.allMovies : session.allMovies.filter { $0.categoryID == category?.categoryID }
-                if forceNetwork || vod.isEmpty { vod = try await APIClient.shared.vodStreams(baseURL: session.baseURL, username: session.username, password: session.password, categoryID: category?.categoryID) }
+                vod = selectedCategory == nil ? session.allMovies : session.allMovies.filter { $0.categoryID == selectedCategory?.categoryID }
+                if forceNetwork || vod.isEmpty { vod = try await APIClient.shared.vodStreams(baseURL: session.baseURL, username: session.username, password: session.password, categoryID: selectedCategory?.categoryID) }
             case .series:
-                series = category == nil ? session.allSeries : session.allSeries.filter { $0.categoryID == category?.categoryID }
-                if forceNetwork || series.isEmpty { series = try await APIClient.shared.series(baseURL: session.baseURL, username: session.username, password: session.password, categoryID: category?.categoryID) }
+                series = selectedCategory == nil ? session.allSeries : session.allSeries.filter { $0.categoryID == selectedCategory?.categoryID }
+                if forceNetwork || series.isEmpty { series = try await APIClient.shared.series(baseURL: session.baseURL, username: session.username, password: session.password, categoryID: selectedCategory?.categoryID) }
             }
         } catch { self.error = error.localizedDescription }
         rebuildVisibleItems()
@@ -2680,6 +2605,25 @@ struct PlaybackQueueItem: Identifiable, Hashable {
     let descriptor: PlaybackDescriptor
 }
 
+@MainActor
+private final class ActivePlaybackRegistry {
+    static let shared = ActivePlaybackRegistry()
+    private weak var activePlayer: AVPlayer?
+
+    func activate(_ player: AVPlayer) {
+        if let previous = activePlayer, previous !== player {
+            previous.pause()
+            previous.replaceCurrentItem(with: nil)
+        }
+        activePlayer = player
+    }
+
+    func deactivate(_ player: AVPlayer?) {
+        guard let player else { return }
+        if activePlayer === player { activePlayer = nil }
+    }
+}
+
 struct PlayerScreen: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.scenePhase) private var scenePhase
@@ -2875,6 +2819,7 @@ struct PlayerScreen: View {
             liveStartupAttempts = 0
         }
         let newPlayer = AVPlayer(playerItem: item)
+        ActivePlaybackRegistry.shared.activate(newPlayer)
         newPlayer.automaticallyWaitsToMinimizeStalling = true
         newPlayer.preventsDisplaySleepDuringVideoPlayback = true
         player = newPlayer
@@ -2913,61 +2858,29 @@ struct PlayerScreen: View {
         liveStartupTask?.cancel()
         livePlaybackStarted = false
         liveStartupAttempts = 0
-
         player.currentItem?.preferredForwardBufferDuration = 1.25
         player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
 
         liveStartupTask = Task { @MainActor in
-            // Attende che AVPlayerItem sia realmente pronto prima di avviare.
-            // Questo evita il caso in cui appare il primo fotogramma ma il
-            // flusso resta fermo finché l’utente non tocca i controlli.
             let readyDeadline = Date().addingTimeInterval(8)
             while player.currentItem?.status == .unknown && Date() < readyDeadline {
                 do { try await Task.sleep(nanoseconds: 100_000_000) } catch { return }
                 guard !Task.isCancelled, self.player === player else { return }
             }
-
             guard !Task.isCancelled, self.player === player else { return }
-            guard player.currentItem?.status != .failed else {
-                self.failed = true
-                return
-            }
+            guard player.currentItem?.status != .failed else { self.failed = true; return }
 
-            player.play()
-
-            // Controlliamo l’avanzamento reale del flusso, non il solo rate.
-            // Se il primo fotogramma resta bloccato, eseguiamo al massimo due
-            // cicli pausa/play, equivalenti al gesto che lo sbloccava a mano.
-            var lastTime = player.currentTime().seconds
-            for attempt in 0..<3 {
-                do { try await Task.sleep(nanoseconds: attempt == 0 ? 900_000_000 : 1_200_000_000) } catch { return }
-                guard !Task.isCancelled, self.player === player else { return }
-
-                let currentTime = player.currentTime().seconds
-                let advanced = currentTime.isFinite && lastTime.isFinite && currentTime > lastTime + 0.03
-                if advanced || player.timeControlStatus == .playing {
-                    self.livePlaybackStarted = true
-                    self.liveStartupAttempts = 0
-                    return
-                }
-
-                self.liveStartupAttempts += 1
-                if attempt < 2 {
-                    player.pause()
-                    do { try await Task.sleep(nanoseconds: 120_000_000) } catch { return }
-                    guard !Task.isCancelled, self.player === player else { return }
-                    player.play()
-                    lastTime = player.currentTime().seconds
-                }
-            }
-
+            // Un solo avvio del flusso: niente cicli pausa/play che alcuni server
+            // IPTV interpretano come una seconda connessione concorrente.
+            player.playImmediately(atRate: 1.0)
+            do { try await Task.sleep(nanoseconds: 650_000_000) } catch { return }
             guard !Task.isCancelled, self.player === player else { return }
-            self.livePlaybackStarted = player.timeControlStatus == .playing
+            self.livePlaybackStarted = player.timeControlStatus == .playing || player.rate > 0
         }
     }
 
     private func resumePlaybackIfNeeded(delay: Double = 0.0) {
-        guard !failed, let player else { return }
+        guard !isLive, !failed, let player else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             guard self.player === player else { return }
             self.startPlayback(player)
@@ -3052,6 +2965,8 @@ struct PlayerScreen: View {
         }
         removeObservers(from: player)
         player?.pause()
+        ActivePlaybackRegistry.shared.deactivate(player)
+        player?.replaceCurrentItem(with: nil)
         player = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
@@ -4413,8 +4328,6 @@ private struct RebornHomeView: View {
     @Binding var selectedTab: MainTabView.AppTab
     @State private var showSearch = false
     @State private var heroMovie: VODStream?
-    @State private var featuredMovieCategory: Category?
-    @State private var featuredSeriesCategory: Category?
 
     private var movies: [VODStream] { Array(session.allMovies.prefix(40)) }
     private var series: [SeriesItem] { Array(session.allSeries.prefix(40)) }
@@ -4428,14 +4341,6 @@ private struct RebornHomeView: View {
                     if !session.continueWatching.isEmpty { continueWatching }
                     movieRail(title: "Film popolari", items: movies)
                     seriesRail(title: "Serie TV da guardare", items: series)
-                    if let category = featuredMovieCategory {
-                        let items = Array(session.allMovies.filter { $0.categoryID == category.categoryID }.prefix(14))
-                        if !items.isEmpty { movieRail(title: category.categoryName, items: items) }
-                    }
-                    if let category = featuredSeriesCategory {
-                        let items = Array(session.allSeries.filter { $0.categoryID == category.categoryID }.prefix(14))
-                        if !items.isEmpty { seriesRail(title: category.categoryName, items: items) }
-                    }
                     if !session.accountWatchHistory.isEmpty { historyRail }
                     quickLinks
                 }
@@ -4451,9 +4356,6 @@ private struct RebornHomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showSearch) { NavigationStack { RebornSearchView() } }
         .task(id: session.allMovies.count) { pickHero() }
-        .task(id: "\(session.movieCategories.count)-\(session.seriesCategories.count)-\(session.allMovies.count)-\(session.allSeries.count)") {
-            pickFeaturedCategories()
-        }
     }
 
     private var topBar: some View {
@@ -4622,11 +4524,6 @@ private struct RebornHomeView: View {
         guard !session.allMovies.isEmpty else { heroMovie = nil; return }
         heroMovie = session.allMovies.prefix(18).randomElement()
     }
-
-    private func pickFeaturedCategories() {
-        let movieCandidates = session.movieCategories.filter { category in
-            session.allMovies.contains { $0.categoryID == category.categoryID }
-        }
         let seriesCandidates = session.seriesCategories.filter { category in
             session.allSeries.contains { $0.categoryID == category.categoryID }
         }

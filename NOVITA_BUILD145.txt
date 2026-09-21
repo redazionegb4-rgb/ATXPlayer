@@ -1,0 +1,6 @@
+AtlantiX 4.0 — Build 145
+- Home alleggerita: rimosse le righe casuali aggiunte nella Build 144.
+- Diretta, Film e Serie aprono direttamente la prima categoria disponibile.
+- Cambio categoria tramite menu dedicato, senza scorrere lunghe liste orizzontali.
+- Reload funzionante direttamente in Diretta, Film e Serie e ricarica della categoria corrente.
+- Player: una sola istanza attiva alla volta; rimossi i cicli pausa/play automatici Live e i resume automatici Live che potevano provocare richieste duplicate.
