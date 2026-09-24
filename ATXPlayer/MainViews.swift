@@ -2542,9 +2542,13 @@ struct NativePlayerController: UIViewControllerRepresentable {
             fullScreenTransitionActive = true
             // Non toccare AVPlayer/AVPlayerItem durante il trasferimento della
             // render surface al controller fullscreen: lo stream deve restare lo stesso.
+            // IMPORTANT: keep this flag TRUE for the entire time the native
+            // AVPlayerViewController is presented full-screen. SwiftUI can send
+            // PlayerScreen.onDisappear after the transition has completed; if we
+            // clear the flag here, onDisappear tears down the AVPlayerItem and the
+            // video freezes permanently in landscape/full-screen.
             coordinator.animate(alongsideTransition: nil) { [weak self, weak playerViewController] _ in
                 guard let self else { return }
-                self.fullScreenTransitionActive = false
                 self.resumePlayback(on: playerViewController?.player)
             }
         }
@@ -2587,13 +2591,10 @@ struct NativePlayerController: UIViewControllerRepresentable {
         }
 
         private func resumePlayback(on player: AVPlayer?) {
-            guard let player else { return }
-            player.play()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                guard player.timeControlStatus != .playing else { return }
-                player.play()
-                if player.rate == 0 { player.rate = 1.0 }
-            }
+            guard let player, player.currentItem != nil else { return }
+            // Do not replace the item or manipulate the rate during the native
+            // full-screen hand-off. A plain play() preserves the same HLS session.
+            if player.timeControlStatus != .playing { player.play() }
         }
 
         func playerViewController(
