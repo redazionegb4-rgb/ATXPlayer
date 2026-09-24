@@ -2517,6 +2517,12 @@ struct NativePlayerController: UIViewControllerRepresentable {
             stopObserving()
         }
 
+        func attach(to controller: AVPlayerViewController) {
+            // Keep AVPlayer attached continuously. AVPlayerViewController manages its own
+            // render surface during rotation and native full-screen transitions.
+            // Detaching/re-attaching the player here can stall HLS/live streams.
+        }
+
         func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
             pictureInPictureActive = true
         }
@@ -2583,7 +2589,10 @@ struct NativePlayerController: UIViewControllerRepresentable {
         controller.entersFullScreenWhenPlaybackBegins = false
         controller.exitsFullScreenWhenPlaybackEnds = false
         controller.updatesNowPlayingInfoCenter = true
+        controller.videoGravity = .resizeAspect
+        controller.view.backgroundColor = .black
 
+        context.coordinator.attach(to: controller)
         context.coordinator.configureAutoplay(for: player, isLive: isLive)
         return controller
     }
@@ -2594,6 +2603,8 @@ struct NativePlayerController: UIViewControllerRepresentable {
         }
         controller.allowsPictureInPicturePlayback = AVPictureInPictureController.isPictureInPictureSupported()
         controller.canStartPictureInPictureAutomaticallyFromInline = true
+        controller.videoGravity = .resizeAspect
+        context.coordinator.attach(to: controller)
         context.coordinator.configureAutoplay(for: player, isLive: isLive)
     }
 }
@@ -2684,7 +2695,8 @@ struct PlayerScreen: View {
             Color.black.ignoresSafeArea()
             if let player {
                 NativePlayerController(player: player, isLive: isLive, pictureInPictureActive: $pictureInPictureActive)
-                    .ignoresSafeArea(edges: .bottom)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
                     .opacity(isLive && !livePlaybackStarted ? 0.001 : 1)
 
                 if isLive && !livePlaybackStarted {
@@ -2741,9 +2753,6 @@ struct PlayerScreen: View {
             if newPhase == .active {
                 resumePlaybackIfNeeded()
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-            resumePlaybackIfNeeded(delay: 0.25)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             resumePlaybackIfNeeded(delay: 0.12)
