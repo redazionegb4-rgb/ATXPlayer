@@ -1,0 +1,6 @@
+AtlantiX 2.0 - Build 76
+
+- Rimosso completamente il mini-player compatto sopra la barra inferiore.
+- Ripristinata la precedente logica di “Continua a guardare” nella Home.
+- Tutti i film e gli episodi sospesi rimangono nella relativa sezione scorrevole.
+- Nessuna modifica a login, DNS, player principale, PiP, AirPlay, Bundle ID o Xcode Cloud.

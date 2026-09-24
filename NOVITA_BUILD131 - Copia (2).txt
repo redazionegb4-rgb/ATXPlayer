@@ -1,0 +1,5 @@
+AtlantiX 4.0 - Build 131
+
+- Corretto errore di compilazione nella nuova Home.
+- Aggiornata la chiamata alla scheda Film al nuovo parametro item.
+- Nessuna modifica al player o alla logica delle altre sezioni.

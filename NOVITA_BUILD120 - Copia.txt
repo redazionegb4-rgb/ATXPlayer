@@ -1,0 +1,10 @@
+ATLANTIX 3.0 — BUILD 120
+
+- Home lasciata invariata rispetto alla build 119.
+- Ridisegnate graficamente Diretta, Film e Serie con intestazioni cinematiche e categorie a pannelli orizzontali.
+- Nuovo catalogo con sfondo dinamico e griglie più adatte ai contenuti streaming.
+- Nuove pagine dettaglio a immagine piena con metadati sovrapposti e pannelli traslucidi.
+- Ricerca ridisegnata con risultati a schede panoramiche.
+- Nuovi stati vuoti e pannelli coerenti in Preferiti, Cronologia, Impostazioni e Download.
+- Colori originali AtlantiX mantenuti.
+- Player Live, PiP e rotazione non modificati.

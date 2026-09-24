@@ -1,0 +1,7 @@
+ATLANTIX 2.0 - BUILD 97
+
+- Rimossa la pagina statica “Altro”: nuova barra inferiore personalizzata con tutte e 6 le sezioni visibili.
+- Avvio offline con sessione salvata: l'app non torna più al login quando manca Internet.
+- Avanzamento reale dei download con barra e percentuale.
+- Apertura dei contenuti offline a schermo intero con una sola freccia per tornare indietro.
+- Versione invariata: 2.0.

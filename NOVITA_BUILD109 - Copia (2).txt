@@ -1,0 +1,8 @@
+ATLANTIX 2.0 - BUILD 109
+
+- Pagina Impostazioni completamente ridisegnata con layout più compatto e moderno.
+- Nuova scheda account premium con stato, scadenza e aggiornamento.
+- Sezioni Riproduzione, Aspetto e Privacy più ordinate.
+- Azioni rapide più compatte.
+- Pulsante Esci sempre visibile sopra la barra inferiore.
+- Versione 2.0, build 109.

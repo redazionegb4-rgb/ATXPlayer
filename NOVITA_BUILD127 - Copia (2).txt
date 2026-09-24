@@ -1,0 +1,11 @@
+ATLANTIX 4.0 — BUILD 127
+
+- Interfaccia ricostruita in stile dark premium.
+- Nuova Home cinematografica a tutta larghezza.
+- Nuova navigazione inferiore.
+- Live, Film e Serie completamente ridisegnati.
+- Nuove pagine categorie e catalogo.
+- Nuove schede Film/Serie e Live.
+- Impostazioni e Cronologia ricostruite.
+- Migliorata leggibilità e spaziatura.
+- Player, download, PiP e logica dati mantenuti.

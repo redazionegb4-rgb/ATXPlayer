@@ -1,0 +1,9 @@
+AtlantiX 4.0 - Build 125
+
+- Redesign completo dell'interfaccia in stile dashboard AtlantiX.
+- Hero Home ampliato e completamente ricostruito.
+- Nuove intestazioni panoramiche per Diretta, Film e Serie TV.
+- Cataloghi Film/Serie con cover hero e controlli modernizzati.
+- Impostazioni trasformate in dashboard account/preferenze.
+- Cronologia ridisegnata con riepilogo attività e filtri.
+- Nessuna modifica alla logica di player, download, PiP e API.

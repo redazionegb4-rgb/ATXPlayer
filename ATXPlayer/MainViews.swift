@@ -2499,9 +2499,11 @@ struct NativePlayerController: UIViewControllerRepresentable {
     let player: AVPlayer
     let isLive: Bool
     @Binding var pictureInPictureActive: Bool
+    @Binding var fullScreenTransitionActive: Bool
 
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
         @Binding var pictureInPictureActive: Bool
+        @Binding var fullScreenTransitionActive: Bool
         private var timeControlObservation: NSKeyValueObservation?
         private var itemStatusObservation: NSKeyValueObservation?
         private var startupWorkItems: [DispatchWorkItem] = []
@@ -2509,8 +2511,9 @@ struct NativePlayerController: UIViewControllerRepresentable {
         private var isLive = false
         private var startupDeadline = Date.distantPast
 
-        init(pictureInPictureActive: Binding<Bool>) {
+        init(pictureInPictureActive: Binding<Bool>, fullScreenTransitionActive: Binding<Bool>) {
             _pictureInPictureActive = pictureInPictureActive
+            _fullScreenTransitionActive = fullScreenTransitionActive
         }
 
         deinit {
@@ -2530,6 +2533,32 @@ struct NativePlayerController: UIViewControllerRepresentable {
         func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
             pictureInPictureActive = false
             resumePlayback(on: playerViewController.player)
+        }
+
+        func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            willBeginFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator
+        ) {
+            fullScreenTransitionActive = true
+            // Non toccare AVPlayer/AVPlayerItem durante il trasferimento della
+            // render surface al controller fullscreen: lo stream deve restare lo stesso.
+            coordinator.animate(alongsideTransition: nil) { [weak self, weak playerViewController] _ in
+                guard let self else { return }
+                self.fullScreenTransitionActive = false
+                self.resumePlayback(on: playerViewController?.player)
+            }
+        }
+
+        func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            willEndFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator
+        ) {
+            fullScreenTransitionActive = true
+            coordinator.animate(alongsideTransition: nil) { [weak self, weak playerViewController] _ in
+                guard let self else { return }
+                self.fullScreenTransitionActive = false
+                self.resumePlayback(on: playerViewController?.player)
+            }
         }
 
         func configureAutoplay(for player: AVPlayer, isLive: Bool) {
@@ -2576,7 +2605,10 @@ struct NativePlayerController: UIViewControllerRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(pictureInPictureActive: $pictureInPictureActive)
+        Coordinator(
+            pictureInPictureActive: $pictureInPictureActive,
+            fullScreenTransitionActive: $fullScreenTransitionActive
+        )
     }
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
@@ -2659,6 +2691,7 @@ struct PlayerScreen: View {
     @State private var player: AVPlayer?
     @State private var failed = false
     @State private var pictureInPictureActive = false
+    @State private var fullScreenTransitionActive = false
     @State private var showResumePrompt = false
     @State private var pendingResumePosition: Double = 0
     @State private var timeObserver: Any?
@@ -2694,7 +2727,12 @@ struct PlayerScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if let player {
-                NativePlayerController(player: player, isLive: isLive, pictureInPictureActive: $pictureInPictureActive)
+                NativePlayerController(
+                    player: player,
+                    isLive: isLive,
+                    pictureInPictureActive: $pictureInPictureActive,
+                    fullScreenTransitionActive: $fullScreenTransitionActive
+                )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
                     .opacity(isLive && !livePlaybackStarted ? 0.001 : 1)
@@ -2757,7 +2795,13 @@ struct PlayerScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             resumePlaybackIfNeeded(delay: 0.12)
         }
-        .onDisappear { closePlayerIfNeeded() }
+        .onDisappear {
+            // AVPlayerViewController presenta il fullscreen fuori dalla gerarchia SwiftUI.
+            // In quel passaggio PlayerScreen può ricevere onDisappear: NON dobbiamo
+            // distruggere l'AVPlayerItem, altrimenti la riproduzione si interrompe.
+            guard !fullScreenTransitionActive else { return }
+            closePlayerIfNeeded()
+        }
     }
 
     private var nextQueueItem: PlaybackQueueItem? {
@@ -2981,7 +3025,7 @@ struct PlayerScreen: View {
     }
 
     private func closePlayerIfNeeded() {
-        guard !pictureInPictureActive else { return }
+        guard !pictureInPictureActive, !fullScreenTransitionActive else { return }
         liveStartupTask?.cancel()
         liveStartupTask = nil
         if let currentDescriptor, let player {

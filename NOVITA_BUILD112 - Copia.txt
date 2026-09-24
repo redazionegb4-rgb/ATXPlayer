@@ -1,0 +1,6 @@
+AtlantiX 2.0 - Build 112
+
+- Rimosso lo swipe che poteva aprire involontariamente il contenuto.
+- Aggiunto pulsante Elimina sempre visibile su ogni film ed episodio scaricato.
+- Aggiunta conferma prima della rimozione del file dal dispositivo.
+- Mantenuta la separazione dei download per account.

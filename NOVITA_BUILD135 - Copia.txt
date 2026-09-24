@@ -1,0 +1,6 @@
+AtlantiX 4.0 Build 135
+- Navigazione e cataloghi ridisegnati in stile streaming content-first
+- Profilo/Impostazioni con pulsante Indietro sempre visibile
+- Categorie a mosaico
+- Cataloghi Film/Serie a parete poster compatta
+- Home, Live, Film, Serie e Download sempre accessibili dalla tab bar

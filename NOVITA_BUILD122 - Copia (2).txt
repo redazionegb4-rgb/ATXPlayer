@@ -1,0 +1,8 @@
+AtlantiX 3.0 — Build 122
+
+- Eliminato lo spazio tra top bar e slide principale della Home.
+- Ridisegnata completamente la pagina interna delle categorie Film e Serie TV.
+- Nuova testata immersiva con immagine, titolo categoria e contatore contenuti.
+- Nuova ricerca integrata e controlli di ordinamento a pillola.
+- Nuova griglia a due colonne e nuove card poster con informazioni separate e pulsante play.
+- Nessuna modifica alla logica del player o alla struttura della Home oltre alla correzione dello spazio.

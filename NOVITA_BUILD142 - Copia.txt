@@ -1,0 +1,6 @@
+AtlantiX 4.0 - Build 142
+
+- La voce Diretta viene mostrata solo agli account che possiedono almeno un canale Live.
+- Per account solo Film/Serie, la tab bar si ridistribuisce automaticamente senza spazi vuoti.
+- Il controllo si aggiorna anche dopo il refresh della playlist.
+- Se i canali Live vengono rimossi mentre Diretta è aperta, l’app torna automaticamente alla Home.

@@ -1,0 +1,13 @@
+ATLANTIX 2.0 - BUILD 75
+
+Correzione mini-player / Continua a guardare:
+- La X nasconde soltanto il mini-player per la sessione corrente.
+- La X non elimina piu il contenuto da Continua a guardare.
+- Tutti i film e gli episodi sospesi restano nella sezione Continua a guardare della Home.
+- Il mini-player mostra sempre il contenuto sospeso piu recente.
+- Quando viene avviato o aggiornato un nuovo contenuto, il mini-player torna visibile automaticamente.
+- La rimozione da Continua a guardare resta separata dalla chiusura del mini-player.
+
+Versione: 2.0
+Build: 75
+Bundle ID: com.dmb.atxplayer

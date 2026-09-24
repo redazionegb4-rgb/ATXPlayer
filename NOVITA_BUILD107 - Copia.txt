@@ -1,0 +1,7 @@
+ATLANTIX 2.0 - BUILD 107
+
+- Header Home compatto: testo riallineato in alto e non più abbassato.
+- Titolo ATLANTIX e informazioni account su due righe compatte.
+- Tre icone superiori ridotte e ravvicinate per evitare il taglio del testo.
+- Rotazione automatica del banner ogni 5 secondi con animazione.
+- Versione 2.0, build 107.

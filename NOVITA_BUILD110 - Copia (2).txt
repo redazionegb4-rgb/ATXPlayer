@@ -1,0 +1,8 @@
+ATLANTIX 2.0 - BUILD 110
+
+CORREZIONE PRIVACY DOWNLOAD
+- I download sono ora separati per singolo account.
+- Cambiando account vengono mostrati esclusivamente i contenuti scaricati da quell’utente.
+- Le cartelle fisiche e i metadati dei download sono isolati per account.
+- I download in corso vengono annullati in sicurezza al logout o al cambio account.
+- I download già presenti vengono assegnati all’account attivo al primo avvio della nuova build.

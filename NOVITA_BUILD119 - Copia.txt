@@ -1,0 +1,5 @@
+AtlantiX 3.0 - Build 119
+
+- Corretto errore di compilazione SwiftUI in MainViews.swift.
+- Sostituito il modificatore Font non valido .black() con .weight(.black).
+- Mantenuto invariato il redesign e tutte le funzioni del player.

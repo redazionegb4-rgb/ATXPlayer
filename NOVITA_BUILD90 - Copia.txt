@@ -1,0 +1,8 @@
+AtlantiX 2.0 - Build 90
+
+- Nuova scheda Download nella barra inferiore
+- Download offline di film ed episodi
+- Riproduzione dei file scaricati senza connessione
+- Stato download in corso
+- Eliminazione con swipe
+- Versione mantenuta a 2.0

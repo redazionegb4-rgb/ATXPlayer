@@ -1,0 +1,10 @@
+ATLANTIX 4.0 — BUILD 124
+
+- Nuova identità grafica ispirata al nuovo pannello AtlantiX.
+- Home trasformata in una vera dashboard mobile.
+- Nuova navigazione inferiore e nuove superfici a pannelli.
+- Diretta, Film e Serie completamente ridisegnati.
+- Categorie in griglia con contatori e indicatori dinamici.
+- Nuove schede per canali, film e serie.
+- Cronologia e Impostazioni aggiornate al nuovo linguaggio grafico.
+- Mantenute le funzioni esistenti di player, PiP, download, preferiti e cronologia.

@@ -1,0 +1,5 @@
+AtlantiX 2.0 - Build 96
+
+- Corretto errore di compilazione in MainViews.swift alla creazione del nome file dei download.
+- Corretto il testo di errore dei download.
+- Versione applicazione invariata: 2.0.

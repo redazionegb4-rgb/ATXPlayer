@@ -1,0 +1,27 @@
+ATLANTIX 2.0 — BUILD 77
+
+Home completamente rinnovata:
+- Hero banner cinematico con Guarda, Dettagli e La mia lista
+- Rotazione automatica e indicatori del carosello
+- Nuove sezioni In tendenza, Nuovi arrivi, Più votati e Consigliati per te
+- Continua a guardare mantenuto con progresso e resume
+
+Ricerca:
+- Filtri Tutto, Film, Serie e Diretta
+- Ricerche recenti
+- Categorie rapide
+- Contenuti più votati prima della ricerca
+
+Dettagli contenuti:
+- Nuova pagina Film con grafica dinamica, badge qualità e metadati
+- Trailer quando fornito dal servizio
+- Cast selezionabile con filmografia locale
+- Film e serie simili
+- Episodi con trama, data, durata e valutazione quando disponibili
+- Memoria dell’ultima stagione aperta
+
+Esperienza:
+- Animazioni leggere e colori dinamici
+- Nessun mini-player
+- Nessun pull-to-refresh
+- Player, PiP, AirPlay, resume e prossimo episodio invariati
