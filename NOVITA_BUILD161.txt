@@ -1,0 +1,7 @@
+ATX Player 4.0.2 - Build 161
+
+- Base stabile della Build 160.
+- Nuovo controllo dei frame video per le dirette.
+- Se AVPlayer riproduce il flusso ma non produce frame video, ATX Player prova automaticamente l'endpoint alternativo HLS/MPEG-TS dello stesso canale.
+- Nessuna dipendenza esterna: evita i crash introdotti dai precedenti tentativi con VLCKit.
+- Mantenuti i fix fullscreen/landscape.

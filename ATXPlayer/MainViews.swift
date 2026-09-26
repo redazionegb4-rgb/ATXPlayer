@@ -2706,6 +2706,9 @@ struct PlayerScreen: View {
     @State private var livePlaybackStarted = false
     @State private var liveStartupAttempts = 0
     @State private var liveStartupTask: Task<Void, Never>?
+    @State private var compatibilityURL: URL?
+    @State private var compatibilityAttempted = false
+    @State private var videoProbeTask: Task<Void, Never>?
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2720,6 +2723,7 @@ struct PlayerScreen: View {
     }
 
     private var currentURL: URL? {
+        if let compatibilityURL { return compatibilityURL }
         guard !episodeQueue.isEmpty, episodeQueue.indices.contains(currentQueueIndex) else { return url }
         return episodeQueue[currentQueueIndex].url
     }
@@ -2902,6 +2906,71 @@ struct PlayerScreen: View {
         }
 
         validate(item: item, player: newPlayer)
+        if isLive { startVideoProbe(item: item, player: newPlayer, sourceURL: currentURL) }
+    }
+
+    // Some IPTV servers expose the same live stream as MPEG-TS and HLS.
+    // AVPlayer can successfully decode the audio track of a TS stream while producing
+    // no video frames for some stream/container combinations. In that case retry the
+    // same channel through the HLS endpoint without adding third-party codecs.
+    private func compatibilityCandidate(for sourceURL: URL) -> URL? {
+        guard var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false) else { return nil }
+        let path = components.path
+        let lower = path.lowercased()
+        if lower.hasSuffix(".ts") {
+            components.path = String(path.dropLast(3)) + ".m3u8"
+            return components.url
+        }
+        if lower.hasSuffix(".m3u8") {
+            components.path = String(path.dropLast(5)) + ".ts"
+            return components.url
+        }
+        // Xtream-compatible servers commonly accept an explicit HLS extension.
+        if !path.hasSuffix("/") {
+            components.path = path + ".m3u8"
+            return components.url
+        }
+        return nil
+    }
+
+    private func startVideoProbe(item: AVPlayerItem, player: AVPlayer, sourceURL: URL) {
+        videoProbeTask?.cancel()
+        guard !compatibilityAttempted, let fallback = compatibilityCandidate(for: sourceURL), fallback != sourceURL else { return }
+
+        let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ])
+        item.add(output)
+
+        videoProbeTask = Task { @MainActor in
+            // Give the original stream enough time to produce its first decoded frame.
+            for _ in 0..<14 {
+                do { try await Task.sleep(nanoseconds: 350_000_000) } catch { return }
+                guard !Task.isCancelled, self.player === player else { return }
+                let t = player.currentTime()
+                if output.hasNewPixelBuffer(forItemTime: t) { return }
+            }
+
+            guard self.player === player, player.currentItem === item else { return }
+            // Only retry when playback itself is alive (typical audio-only/black-video case).
+            guard player.rate > 0 || player.timeControlStatus == .playing else { return }
+            self.compatibilityAttempted = true
+            self.switchToCompatibilityURL(fallback)
+        }
+    }
+
+    private func switchToCompatibilityURL(_ fallback: URL) {
+        videoProbeTask?.cancel()
+        liveStartupTask?.cancel()
+        if let player {
+            removeObservers(from: player)
+            ActivePlaybackRegistry.shared.deactivate(player)
+        }
+        player = nil
+        failed = false
+        livePlaybackStarted = false
+        compatibilityURL = fallback
+        configurePlayer()
     }
 
     private func startPlayback(_ player: AVPlayer) {
@@ -3029,6 +3098,8 @@ struct PlayerScreen: View {
         guard !pictureInPictureActive, !fullScreenTransitionActive else { return }
         liveStartupTask?.cancel()
         liveStartupTask = nil
+        videoProbeTask?.cancel()
+        videoProbeTask = nil
         if let currentDescriptor, let player {
             session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
         }
