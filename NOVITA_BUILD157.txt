@@ -1,0 +1,6 @@
+ATX Player 4.0.1 - Build 157
+
+- Aggiunto Package.resolved condiviso per Xcode Cloud.
+- VLCKit bloccato alla versione 3.6.6.
+- Mantiene il fallback codec della Build 156.
+- Nessuna configurazione manuale richiesta.
