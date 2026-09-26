@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import MobileVLCKit
+import VLCKit
 
 /// Decoder di compatibilità usato solo quando AVPlayer riproduce il flusso live
 /// ma non riesce a produrre frame video (codec/container non supportato da AVFoundation).

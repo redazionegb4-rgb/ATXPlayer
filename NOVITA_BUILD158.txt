@@ -1,0 +1,6 @@
+ATX Player 4.0.1 - Build 158
+
+- Corretto il collegamento Swift Package di VLCKit per Xcode/Xcode Cloud.
+- Il package rsalesas/VLCKit 3.6.6 espone il prodotto SwiftPM "VLCKit"; MobileVLCKit è il binary target iOS interno, non un prodotto collegabile direttamente.
+- Aggiornato l'import del fallback player a VLCKit, che riesporta MobileVLCKit su iOS.
+- Mantenuto Package.resolved 3.6.6 e il fallback codec introdotto nella Build 156.
