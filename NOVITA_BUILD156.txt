@@ -1,0 +1,6 @@
+ATX Player 4.0.1 — Build 156
+
+- Aggiunto decoder di compatibilità MobileVLCKit per i canali live con audio ma video nero su AVPlayer.
+- Rilevamento automatico dei frame video: AVPlayer resta il motore principale e VLC viene usato solo quando il video non viene decodificato.
+- Nessuna configurazione manuale richiesta: dipendenza Swift Package già inserita nel progetto.
+- Mantenuti i fix fullscreen/landscape della Build 155.
