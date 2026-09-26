@@ -1,0 +1,8 @@
+ATX Player 4.0.2 - Build 160
+
+- Rimosso il runtime VLCKit introdotto nelle build 156-159, responsabile della regressione/crash all’avvio su dispositivo.
+- Ripristinato l’avvio stabile dell’app e il player AVFoundation della base 155.
+- Mantenuti i fix fullscreen/landscape precedenti.
+- Nessuna dipendenza Swift Package esterna caricata all’avvio.
+
+Nota: questa build privilegia la stabilità e NON dichiara risolto il supporto ai codec video non gestiti da AVPlayer.

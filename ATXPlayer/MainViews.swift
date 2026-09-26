@@ -2706,9 +2706,6 @@ struct PlayerScreen: View {
     @State private var livePlaybackStarted = false
     @State private var liveStartupAttempts = 0
     @State private var liveStartupTask: Task<Void, Never>?
-    @State private var useVLCFallback = false
-    @State private var videoProbeOutput: AVPlayerItemVideoOutput?
-    @State private var videoProbeTask: Task<Void, Never>?
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2730,11 +2727,7 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if useVLCFallback, let currentURL {
-                VLCFallbackPlayer(url: currentURL)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea()
-            } else if let player {
+            if let player {
                 NativePlayerController(
                     player: player,
                     isLive: isLive,
@@ -2893,14 +2886,6 @@ struct PlayerScreen: View {
             item.preferredPeakBitRate = 0
             livePlaybackStarted = false
             liveStartupAttempts = 0
-            useVLCFallback = false
-            // Sonda i frame video decodificati. Se AVPlayer riproduce l'audio ma non
-            // produce alcun frame video, passiamo automaticamente a MobileVLCKit.
-            let probe = AVPlayerItemVideoOutput(pixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ])
-            item.add(probe)
-            videoProbeOutput = probe
         }
         let newPlayer = AVPlayer(playerItem: item)
         ActivePlaybackRegistry.shared.activate(newPlayer)
@@ -2960,31 +2945,6 @@ struct PlayerScreen: View {
             do { try await Task.sleep(nanoseconds: 650_000_000) } catch { return }
             guard !Task.isCancelled, self.player === player else { return }
             self.livePlaybackStarted = player.timeControlStatus == .playing || player.rate > 0
-            if self.livePlaybackStarted {
-                self.startVideoCompatibilityProbe(player: player)
-            }
-        }
-    }
-
-    @MainActor
-    private func startVideoCompatibilityProbe(player: AVPlayer) {
-        videoProbeTask?.cancel()
-        guard isLive, let output = videoProbeOutput else { return }
-        videoProbeTask = Task { @MainActor in
-            // Lascia tempo al decoder hardware di produrre il primo frame.
-            for _ in 0..<16 {
-                do { try await Task.sleep(nanoseconds: 250_000_000) } catch { return }
-                guard !Task.isCancelled, self.player === player, !self.useVLCFallback else { return }
-                let itemTime = output.itemTime(forHostTime: CACurrentMediaTime())
-                if output.hasNewPixelBuffer(forItemTime: itemTime) {
-                    return // AVPlayer sta decodificando correttamente il video.
-                }
-            }
-            guard self.player === player, player.rate > 0 || player.timeControlStatus == .playing else { return }
-            // Audio/stream attivo ma nessun frame video decodificato: codec/container
-            // non gestito da AVFoundation. Ferma AVPlayer e riapri lo stesso URL con VLC.
-            player.pause()
-            self.useVLCFallback = true
         }
     }
 
@@ -3067,9 +3027,6 @@ struct PlayerScreen: View {
 
     private func closePlayerIfNeeded() {
         guard !pictureInPictureActive, !fullScreenTransitionActive else { return }
-        videoProbeTask?.cancel()
-        videoProbeTask = nil
-        videoProbeOutput = nil
         liveStartupTask?.cancel()
         liveStartupTask = nil
         if let currentDescriptor, let player {
