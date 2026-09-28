@@ -3,6 +3,7 @@ import Foundation
 actor APIClient {
     static let shared = APIClient()
     private let configURL = URL(string: "https://3-cuo.icu/atxios/config.json")!
+    private let remoteAccessURL = URL(string: "https://3-cuo.icu/atxremote/api.php")!
 
     func fetchConfig() async throws -> RemoteConfig {
         var request = URLRequest(url: configURL)
@@ -11,6 +12,23 @@ actor APIClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response)
         return try JSONDecoder().decode(RemoteConfig.self, from: data)
+    }
+
+    func remoteLine(deviceCode: String) async throws -> RemoteLineResponse {
+        var components = URLComponents(url: remoteAccessURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "action", value: "device"), URLQueryItem(name: "code", value: deviceCode)]
+        guard let url = components.url else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 12
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        do {
+            let result = try JSONDecoder().decode(RemoteLineResponse.self, from: data)
+            if !result.found { throw APIError.activation(result.message ?? "Nessuna linea associata a questo dispositivo.") }
+            return result
+        } catch let e as APIError { throw e }
+        catch { throw APIError.invalidResponse }
     }
 
     func login(baseURL: String, username: String, password: String) async throws -> LoginResponse {
@@ -97,3 +115,5 @@ enum APIError: LocalizedError {
         }
     }
 }
+
+struct RemoteLineResponse: Codable { let found: Bool; let active: Bool; let username: String; let password: String; let message: String? }

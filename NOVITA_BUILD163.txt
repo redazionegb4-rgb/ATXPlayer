@@ -1,0 +1,5 @@
+ATX Player 5.0 Build 163
+- Accesso remoto completamente rivisto
+- Il pannello associa solo codice dispositivo, username e password
+- Server/DNS letto esclusivamente dal config.json centralizzato dell’app
+- Migliorata gestione attivazione dispositivo

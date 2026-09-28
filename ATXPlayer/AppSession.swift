@@ -80,6 +80,7 @@ final class AppSession: ObservableObject {
     @Published var accessCode = ""
     @Published var username = ""
     @Published var password = ""
+    @Published var deviceCode = DeviceIdentity.code()
     @Published var userInfo: UserInfo?
     @Published var liveCategories: [Category] = []
     @Published var movieCategories: [Category] = []
@@ -121,20 +122,13 @@ final class AppSession: ObservableObject {
 
     private func restoreSession() async {
         do {
-            let config = try await APIClient.shared.fetchConfig()
-            guard config.enabled else { throw APIError.disabled(config.message) }
-            baseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            UserDefaults.standard.set(baseURL, forKey: "baseURL")
+            guard !baseURL.isEmpty else { throw APIError.invalidURL }
             let login = try await APIClient.shared.login(baseURL: baseURL, username: username, password: password)
-            guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else {
-                throw APIError.invalidCredentials
-            }
+            guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else { throw APIError.invalidCredentials }
             userInfo = login.userInfo
-            accessCode = username
+            accessCode = deviceCode
             if refreshOnLaunch || (allLive.isEmpty && allMovies.isEmpty && allSeries.isEmpty) { await reloadPlaylist() }
         } catch {
-            // In assenza di rete manteniamo aperta la sessione salvata: la sezione
-            // Download e la playlist in cache devono restare utilizzabili offline.
             if let apiError = error as? APIError {
                 switch apiError {
                 case .invalidCredentials, .disabled(_), .activation(_):
@@ -145,50 +139,39 @@ final class AppSession: ObservableObject {
                     isAuthenticated = true
                     errorMessage = nil
                 }
-            } else {
-                isAuthenticated = true
-                errorMessage = nil
-            }
+            } else { isAuthenticated = true; errorMessage = nil }
         }
     }
 
     func signIn() async {
-        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanUsername.isEmpty, !password.isEmpty else {
-            errorMessage = "Inserisci nome utente e password."
-            return
-        }
-        username = cleanUsername
+        await reloadRemoteAccess()
+    }
+
+    func reloadRemoteAccess() async {
         isLoading = true
         errorMessage = nil
         do {
+            let remote = try await APIClient.shared.remoteLine(deviceCode: deviceCode)
+            guard remote.active else { throw APIError.activation(remote.message ?? "Linea non attiva.") }
+            // Il server/DNS non viene mai caricato dal pannello: resta centralizzato
+            // nel config.json remoto già usato da ATX Player.
             let config = try await APIClient.shared.fetchConfig()
             guard config.enabled else { throw APIError.disabled(config.message) }
             let cleanBaseURL = config.dns.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            let login: LoginResponse
-            do {
-                login = try await APIClient.shared.login(baseURL: cleanBaseURL, username: username, password: password)
-            } catch let apiError as APIError {
-                switch apiError {
-                case .serverUnavailable:
-                    throw apiError
-                default:
-                    throw APIError.invalidCredentials
-                }
-            } catch {
-                throw APIError.invalidCredentials
-            }
+            guard !cleanBaseURL.isEmpty else { throw APIError.invalidURL }
+            let login = try await APIClient.shared.login(baseURL: cleanBaseURL, username: remote.username, password: remote.password)
             guard login.userInfo?.auth == 1, (login.userInfo?.status ?? "").lowercased() == "active" else {
-                throw APIError.invalidCredentials
+                throw APIError.activation("La linea associata non risulta valida o attiva.")
             }
+            username = remote.username
+            password = remote.password
             baseURL = cleanBaseURL
-            accessCode = username
+            accessCode = deviceCode
             UserDefaults.standard.set(baseURL, forKey: "baseURL")
             userInfo = login.userInfo
             DownloadCenter.shared.switchAccount(to: username)
             KeychainStore.save(username, for: "username")
             KeychainStore.save(password, for: "password")
-            KeychainStore.delete("accessCode")
             UserDefaults.standard.set(true, forKey: "hasSavedSession")
             UserDefaults.standard.set(true, forKey: "autoLogin")
             autoLogin = true
