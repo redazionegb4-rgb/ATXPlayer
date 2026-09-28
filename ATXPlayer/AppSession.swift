@@ -147,6 +147,28 @@ final class AppSession: ObservableObject {
         await reloadRemoteAccess()
     }
 
+    /// Verifica che questo dispositivo sia ancora autorizzato dal pannello remoto.
+    /// Se viene sospeso o rimosso, invalida immediatamente la sessione locale.
+    func validateRemoteAuthorization() async {
+        guard isAuthenticated else { return }
+        do {
+            let remote = try await APIClient.shared.remoteLine(deviceCode: deviceCode)
+            guard remote.found, remote.active else {
+                errorMessage = remote.message ?? "Dispositivo sospeso. Contatta il tuo fornitore."
+                signOut()
+                return
+            }
+            // Se l'admin cambia le credenziali della linea, forza un nuovo accesso.
+            if remote.username != username || remote.password != password {
+                errorMessage = "Configurazione aggiornata. Premi Ricarica per accedere nuovamente."
+                signOut()
+            }
+        } catch {
+            // Un errore di rete temporaneo non espelle il cliente: la sospensione deve
+            // essere confermata dall'API remota.
+        }
+    }
+
     func reloadRemoteAccess() async {
         isLoading = true
         errorMessage = nil

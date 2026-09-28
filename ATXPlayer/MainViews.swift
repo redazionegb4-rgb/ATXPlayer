@@ -372,6 +372,23 @@ struct MainTabView: View {
         }
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .task {
+            // Controllo periodico: un dispositivo sospeso dal pannello viene espulso
+            // anche se il cliente resta fermo dentro una schermata.
+            while !Task.isCancelled && session.isAuthenticated {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                await session.validateRemoteAuthorization()
+            }
+        }
+        .onChange(of: selectedTab) { _ in
+            Task { await session.validateRemoteAuthorization() }
+        }
+        .onChange(of: session.isAuthenticated) { authenticated in
+            if !authenticated { ActivePlaybackRegistry.shared.stopCurrent() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            Task { await session.validateRemoteAuthorization() }
+        }
         .onChange(of: session.allLive.isEmpty) { isEmpty in
             // Se dopo login/refresh l'account non ha canali Live, evita di lasciare
             // selezionata una sezione che non deve più essere disponibile.
