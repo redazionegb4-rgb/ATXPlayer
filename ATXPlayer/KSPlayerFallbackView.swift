@@ -20,13 +20,13 @@ struct KSPlayerFallbackView: UIViewRepresentable {
         let view = IOSVideoPlayerView()
         view.backgroundColor = .black
         context.coordinator.loadedURL = url
-        view.set(url: url)
+        view.set(url: url, options: KSOptions())
         return view
     }
 
     func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {
         guard context.coordinator.loadedURL != url else { return }
         context.coordinator.loadedURL = url
-        uiView.set(url: url)
+        uiView.set(url: url, options: KSOptions())
     }
 }
