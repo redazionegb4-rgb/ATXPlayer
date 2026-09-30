@@ -11,13 +11,11 @@ struct KSPlayerFallbackView: UIViewRepresentable {
         var loadedURL: URL?
 
         weak var controlledView: IOSVideoPlayerView?
-        private var controlObservers: [NSObjectProtocol] = []
 
         func installControls(on view: IOSVideoPlayerView) {
             controlledView = view
             let nc = NotificationCenter.default
 
-            controlObservers.append(nc.addObserver(forName: .atxKSTogglePlay, object: nil, queue: .main) { [weak self] _ in
                 guard let player = self?.controlledView?.playerLayer?.player else { return }
                 if player.isPlaying {
                     player.pause()
@@ -26,13 +24,11 @@ struct KSPlayerFallbackView: UIViewRepresentable {
                 }
             })
 
-            controlObservers.append(nc.addObserver(forName: .atxKSSeekBack, object: nil, queue: .main) { [weak self] _ in
                 guard let player = self?.controlledView?.playerLayer?.player else { return }
                 let target = max(0, player.currentPlaybackTime - 10)
                 player.seek(time: target) { _ in }
             })
 
-            controlObservers.append(nc.addObserver(forName: .atxKSSeekForward, object: nil, queue: .main) { [weak self] _ in
                 guard let player = self?.controlledView?.playerLayer?.player else { return }
                 let target = player.currentPlaybackTime + 10
                 player.seek(time: target) { _ in }
@@ -40,7 +36,7 @@ struct KSPlayerFallbackView: UIViewRepresentable {
         }
 
         deinit {
-            controlObservers.forEach { NotificationCenter.default.removeObserver($0) }
+
         }
     }
 
