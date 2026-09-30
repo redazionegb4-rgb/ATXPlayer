@@ -1,12 +1,20 @@
 {
   "pins": [
     {
-      "identity": "vlckit",
+      "identity": "ffmpegkit",
       "kind": "remoteSourceControl",
-      "location": "https://github.com/videolan/vlckit.git",
+      "location": "https://github.com/kingslay/FFmpegKit.git",
       "state": {
-        "revision": "5d3535a664e7815765a5cee40d9b22527d7299cc",
-        "version": "4.0.0-a22"
+        "revision": "c32be9bfb628042737ad3ef622e930c5c7b15954",
+        "version": "6.1.4"
+      }
+    },
+    {
+      "identity": "ksplayer",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/kingslay/KSPlayer.git",
+      "state": {
+        "revision": "76aae3dca1f54bd36bb036a4fb261b0c9dc30d91"
       }
     }
   ],
