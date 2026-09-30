@@ -1,47 +1,59 @@
 import SwiftUI
+import UIKit
 import VLCKit
 
-/// Compatibility player used only when AVPlayer cannot open a non-live movie/episode.
-/// This adds support for HEVC/H.265 streams and containers not handled by AVFoundation.
 struct VLCFallbackPlayerView: UIViewRepresentable {
     let url: URL
+    var onFailure: (() -> Void)? = nil
 
-    final class Coordinator {
-        let mediaPlayer = VLCMediaPlayer()
-        var loadedURL: URL?
+    final class Coordinator: NSObject, VLCMediaPlayerDelegate {
+        private var mediaPlayer: VLCMediaPlayer?
+        private var loadedURL: URL?
+        var onFailure: (() -> Void)?
 
         func load(_ url: URL, drawable: UIView) {
-            mediaPlayer.drawable = drawable
+            if mediaPlayer == nil {
+                let p = VLCMediaPlayer()
+                p.delegate = self
+                mediaPlayer = p
+            }
+            guard let p = mediaPlayer else { return }
+            p.drawable = drawable
             guard loadedURL != url else {
-                if !mediaPlayer.isPlaying { mediaPlayer.play() }
+                if !p.isPlaying { p.play() }
                 return
             }
             loadedURL = url
-            mediaPlayer.stop()
-            mediaPlayer.media = VLCMedia(url: url)
-            mediaPlayer.play()
+            p.stop()
+            p.media = VLCMedia(url: url)
+            p.play()
         }
 
-        deinit {
-            mediaPlayer.stop()
+        func mediaPlayerStateChanged(_ aNotification: Notification) {
+            if mediaPlayer?.state == .error {
+                DispatchQueue.main.async { [weak self] in self?.onFailure?() }
+            }
         }
+
+        func stop() {
+            mediaPlayer?.stop()
+            mediaPlayer?.drawable = nil
+            mediaPlayer?.delegate = nil
+            mediaPlayer = nil
+        }
+        deinit { stop() }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
+    func makeCoordinator() -> Coordinator {
+        let c=Coordinator(); c.onFailure=onFailure; return c
+    }
     func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        view.backgroundColor = .black
-        context.coordinator.load(url, drawable: view)
-        return view
+        let v=UIView(); v.backgroundColor=.black
+        context.coordinator.load(url, drawable:v); return v
     }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.load(url, drawable: uiView)
+    func updateUIView(_ uiView:UIView, context:Context) {
+        context.coordinator.onFailure=onFailure
+        context.coordinator.load(url, drawable:uiView)
     }
-
-    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
-        coordinator.mediaPlayer.stop()
-        coordinator.mediaPlayer.drawable = nil
-    }
+    static func dismantleUIView(_ uiView:UIView, coordinator:Coordinator) { coordinator.stop() }
 }

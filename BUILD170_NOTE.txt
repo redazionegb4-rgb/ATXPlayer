@@ -1,0 +1,8 @@
+ATX Player 5.1 Build 170
+- Base Build 169 stabile.
+- MKV Film/Episodi: apertura diretta VLCKit sullo stesso URL.
+- AVPlayer resta per contenuti già compatibili.
+- VLCKit viene istanziato solo quando si apre un VOD incompatibile, non all'avvio.
+- Dipendenza ufficiale VideoLAN branch master corrente.
+- Nessun Package.resolved obsoleto incluso.
+- Fix copia codice senza prefisso ATX- mantenuto.
