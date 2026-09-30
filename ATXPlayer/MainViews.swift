@@ -333,8 +333,16 @@ final class PlayerPresentationState: ObservableObject {
     private init() {}
 }
 
+extension Notification.Name {
+    static let atxPlayerTogglePlayback = Notification.Name("ATXPlayer.TogglePlayback")
+    static let atxPlayerSeekBackward = Notification.Name("ATXPlayer.SeekBackward")
+    static let atxPlayerSeekForward = Notification.Name("ATXPlayer.SeekForward")
+    static let atxPlayerTogglePiP = Notification.Name("ATXPlayer.TogglePiP")
+}
+
 struct MainTabView: View {
     @EnvironmentObject private var session: AppSession
+    @ObservedObject private var playerPresentation = PlayerPresentationState.shared
     enum AppTab: String, CaseIterable {
         case home = "Home"
         case live = "Diretta"
@@ -374,7 +382,10 @@ struct MainTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            RebornTabBar(selectedTab: $selectedTab, showsLive: !session.allLive.isEmpty)
+            if !playerPresentation.isPlayerPresented {
+                RebornTabBar(selectedTab: $selectedTab, showsLive: !session.allLive.isEmpty)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -2705,6 +2716,7 @@ private final class ActivePlaybackRegistry {
 struct PlayerScreen: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
     let title: String
     let url: URL?
     let isLive: Bool
@@ -2733,6 +2745,7 @@ struct PlayerScreen: View {
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
     @State private var useKSPlayerFallback = false
+    @State private var showPlayerControls = true
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2756,8 +2769,65 @@ struct PlayerScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if useKSPlayerFallback, let fallbackURL = currentURL {
-                KSPlayerFallbackView(url: fallbackURL)
+                ZStack {
+                    KSPlayerFallbackView(url: fallbackURL, title: displayedTitle) {
+                        dismiss()
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Full player controls restored for the FFmpeg/KSPlayer path.
+                    // KSPlayer keeps decoding; this layer restores the app controls
+                    // that disappeared when every format was routed to KSPlayer.
+                    if showPlayerControls {
+                        VStack {
+                            Spacer()
+
+                            HStack(spacing: 28) {
+                                Button {
+                                    NotificationCenter.default.post(name: .atxPlayerSeekBackward, object: nil)
+                                } label: {
+                                    Image(systemName: "gobackward.10")
+                                        .font(.system(size: 26, weight: .semibold))
+                                }
+
+                                Button {
+                                    NotificationCenter.default.post(name: .atxPlayerTogglePlayback, object: nil)
+                                } label: {
+                                    Image(systemName: "playpause.fill")
+                                        .font(.system(size: 32, weight: .semibold))
+                                }
+
+                                Button {
+                                    NotificationCenter.default.post(name: .atxPlayerSeekForward, object: nil)
+                                } label: {
+                                    Image(systemName: "goforward.10")
+                                        .font(.system(size: 26, weight: .semibold))
+                                }
+
+                                Button {
+                                    NotificationCenter.default.post(name: .atxPlayerTogglePiP, object: nil)
+                                } label: {
+                                    Image(systemName: "pip")
+                                        .font(.system(size: 25, weight: .semibold))
+                                }
+
+                                AirPlayRouteButton()
+                                    .frame(width: 30, height: 30)
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 16)
+                            .background(.black.opacity(0.62), in: Capsule())
+                            .padding(.bottom, 28)
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showPlayerControls.toggle()
+                    }
+                }
                     .ignoresSafeArea()
             } else if let player {
                 NativePlayerController(
@@ -2804,6 +2874,7 @@ struct PlayerScreen: View {
         }
         .navigationTitle(displayedTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .alert("Riprendere la visione?", isPresented: $showResumePrompt) {
             Button("Ricomincia") {
                 player?.seek(to: .zero) { _ in
