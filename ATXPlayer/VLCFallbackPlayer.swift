@@ -4,56 +4,52 @@ import VLCKit
 
 struct VLCFallbackPlayerView: UIViewRepresentable {
     let url: URL
-    var onFailure: (() -> Void)? = nil
 
-    final class Coordinator: NSObject, VLCMediaPlayerDelegate {
-        private var mediaPlayer: VLCMediaPlayer?
-        private var loadedURL: URL?
-        var onFailure: (() -> Void)?
+    final class Coordinator: NSObject {
+        var player: VLCMediaPlayer?
 
-        func load(_ url: URL, drawable: UIView) {
-            if mediaPlayer == nil {
-                let p = VLCMediaPlayer()
-                p.delegate = self
-                mediaPlayer = p
+        func start(url: URL, view: UIView) {
+            if player == nil {
+                player = VLCMediaPlayer()
             }
-            guard let p = mediaPlayer else { return }
-            p.drawable = drawable
-            guard loadedURL != url else {
-                if !p.isPlaying { p.play() }
-                return
+            guard let player else { return }
+            player.drawable = view
+            if player.media?.url != url {
+                player.stop()
+                player.media = VLCMedia(url: url)
             }
-            loadedURL = url
-            p.stop()
-            p.media = VLCMedia(url: url)
-            p.play()
-        }
-
-        func mediaPlayerStateChanged(_ aNotification: Notification) {
-            if mediaPlayer?.state == .error {
-                DispatchQueue.main.async { [weak self] in self?.onFailure?() }
+            if !player.isPlaying {
+                player.play()
             }
         }
 
         func stop() {
-            mediaPlayer?.stop()
-            mediaPlayer?.drawable = nil
-            mediaPlayer?.delegate = nil
-            mediaPlayer = nil
+            player?.stop()
+            player?.drawable = nil
+            player = nil
         }
-        deinit { stop() }
+
+        deinit {
+            stop()
+        }
     }
 
     func makeCoordinator() -> Coordinator {
-        let c = Coordinator(); c.onFailure = onFailure; return c
+        Coordinator()
     }
+
     func makeUIView(context: Context) -> UIView {
-        let v = UIView(); v.backgroundColor = .black
-        context.coordinator.load(url, drawable: v); return v
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .black
+        context.coordinator.start(url: url, view: view)
+        return view
     }
+
     func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.onFailure = onFailure
-        context.coordinator.load(url, drawable: uiView)
+        context.coordinator.start(url: url, view: uiView)
     }
-    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) { coordinator.stop() }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
 }

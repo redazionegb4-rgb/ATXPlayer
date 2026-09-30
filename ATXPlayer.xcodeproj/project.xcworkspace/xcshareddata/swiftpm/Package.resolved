@@ -1,5 +1,4 @@
 {
-  "originHash": "atxplayer-build173-vlckit-4.0.0-a22",
   "pins": [
     {
       "identity": "vlckit",
@@ -11,5 +10,5 @@
       }
     }
   ],
-  "version": 3
+  "version": 2
 }

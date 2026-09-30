@@ -2726,6 +2726,7 @@ struct PlayerScreen: View {
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
+    @State private var useVLCFallback = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2748,7 +2749,11 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let player {
+            if useVLCFallback, let source = currentURL {
+                VLCFallbackPlayerView(url: source)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
+            } else if let player {
                 NativePlayerController(
                     player: player,
                     isLive: isLive,
@@ -2876,6 +2881,14 @@ struct PlayerScreen: View {
     private func configurePlayer() {
         guard player == nil else { return }
         guard let currentURL else { failed = true; return }
+
+        let vodExtension = currentURL.pathExtension.lowercased()
+        if !isLive && ["mkv", "avi"].contains(vodExtension) {
+            failed = false
+            useVLCFallback = true
+            return
+        }
+        useVLCFallback = false
 
         do {
             let audioSession = AVAudioSession.sharedInstance()
@@ -3042,34 +3055,9 @@ struct PlayerScreen: View {
         }
     }
 
-    private func vodCompatibilityCandidate(for sourceURL: URL) -> URL? {
-        guard !isLive,
-              var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false)
-        else { return nil }
-
-        let path = components.path
-        let lower = path.lowercased()
-
-        // AVPlayer supports HEVC/H.265 when it is delivered in an Apple-compatible
-        // container/stream. Some Xtream servers expose HEVC VOD as MKV/AVI even when
-        // the same asset is available through the MP4 endpoint. Retry that endpoint
-        // before reporting a playback error.
-        for suffix in [".mkv", ".avi", ".ts", ".mov"] {
-            if lower.hasSuffix(suffix) {
-                components.path = String(path.dropLast(suffix.count)) + ".mp4"
-                return components.url
-            }
-        }
-        return nil
-    }
-
     private func retryVODCompatibilityIfPossible(sourceURL: URL) -> Bool {
-        guard let fallback = vodCompatibilityCandidate(for: sourceURL),
-              fallback != sourceURL,
-              compatibilityURL == nil
-        else { return false }
+        guard !isLive, compatibilityURL == nil else { return false }
 
-        compatibilityURL = fallback
         if let player {
             removeObservers(from: player)
             ActivePlaybackRegistry.shared.deactivate(player)
@@ -3077,7 +3065,7 @@ struct PlayerScreen: View {
         }
         player = nil
         failed = false
-        configurePlayer()
+        useVLCFallback = true
         return true
     }
 
