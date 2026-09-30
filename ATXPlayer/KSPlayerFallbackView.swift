@@ -1,131 +1,148 @@
 import SwiftUI
 import UIKit
 import AVKit
-import MediaPlayer
 import KSPlayer
 
-private final class ATXKSPlayerView: IOSVideoPlayerView {
-    var atxBack: (() -> Void)?
+final class ATXKSPlayerHostController: UIViewController {
+    var onBack: (() -> Void)?
+    private let mediaURL: URL
+    private let mediaTitle: String
+
+    private let playerView = IOSVideoPlayerView()
+    private let overlay = UIView()
+    private let atxTitleLabel = UILabel()
+    private let atxBackButton = UIButton(type: .system)
+    private let atxPlayButton = UIButton(type: .system)
+    private let atxBack10Button = UIButton(type: .system)
+    private let atxForward10Button = UIButton(type: .system)
+    private let atxFullscreenButton = UIButton(type: .system)
+    private let atxRoutePicker = AVRoutePickerView(frame: .zero)
+
     private var isATXFullscreen = false
 
-    private let chrome = UIView()
-    private let titleLabel = UILabel()
-    private let backButton = UIButton(type: .system)
-    private let playButton = UIButton(type: .system)
-    private let back10Button = UIButton(type: .system)
-    private let forward10Button = UIButton(type: .system)
-    private let fullscreenButton = UIButton(type: .system)
-    private let routePicker = AVRoutePickerView(frame: .zero)
-
-    override init() {
-        super.init()
-        buildATXControls()
+    init(url: URL, title: String) {
+        self.mediaURL = url
+        self.mediaTitle = title
+        super.init(nibName: nil, bundle: nil)
     }
 
     required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        buildATXControls()
+        fatalError("init(coder:) has not been implemented")
     }
 
-    private func buildATXControls() {
-        backgroundColor = .black
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
 
-        // We use KSPlayer only as playback/rendering engine.
-        // Its toolbar is hidden because its internal landscape/fullscreen transition
-        // is the path that was freezing the stream.
-        toolBar.isHidden = true
+        KSOptions.firstPlayerType = KSMEPlayer.self
+        KSOptions.secondPlayerType = KSMEPlayer.self
+        KSOptions.isAutoPlay = true
 
-        chrome.backgroundColor = .clear
-        chrome.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(chrome)
-
-        titleLabel.textColor = .white
-        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
-        titleLabel.textAlignment = .center
-        titleLabel.numberOfLines = 1
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        chrome.addSubview(titleLabel)
-
-        configure(backButton, systemName: "chevron.left", action: #selector(goBack))
-        configure(back10Button, systemName: "gobackward.10", action: #selector(seekBack))
-        configure(playButton, systemName: "playpause.fill", action: #selector(togglePlayback))
-        configure(forward10Button, systemName: "goforward.10", action: #selector(seekForward))
-        configure(fullscreenButton, systemName: "arrow.up.left.and.arrow.down.right", action: #selector(toggleFullscreen))
-
-        routePicker.prioritizesVideoDevices = true
-        routePicker.tintColor = .white
-        routePicker.activeTintColor = .white
-        routePicker.translatesAutoresizingMaskIntoConstraints = false
-        chrome.addSubview(routePicker)
-
-        let controls = UIStackView(arrangedSubviews: [
-            back10Button, playButton, forward10Button, routePicker, fullscreenButton
+        playerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(playerView)
+        NSLayoutConstraint.activate([
+            playerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            playerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            playerView.topAnchor.constraint(equalTo: view.topAnchor),
+            playerView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-        controls.axis = .horizontal
-        controls.alignment = .center
-        controls.distribution = .equalSpacing
-        controls.spacing = 24
-        controls.translatesAutoresizingMaskIntoConstraints = false
-        chrome.addSubview(controls)
+
+        // Keep KSPlayer as the decoder/render surface. Hide only its chrome.
+        playerView.toolBar.isHidden = true
+
+        buildOverlay()
+
+        let resource = KSPlayerResource(url: mediaURL, name: "")
+        playerView.set(resource: resource)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        playerView.toolBar.isHidden = true
+        view.bringSubviewToFront(overlay)
+    }
+
+    private func buildOverlay() {
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        overlay.backgroundColor = .clear
+        view.addSubview(overlay)
+
+        atxTitleLabel.text = mediaTitle
+        atxTitleLabel.textColor = .white
+        atxTitleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        atxTitleLabel.textAlignment = .center
+        atxTitleLabel.numberOfLines = 1
+        atxTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        overlay.addSubview(atxTitleLabel)
+
+        setupButton(atxBackButton, symbol: "chevron.left", selector: #selector(closePlayer))
+        setupButton(atxBack10Button, symbol: "gobackward.10", selector: #selector(seekBack))
+        setupButton(atxPlayButton, symbol: "playpause.fill", selector: #selector(togglePlayback))
+        setupButton(atxForward10Button, symbol: "goforward.10", selector: #selector(seekForward))
+        setupButton(atxFullscreenButton, symbol: "arrow.up.left.and.arrow.down.right", selector: #selector(toggleFullscreen))
+
+        atxRoutePicker.prioritizesVideoDevices = true
+        atxRoutePicker.tintColor = .white
+        atxRoutePicker.activeTintColor = .white
+        atxRoutePicker.translatesAutoresizingMaskIntoConstraints = false
+
+        let bottom = UIStackView(arrangedSubviews: [
+            atxBack10Button,
+            atxPlayButton,
+            atxForward10Button,
+            atxRoutePicker,
+            atxFullscreenButton
+        ])
+        bottom.axis = .horizontal
+        bottom.alignment = .center
+        bottom.distribution = .equalSpacing
+        bottom.spacing = 20
+        bottom.translatesAutoresizingMaskIntoConstraints = false
+        overlay.addSubview(bottom)
 
         NSLayoutConstraint.activate([
-            chrome.leadingAnchor.constraint(equalTo: leadingAnchor),
-            chrome.trailingAnchor.constraint(equalTo: trailingAnchor),
-            chrome.topAnchor.constraint(equalTo: topAnchor),
-            chrome.bottomAnchor.constraint(equalTo: bottomAnchor),
+            overlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            overlay.topAnchor.constraint(equalTo: view.topAnchor),
+            overlay.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            backButton.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 14),
-            backButton.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 10),
-            backButton.widthAnchor.constraint(equalToConstant: 44),
-            backButton.heightAnchor.constraint(equalToConstant: 44),
+            atxBackButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
+            atxBackButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
 
-            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: backButton.trailingAnchor, constant: 8),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: safeAreaLayoutGuide.trailingAnchor, constant: -58),
-            titleLabel.centerXAnchor.constraint(equalTo: chrome.centerXAnchor),
-            titleLabel.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            atxTitleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: atxBackButton.trailingAnchor, constant: 8),
+            atxTitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -52),
+            atxTitleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            atxTitleLabel.centerYAnchor.constraint(equalTo: atxBackButton.centerYAnchor),
 
-            controls.centerXAnchor.constraint(equalTo: chrome.centerXAnchor),
-            controls.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -20),
-            controls.widthAnchor.constraint(lessThanOrEqualTo: chrome.widthAnchor, multiplier: 0.86),
+            bottom.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            bottom.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -18),
+            bottom.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.88),
 
-            routePicker.widthAnchor.constraint(equalToConstant: 30),
-            routePicker.heightAnchor.constraint(equalToConstant: 30)
+            atxRoutePicker.widthAnchor.constraint(equalToConstant: 34),
+            atxRoutePicker.heightAnchor.constraint(equalToConstant: 34)
         ])
-
-        bringSubviewToFront(chrome)
     }
 
-    private func configure(_ button: UIButton, systemName: String, action: Selector) {
+    private func setupButton(_ button: UIButton, symbol: String, selector: Selector) {
         let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
-        button.setImage(UIImage(systemName: systemName, withConfiguration: config), for: .normal)
+        button.setImage(UIImage(systemName: symbol, withConfiguration: config), for: .normal)
         button.tintColor = .white
         button.translatesAutoresizingMaskIntoConstraints = false
         button.widthAnchor.constraint(equalToConstant: 44).isActive = true
         button.heightAnchor.constraint(equalToConstant: 44).isActive = true
-        button.addTarget(self, action: action, for: .touchUpInside)
-        chrome.addSubview(button)
+        button.addTarget(self, action: selector, for: .touchUpInside)
     }
 
-    func setATXTitle(_ title: String) {
-        titleLabel.text = title
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        toolBar.isHidden = true
-        bringSubviewToFront(chrome)
-    }
-
-    @objc private func goBack() {
+    @objc private func closePlayer() {
         if isATXFullscreen {
-            setATXFullscreen(false)
+            setFullscreen(false)
         } else {
-            atxBack?()
+            onBack?()
         }
     }
 
     @objc private func togglePlayback() {
-        guard let player = playerLayer?.player else { return }
+        let player = playerView.playerLayer.player
         if player.isPlaying {
             player.pause()
         } else {
@@ -134,32 +151,29 @@ private final class ATXKSPlayerView: IOSVideoPlayerView {
     }
 
     @objc private func seekBack() {
-        guard let player = playerLayer?.player else { return }
+        let player = playerView.playerLayer.player
         let target = max(0, player.currentPlaybackTime - 10)
         player.seek(time: target) { _ in }
     }
 
     @objc private func seekForward() {
-        guard let player = playerLayer?.player else { return }
+        let player = playerView.playerLayer.player
         let target = player.currentPlaybackTime + 10
         player.seek(time: target) { _ in }
     }
 
     @objc private func toggleFullscreen() {
-        setATXFullscreen(!isATXFullscreen)
+        setFullscreen(!isATXFullscreen)
     }
 
-    private func setATXFullscreen(_ fullscreen: Bool) {
+    private func setFullscreen(_ fullscreen: Bool) {
         isATXFullscreen = fullscreen
-
-        // Keep the same KSPlayer view/layer/player alive.
-        // Only the window orientation changes; the stream is never detached/recreated.
         let mask: UIInterfaceOrientationMask = fullscreen ? .landscape : .portrait
 
-        if #available(iOS 16.0, *), let scene = window?.windowScene {
+        if #available(iOS 16.0, *), let scene = view.window?.windowScene {
             let preferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
             scene.requestGeometryUpdate(preferences) { _ in }
-            window?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            setNeedsUpdateOfSupportedInterfaceOrientations()
         } else {
             UIDevice.current.setValue(
                 fullscreen ? UIInterfaceOrientation.landscapeRight.rawValue : UIInterfaceOrientation.portrait.rawValue,
@@ -167,52 +181,34 @@ private final class ATXKSPlayerView: IOSVideoPlayerView {
             )
         }
 
-        let icon = fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+        let symbol = fullscreen
+            ? "arrow.down.right.and.arrow.up.left"
+            : "arrow.up.left.and.arrow.down.right"
         let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
-        fullscreenButton.setImage(UIImage(systemName: icon, withConfiguration: config), for: .normal)
+        atxFullscreenButton.setImage(UIImage(systemName: symbol, withConfiguration: config), for: .normal)
+    }
+
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        isATXFullscreen ? .landscape : .portrait
+    }
+
+    deinit {
+        playerView.playerLayer.player.pause()
     }
 }
 
-struct KSPlayerFallbackView: UIViewRepresentable {
+struct KSPlayerFallbackView: UIViewControllerRepresentable {
     let url: URL
     let title: String
     let onBack: () -> Void
 
-    final class Coordinator {
-        var loadedURL: URL?
+    func makeUIViewController(context: Context) -> ATXKSPlayerHostController {
+        let controller = ATXKSPlayerHostController(url: url, title: title)
+        controller.onBack = onBack
+        return controller
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeUIView(context: Context) -> ATXKSPlayerView {
-        KSOptions.firstPlayerType = KSMEPlayer.self
-        KSOptions.secondPlayerType = KSMEPlayer.self
-        KSOptions.isAutoPlay = true
-
-        let view = ATXKSPlayerView()
-        view.atxBack = onBack
-        view.setATXTitle(title)
-
-        // Empty KS resource name prevents KSPlayer's title from being drawn over the clock.
-        let resource = KSPlayerResource(url: url, name: "")
-        context.coordinator.loadedURL = url
-        view.set(resource: resource)
-        return view
-    }
-
-    func updateUIView(_ uiView: ATXKSPlayerView, context: Context) {
-        uiView.atxBack = onBack
-        uiView.setATXTitle(title)
-
-        guard context.coordinator.loadedURL != url else { return }
-        context.coordinator.loadedURL = url
-        let resource = KSPlayerResource(url: url, name: "")
-        uiView.set(resource: resource)
-    }
-
-    static func dismantleUIView(_ uiView: ATXKSPlayerView, coordinator: Coordinator) {
-        uiView.playerLayer?.player?.pause()
+    func updateUIViewController(_ uiViewController: ATXKSPlayerHostController, context: Context) {
+        uiViewController.onBack = onBack
     }
 }

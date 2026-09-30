@@ -1,0 +1,19 @@
+ATX Player 5.1 - Build 193
+
+Compile repair after Build 192.
+
+The previous approach incorrectly subclassed IOSVideoPlayerView and redeclared members
+already owned by KSPlayer (titleLabel/backButton). Build 193 removes that architecture.
+
+Now:
+- IOSVideoPlayerView is used as a contained stock KSPlayer view, not subclassed.
+- ATX controls live in a separate UIViewController overlay.
+- No titleLabel/backButton naming collision.
+- No override of KSPlayer non-open properties.
+- No invalid IOSVideoPlayerView initializer override.
+- No optional chaining on MediaPlayerProtocol.
+- UIViewControllerRepresentable uses a non-private controller type, avoiding access-level errors.
+- KSPlayer/KSMEPlayer remains the decoder.
+- KSPlayer toolbar stays hidden.
+- ATX title stays inside safe area.
+- ATX controls: back, -10, play/pause, +10, AirPlay, fullscreen.
