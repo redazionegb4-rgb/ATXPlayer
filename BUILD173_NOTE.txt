@@ -1,0 +1,8 @@
+ATX Player 5.1 — Build 173
+Fix Xcode Cloud Swift Package lock:
+- VLCKit requirement changed from moving branch 'master' to exact version 4.0.0-a22.
+- Package.resolved included and aligned to 4.0.0-a22.
+- Revision pinned: 5d3535a664e7815765a5cee40d9b22527d7299cc.
+- This directly addresses Xcode Cloud's 'out-of-date resolved file' error when automatic dependency resolution is disabled.
+- Existing MKV -> VLCKit routing retained.
+- Copy-code fix without ATX- retained.
