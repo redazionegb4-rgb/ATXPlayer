@@ -1,0 +1,6 @@
+ATX Player 5.1 — Build 171
+- Corretto collegamento Swift Package VLCKit al PBXProject e al target ATXPlayer.
+- Prodotto collegato: VLCKit (nome verificato nel Package.swift ufficiale VideoLAN).
+- Package fissato alla revisione ufficiale che introduce la distribuzione SPM 4.0.0a22.
+- Nessun Package.resolved precompilato/obsoleto incluso.
+- Mantiene routing diretto .mkv -> VLCKit e fix copia codice senza ATX-.
