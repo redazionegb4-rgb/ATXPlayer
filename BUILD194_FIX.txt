@@ -1,0 +1,18 @@
+ATX Player 5.1 - Build 194
+
+Fixes the four Xcode Cloud compile errors shown after Build 193.
+
+Cause:
+IOSVideoPlayerView.playerLayer is KSPlayerLayer?, not KSPlayerLayer.
+
+Fixed:
+- togglePlayback: safely unwrap playerLayer
+- seekBack: safely unwrap playerLayer
+- seekForward: safely unwrap playerLayer
+- deinit: optional-chain playerLayer before pausing
+
+Audit:
+No direct `playerLayer.player` access remains in KSPlayerFallbackView.swift.
+
+The Build 193 architecture is otherwise unchanged:
+KSPlayer/KSMEPlayer remains the decoder, KS toolbar remains hidden, ATX controls remain separate.

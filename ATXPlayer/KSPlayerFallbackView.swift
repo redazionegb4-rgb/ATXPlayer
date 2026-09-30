@@ -142,7 +142,8 @@ final class ATXKSPlayerHostController: UIViewController {
     }
 
     @objc private func togglePlayback() {
-        let player = playerView.playerLayer.player
+        guard let layer = playerView.playerLayer else { return }
+        let player = layer.player
         if player.isPlaying {
             player.pause()
         } else {
@@ -151,13 +152,15 @@ final class ATXKSPlayerHostController: UIViewController {
     }
 
     @objc private func seekBack() {
-        let player = playerView.playerLayer.player
+        guard let layer = playerView.playerLayer else { return }
+        let player = layer.player
         let target = max(0, player.currentPlaybackTime - 10)
         player.seek(time: target) { _ in }
     }
 
     @objc private func seekForward() {
-        let player = playerView.playerLayer.player
+        guard let layer = playerView.playerLayer else { return }
+        let player = layer.player
         let target = player.currentPlaybackTime + 10
         player.seek(time: target) { _ in }
     }
@@ -193,7 +196,7 @@ final class ATXKSPlayerHostController: UIViewController {
     }
 
     deinit {
-        playerView.playerLayer.player.pause()
+        playerView.playerLayer?.player.pause()
     }
 }
 
