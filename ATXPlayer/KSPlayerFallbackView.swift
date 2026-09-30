@@ -20,6 +20,7 @@ struct KSPlayerFallbackView: UIViewRepresentable {
 
         let view = IOSVideoPlayerView()
         view.backgroundColor = .black
+        view.contentMode = .scaleAspectFit
         context.coordinator.loadedURL = url
         view.set(url: url, options: KSOptions())
         return view

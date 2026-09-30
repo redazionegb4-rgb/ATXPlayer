@@ -327,6 +327,12 @@ private struct ATXProfileChooserView: View {
     }
 }
 
+final class PlayerPresentationState: ObservableObject {
+    static let shared = PlayerPresentationState()
+    @Published var isPlayerPresented = false
+    private init() {}
+}
+
 struct MainTabView: View {
     @EnvironmentObject private var session: AppSession
     enum AppTab: String, CaseIterable {
@@ -2823,7 +2829,11 @@ struct PlayerScreen: View {
             resumePlaybackIfNeeded(delay: 0.12)
         }
         .toolbar(.hidden, for: .tabBar)
+        .onAppear {
+            PlayerPresentationState.shared.isPlayerPresented = true
+        }
         .onDisappear {
+            PlayerPresentationState.shared.isPlayerPresented = false
             // PlayerScreen chiude la riproduzione quando si torna ai contenuti.
             // In quel passaggio PlayerScreen può ricevere onDisappear: NON dobbiamo
             // distruggere l'AVPlayerItem, altrimenti la riproduzione si interrompe.
