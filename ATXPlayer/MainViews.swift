@@ -2726,7 +2726,6 @@ struct PlayerScreen: View {
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
-    @State private var useVLCFallback = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2749,14 +2748,7 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if useVLCFallback, let fallbackURL = currentURL {
-                VLCFallbackPlayerView(url: fallbackURL) {
-                    useVLCFallback = false
-                    failed = true
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea()
-            } else if let player {
+            if let player {
                 NativePlayerController(
                     player: player,
                     isLive: isLive,
@@ -2885,14 +2877,6 @@ struct PlayerScreen: View {
         guard player == nil else { return }
         guard let currentURL else { failed = true; return }
 
-        // Matroska/MKV non viene gestito da AVPlayer. Film ed episodi MKV
-        // passano direttamente al motore VLCKit con l'URL originale.
-        if !isLive && currentURL.pathExtension.lowercased() == "mkv" {
-            failed = false
-            useVLCFallback = true
-            return
-        }
-        useVLCFallback = false
 
         do {
             let audioSession = AVAudioSession.sharedInstance()

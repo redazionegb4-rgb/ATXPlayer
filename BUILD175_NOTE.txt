@@ -1,0 +1,17 @@
+ATX Player 5.1 — Build 175 STARTUP CRASH FIX
+
+Emergency rollback of VLCKit runtime integration.
+Reason: the app started terminating immediately on launch after VLCKit was linked.
+
+Changes:
+- VLCKit package/product/framework references removed.
+- VLCFallbackPlayer.swift removed.
+- No VLC object is loaded at application startup.
+- Native AVPlayer path restored.
+- Existing ATX code-copy fix retained.
+- Build number 175.
+
+IMPORTANT:
+This build is intended first to restore stable application launch.
+MKV/H.265 fallback will be reintroduced separately only after the startup crash
+is isolated, rather than keeping a framework that can terminate before SwiftUI launches.
