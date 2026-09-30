@@ -2726,7 +2726,7 @@ struct PlayerScreen: View {
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
-    @State private var useVLCFallback = false
+    @State private var useKSPlayerFallback = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2749,8 +2749,8 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if useVLCFallback, let source = currentURL {
-                VLCFallbackPlayerView(url: source)
+            if useKSPlayerFallback, let fallbackURL = currentURL {
+                KSPlayerFallbackView(url: fallbackURL)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
             } else if let player {
@@ -2883,12 +2883,12 @@ struct PlayerScreen: View {
         guard let currentURL else { failed = true; return }
 
         let vodExtension = currentURL.pathExtension.lowercased()
-        if !isLive && ["mkv", "avi"].contains(vodExtension) {
+        if !isLive && ["mkv", "avi", "flv", "webm"].contains(vodExtension) {
             failed = false
-            useVLCFallback = true
+            useKSPlayerFallback = true
             return
         }
-        useVLCFallback = false
+        useKSPlayerFallback = false
 
         do {
             let audioSession = AVAudioSession.sharedInstance()
@@ -2998,6 +2998,7 @@ struct PlayerScreen: View {
         }
         player = nil
         failed = false
+        useKSPlayerFallback = false
         livePlaybackStarted = false
         compatibilityURL = fallback
         configurePlayer()
@@ -3056,8 +3057,10 @@ struct PlayerScreen: View {
     }
 
     private func retryVODCompatibilityIfPossible(sourceURL: URL) -> Bool {
-        guard !isLive, compatibilityURL == nil else { return false }
+        guard !isLive, !useKSPlayerFallback else { return false }
 
+        videoProbeTask?.cancel()
+        liveStartupTask?.cancel()
         if let player {
             removeObservers(from: player)
             ActivePlaybackRegistry.shared.deactivate(player)
@@ -3065,7 +3068,8 @@ struct PlayerScreen: View {
         }
         player = nil
         failed = false
-        useVLCFallback = true
+        compatibilityURL = nil
+        useKSPlayerFallback = true
         return true
     }
 
