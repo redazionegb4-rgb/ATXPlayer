@@ -1,0 +1,7 @@
+ATX Player 5.1 — Build 166
+
+- Corretto il pulsante Copia codice: ATX- resta visibile nell'app, ma negli appunti viene copiato solo XXXX-XXXX-XXXX.
+- Rimossa la dipendenza VLCKit che bloccava Xcode Cloud con Package.resolved.
+- Migliorata la compatibilità HEVC/H.265 usando AVFoundation nativo.
+- Per VOD HEVC forniti in container MKV/AVI/TS/MOV, se AVPlayer fallisce viene tentato automaticamente l'endpoint MP4 compatibile.
+- Nessuna nuova dipendenza Swift Package: la build non richiede risoluzione pacchetti esterni.

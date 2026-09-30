@@ -2726,7 +2726,6 @@ struct PlayerScreen: View {
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
-    @State private var useVLCFallback = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2749,11 +2748,7 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if useVLCFallback, let fallbackURL = currentURL {
-                VLCFallbackPlayerView(url: fallbackURL)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea()
-            } else if let player {
+            if let player {
                 NativePlayerController(
                     player: player,
                     isLive: isLive,
@@ -3047,21 +3042,58 @@ struct PlayerScreen: View {
         }
     }
 
+    private func vodCompatibilityCandidate(for sourceURL: URL) -> URL? {
+        guard !isLive,
+              var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false)
+        else { return nil }
+
+        let path = components.path
+        let lower = path.lowercased()
+
+        // AVPlayer supports HEVC/H.265 when it is delivered in an Apple-compatible
+        // container/stream. Some Xtream servers expose HEVC VOD as MKV/AVI even when
+        // the same asset is available through the MP4 endpoint. Retry that endpoint
+        // before reporting a playback error.
+        for suffix in [".mkv", ".avi", ".ts", ".mov"] {
+            if lower.hasSuffix(suffix) {
+                components.path = String(path.dropLast(suffix.count)) + ".mp4"
+                return components.url
+            }
+        }
+        return nil
+    }
+
+    private func retryVODCompatibilityIfPossible(sourceURL: URL) -> Bool {
+        guard let fallback = vodCompatibilityCandidate(for: sourceURL),
+              fallback != sourceURL,
+              compatibilityURL == nil
+        else { return false }
+
+        compatibilityURL = fallback
+        if let player {
+            removeObservers(from: player)
+            ActivePlaybackRegistry.shared.deactivate(player)
+            player.pause()
+        }
+        player = nil
+        failed = false
+        configurePlayer()
+        return true
+    }
+
     private func validate(item: AVPlayerItem, player: AVPlayer) {
-        Task {
-            try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_000_000_000)
+        let sourceURL = currentURL
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_500_000_000)
+            guard self.player === player else { return }
+
             if item.status == .failed {
-                player.pause()
-                ActivePlaybackRegistry.shared.deactivate(player)
-                self.player = nil
-                // Film e serie: se AVFoundation rifiuta il flusso (ad esempio
-                // HEVC/H.265 o container non compatibile), passa al motore VLC.
-                if !isLive, currentURL != nil {
-                    failed = false
-                    useVLCFallback = true
-                } else {
-                    failed = true
+                if !isLive, retryVODCompatibilityIfPossible(sourceURL: sourceURL) {
+                    return
                 }
+                failed = true
+                player.pause()
+                self.player = nil
             }
         }
     }
