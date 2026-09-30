@@ -1,0 +1,5 @@
+ATX Player 5.1 (Build 165)
+
+- Codice dispositivo: il prefisso ATX- resta visibile nell’app, ma il pulsante COPIA CODICE copia solo i 12 caratteri del codice con i trattini.
+- Compatibilità video migliorata: aggiunto fallback VLCKit per Film e Serie quando AVPlayer non riesce ad aprire contenuti HEVC/H.265 o container non supportati da AVFoundation.
+- Nessuna modifica alla configurazione ATX Remote o alla grafica generale.

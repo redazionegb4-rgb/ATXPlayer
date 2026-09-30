@@ -1,38 +1,29 @@
 import SwiftUI
-import UIKit
 import VLCKit
 
-/// Decoder di compatibilità usato solo quando AVPlayer riproduce il flusso live
-/// ma non riesce a produrre frame video (codec/container non supportato da AVFoundation).
-struct VLCFallbackPlayer: UIViewRepresentable {
+/// Compatibility player used only when AVPlayer cannot open a non-live movie/episode.
+/// This adds support for HEVC/H.265 streams and containers not handled by AVFoundation.
+struct VLCFallbackPlayerView: UIViewRepresentable {
     let url: URL
 
-    final class Coordinator: NSObject {
+    final class Coordinator {
         let mediaPlayer = VLCMediaPlayer()
-        var currentURL: URL?
+        var loadedURL: URL?
 
-        func play(_ url: URL, in view: UIView) {
-            guard currentURL != url || mediaPlayer.drawable == nil else { return }
-            currentURL = url
+        func load(_ url: URL, drawable: UIView) {
+            mediaPlayer.drawable = drawable
+            guard loadedURL != url else {
+                if !mediaPlayer.isPlaying { mediaPlayer.play() }
+                return
+            }
+            loadedURL = url
             mediaPlayer.stop()
-            mediaPlayer.drawable = view
-            let media = VLCMedia(url: url)
-            // Valori contenuti per una diretta: abbastanza buffer per codec/TS più
-            // difficili senza introdurre un ritardo eccessivo.
-            media.addOptions([
-                "network-caching": 1200,
-                "live-caching": 1200,
-                "clock-jitter": 0,
-                "clock-synchro": 0
-            ])
-            mediaPlayer.media = media
+            mediaPlayer.media = VLCMedia(url: url)
             mediaPlayer.play()
         }
 
-        func stop() {
+        deinit {
             mediaPlayer.stop()
-            mediaPlayer.drawable = nil
-            currentURL = nil
         }
     }
 
@@ -41,16 +32,16 @@ struct VLCFallbackPlayer: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: .zero)
         view.backgroundColor = .black
-        view.clipsToBounds = true
-        context.coordinator.play(url, in: view)
+        context.coordinator.load(url, drawable: view)
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.play(url, in: uiView)
+        context.coordinator.load(url, drawable: uiView)
     }
 
     static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
-        coordinator.stop()
+        coordinator.mediaPlayer.stop()
+        coordinator.mediaPlayer.drawable = nil
     }
 }

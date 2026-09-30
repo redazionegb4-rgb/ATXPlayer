@@ -2726,6 +2726,7 @@ struct PlayerScreen: View {
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
+    @State private var useVLCFallback = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2748,7 +2749,11 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let player {
+            if useVLCFallback, let fallbackURL = currentURL {
+                VLCFallbackPlayerView(url: fallbackURL)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
+            } else if let player {
                 NativePlayerController(
                     player: player,
                     isLive: isLive,
@@ -3046,9 +3051,17 @@ struct PlayerScreen: View {
         Task {
             try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_000_000_000)
             if item.status == .failed {
-                failed = true
                 player.pause()
+                ActivePlaybackRegistry.shared.deactivate(player)
                 self.player = nil
+                // Film e serie: se AVFoundation rifiuta il flusso (ad esempio
+                // HEVC/H.265 o container non compatibile), passa al motore VLC.
+                if !isLive, currentURL != nil {
+                    failed = false
+                    useVLCFallback = true
+                } else {
+                    failed = true
+                }
             }
         }
     }
