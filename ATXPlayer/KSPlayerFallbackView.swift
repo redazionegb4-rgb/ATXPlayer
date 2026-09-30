@@ -14,6 +14,7 @@ struct KSPlayerFallbackView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> IOSVideoPlayerView {
+        KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
         KSOptions.isAutoPlay = true
 

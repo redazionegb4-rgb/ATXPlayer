@@ -2822,8 +2822,9 @@ struct PlayerScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             resumePlaybackIfNeeded(delay: 0.12)
         }
+        .toolbar(.hidden, for: .tabBar)
         .onDisappear {
-            // AVPlayerViewController presenta il fullscreen fuori dalla gerarchia SwiftUI.
+            // PlayerScreen chiude la riproduzione quando si torna ai contenuti.
             // In quel passaggio PlayerScreen può ricevere onDisappear: NON dobbiamo
             // distruggere l'AVPlayerItem, altrimenti la riproduzione si interrompe.
             guard !fullScreenTransitionActive else { return }
@@ -2879,70 +2880,17 @@ struct PlayerScreen: View {
     }
 
     private func configurePlayer() {
-        guard player == nil else { return }
-        guard let currentURL else { failed = true; return }
-
-        let vodExtension = currentURL.pathExtension.lowercased()
-        if !isLive && ["mkv", "avi", "flv", "webm"].contains(vodExtension) {
-            failed = false
-            useKSPlayerFallback = true
+        guard currentURL != nil else {
+            failed = true
             return
         }
-        useKSPlayerFallback = false
 
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])
-            try audioSession.setActive(true)
-        } catch { }
-
-        if !episodeQueue.isEmpty, episodeQueue.indices.contains(currentQueueIndex) {
-            displayedTitle = episodeQueue[currentQueueIndex].title
-            currentDescriptor = episodeQueue[currentQueueIndex].descriptor
-        }
-
-        if let currentDescriptor { session.recordHistory(for: currentDescriptor) }
-
-        // Chiude completamente un eventuale stream precedente PRIMA di creare
-        // il nuovo asset, evitando due sessioni contemporanee lato provider.
-        ActivePlaybackRegistry.shared.stopCurrent()
-
-        let assetOptions: [String: Any] = [
-            AVURLAssetPreferPreciseDurationAndTimingKey: false
-        ]
-        let asset = AVURLAsset(url: currentURL, options: assetOptions)
-        let item = AVPlayerItem(asset: asset)
-        item.preferredForwardBufferDuration = isLive ? 1.25 : 3.0
-        item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive
-        if isLive {
-            // Buffer molto ridotto, ma non azzerato: migliora la compatibilità
-            // con i server HLS più lenti senza ritardare visibilmente l'avvio.
-            item.preferredPeakBitRate = 0
-            livePlaybackStarted = false
-            liveStartupAttempts = 0
-        }
-        let newPlayer = AVPlayer(playerItem: item)
-        ActivePlaybackRegistry.shared.activate(newPlayer)
-        newPlayer.automaticallyWaitsToMinimizeStalling = true
-        newPlayer.preventsDisplaySleepDuringVideoPlayback = true
-        player = newPlayer
-        installObservers(on: newPlayer, item: item)
-
-        if !isLive, let currentDescriptor, let saved = session.savedProgress(for: currentDescriptor), saved.position >= 20 {
-            pendingResumePosition = saved.position
-            showResumePrompt = true
-        } else {
-            startPlayback(newPlayer)
-        }
-
-        validate(item: item, player: newPlayer)
-        if isLive { startVideoProbe(item: item, player: newPlayer, sourceURL: currentURL) }
+        // Build 184: KSPlayer/FFmpeg is the single playback engine for
+        // Live channels, films and series episodes.
+        failed = false
+        useKSPlayerFallback = true
     }
 
-    // Some IPTV servers expose the same live stream as MPEG-TS and HLS.
-    // AVPlayer can successfully decode the audio track of a TS stream while producing
-    // no video frames for some stream/container combinations. In that case retry the
-    // same channel through the HLS endpoint without adding third-party codecs.
     private func compatibilityCandidate(for sourceURL: URL) -> URL? {
         guard var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false) else { return nil }
         let path = components.path
