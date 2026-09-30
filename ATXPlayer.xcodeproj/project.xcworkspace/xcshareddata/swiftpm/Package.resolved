@@ -3,10 +3,10 @@
     {
       "identity": "vlckit",
       "kind": "remoteSourceControl",
-      "location": "https://github.com/rsalesas/VLCKit.git",
+      "location": "https://github.com/videolan/vlckit.git",
       "state": {
-        "revision": "98b75fa91691de189886656aeec17206b2829e68",
-        "version": "3.6.6"
+        "revision": "5d3535a664e7815765a5cee40d9b22527d7299cc",
+        "version": "4.0.0-a22"
       }
     }
   ],

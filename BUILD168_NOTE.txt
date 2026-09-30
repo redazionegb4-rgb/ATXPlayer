@@ -1,0 +1,7 @@
+ATX Player 5.1 — Build 168
+- ATX- resta visibile; Copia codice copia solo XXXX-XXXX-XXXX.
+- AVPlayer resta il player principale.
+- Film/Episodi che AVPlayer rifiuta o lascia bloccati passano automaticamente a VLCKit.
+- Il fallback usa lo stesso URL originale: nessuna falsa conversione MKV/TS -> MP4.
+- VLCKit ufficiale VideoLAN fissato a 4.0.0-a22.
+- Package.resolved incluso e coerente per Xcode Cloud.
