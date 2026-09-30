@@ -1,0 +1,18 @@
+ATX Player 5.1 — Build 172
+
+CORREZIONE XCODE CLOUD
+La Build 171 aveva due proprietà packageReferences nello stesso PBXProject:
+- packageReferences = (B200);
+- packageReferences = ();
+
+La seconda annullava il riferimento al package e provocava:
+Missing package product 'VLCKit'
+
+Build 172:
+- eliminato il packageReferences vuoto;
+- mantenuto un solo riferimento B200;
+- VLCKit collegato al target ATXPlayer e alla Frameworks phase;
+- repository ufficiale VideoLAN, branch master;
+- nessun Package.resolved obsoleto incluso;
+- Build 172;
+- mantiene MKV -> VLCKit e il fix copia codice senza ATX-.
