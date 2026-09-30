@@ -1,6 +1,7 @@
 // ATX PLAYER 4.0 BUILD 140 — PROFILE EXPERIENCE + CATALOG CLEANUP
 import Foundation
 import SwiftUI
+import MediaPlayer
 import AVKit
 import AVFoundation
 import UIKit
@@ -334,10 +335,21 @@ final class PlayerPresentationState: ObservableObject {
 }
 
 extension Notification.Name {
-    static let atxPlayerTogglePlayback = Notification.Name("ATXPlayer.TogglePlayback")
-    static let atxPlayerSeekBackward = Notification.Name("ATXPlayer.SeekBackward")
-    static let atxPlayerSeekForward = Notification.Name("ATXPlayer.SeekForward")
-    static let atxPlayerTogglePiP = Notification.Name("ATXPlayer.TogglePiP")
+    static let atxKSTogglePlay = Notification.Name("ATX.KS.TogglePlay")
+    static let atxKSSeekBack = Notification.Name("ATX.KS.SeekBack")
+    static let atxKSSeekForward = Notification.Name("ATX.KS.SeekForward")
+}
+
+struct ATXAirPlayButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let view = AVRoutePickerView(frame: .zero)
+        view.prioritizesVideoDevices = true
+        view.tintColor = .white
+        view.activeTintColor = .white
+        return view
+    }
+
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
 }
 
 struct MainTabView: View {
@@ -2745,7 +2757,6 @@ struct PlayerScreen: View {
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
     @State private var useKSPlayerFallback = false
-    @State private var showPlayerControls = true
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2775,57 +2786,38 @@ struct PlayerScreen: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    // Full player controls restored for the FFmpeg/KSPlayer path.
-                    // KSPlayer keeps decoding; this layer restores the app controls
-                    // that disappeared when every format was routed to KSPlayer.
-                    if showPlayerControls {
-                        VStack {
-                            Spacer()
-
-                            HStack(spacing: 28) {
-                                Button {
-                                    NotificationCenter.default.post(name: .atxPlayerSeekBackward, object: nil)
-                                } label: {
-                                    Image(systemName: "gobackward.10")
-                                        .font(.system(size: 26, weight: .semibold))
-                                }
-
-                                Button {
-                                    NotificationCenter.default.post(name: .atxPlayerTogglePlayback, object: nil)
-                                } label: {
-                                    Image(systemName: "playpause.fill")
-                                        .font(.system(size: 32, weight: .semibold))
-                                }
-
-                                Button {
-                                    NotificationCenter.default.post(name: .atxPlayerSeekForward, object: nil)
-                                } label: {
-                                    Image(systemName: "goforward.10")
-                                        .font(.system(size: 26, weight: .semibold))
-                                }
-
-                                Button {
-                                    NotificationCenter.default.post(name: .atxPlayerTogglePiP, object: nil)
-                                } label: {
-                                    Image(systemName: "pip")
-                                        .font(.system(size: 25, weight: .semibold))
-                                }
-
-                                AirPlayRouteButton()
-                                    .frame(width: 30, height: 30)
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 30) {
+                            Button {
+                                NotificationCenter.default.post(name: .atxKSSeekBack, object: nil)
+                            } label: {
+                                Image(systemName: "gobackward.10")
+                                    .font(.system(size: 27, weight: .semibold))
                             }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 16)
-                            .background(.black.opacity(0.62), in: Capsule())
-                            .padding(.bottom, 28)
+
+                            Button {
+                                NotificationCenter.default.post(name: .atxKSTogglePlay, object: nil)
+                            } label: {
+                                Image(systemName: "playpause.fill")
+                                    .font(.system(size: 32, weight: .semibold))
+                            }
+
+                            Button {
+                                NotificationCenter.default.post(name: .atxKSSeekForward, object: nil)
+                            } label: {
+                                Image(systemName: "goforward.10")
+                                    .font(.system(size: 27, weight: .semibold))
+                            }
+
+                            ATXAirPlayButton()
+                                .frame(width: 30, height: 30)
                         }
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        showPlayerControls.toggle()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 26)
+                        .padding(.vertical, 15)
+                        .background(.black.opacity(0.65), in: Capsule())
+                        .padding(.bottom, 28)
                     }
                 }
                     .ignoresSafeArea()
