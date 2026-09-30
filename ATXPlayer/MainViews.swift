@@ -2877,7 +2877,6 @@ struct PlayerScreen: View {
         guard player == nil else { return }
         guard let currentURL else { failed = true; return }
 
-
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])

@@ -1,0 +1,12 @@
+ATX Player 5.1 — Build 176 CLEAN/STABLE
+
+Questa build NON deriva dalla 175 corrotta.
+È stata ricostruita dalla Build 169 pre-VLCKit, con project.pbxproj integro.
+
+- Build number 176
+- Nessun VLCKit
+- Nessun Swift Package VLC
+- Nessun Package.resolved VLC
+- Nessuna modifica runtime che possa causare crash all'avvio
+- Mantiene le modifiche già presenti nella Build 169, incluso il fix del codice ATX
+- Il supporto MKV/H.265 NON viene modificato in questa build: prima viene ristabilita una base compilabile e stabile.
