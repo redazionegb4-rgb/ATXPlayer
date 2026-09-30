@@ -1,0 +1,19 @@
+ATX Player 5.1 — Build 169 CRASH ROLLBACK
+
+Questa build rimuove completamente VLCKit/SPM introdotto nella Build 168,
+per eliminare il crash immediato all'avvio.
+
+Base: Build 167 funzionante.
+Mantenuto:
+- codice dispositivo ATX- visibile
+- Copia codice senza prefisso ATX-
+- modifiche native AVFoundation della 167
+
+Rimosso:
+- VLCKit
+- MobileVLCKit
+- Package.resolved / configurazione SwiftPM relativa a VLC
+
+Obiettivo di questa build: ripristinare immediatamente l'avvio stabile dell'app.
+Il problema dei contenuti H.265 non viene dichiarato risolto in questa build:
+va affrontato separatamente senza introdurre un framework che provochi crash all'avvio.
