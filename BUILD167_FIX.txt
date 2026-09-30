@@ -1,0 +1,4 @@
+ATX Player 5.1 Build 167
+- Corretto errore Swift: URL? ora viene unwrapped prima del fallback HEVC.
+- Conservate le modifiche della 5.1: copia codice senza ATX- e fallback VOD HEVC nativo.
+- Nessuna dipendenza esterna.

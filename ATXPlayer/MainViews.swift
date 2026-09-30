@@ -3082,7 +3082,13 @@ struct PlayerScreen: View {
     }
 
     private func validate(item: AVPlayerItem, player: AVPlayer) {
-        let sourceURL = currentURL
+        guard let sourceURL = currentURL else {
+            failed = true
+            player.pause()
+            self.player = nil
+            return
+        }
+
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_500_000_000)
             guard self.player === player else { return }
