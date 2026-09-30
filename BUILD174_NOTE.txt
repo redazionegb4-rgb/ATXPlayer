@@ -1,0 +1,7 @@
+ATX Player 5.1 — Build 174
+- Corretto errore Swift 6 in VLCFallbackPlayer.swift:
+  '=' must have consistent whitespace on both sides.
+- Normalizzata la sintassi/whitespace del file VLC fallback.
+- Mantiene VLCKit 4.0.0-a22 e Package.resolved della Build 173.
+- Mantiene MKV -> VLCKit.
+- Mantiene fix copia codice senza prefisso ATX-.

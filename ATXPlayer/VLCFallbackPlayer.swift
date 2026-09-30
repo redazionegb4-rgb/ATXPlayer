@@ -45,15 +45,15 @@ struct VLCFallbackPlayerView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        let c=Coordinator(); c.onFailure=onFailure; return c
+        let c = Coordinator(); c.onFailure = onFailure; return c
     }
     func makeUIView(context: Context) -> UIView {
-        let v=UIView(); v.backgroundColor=.black
-        context.coordinator.load(url, drawable:v); return v
+        let v = UIView(); v.backgroundColor = .black
+        context.coordinator.load(url, drawable: v); return v
     }
-    func updateUIView(_ uiView:UIView, context:Context) {
-        context.coordinator.onFailure=onFailure
-        context.coordinator.load(url, drawable:uiView)
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onFailure = onFailure
+        context.coordinator.load(url, drawable: uiView)
     }
-    static func dismantleUIView(_ uiView:UIView, coordinator:Coordinator) { coordinator.stop() }
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) { coordinator.stop() }
 }
