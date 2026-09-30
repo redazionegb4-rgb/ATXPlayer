@@ -7,7 +7,7 @@ struct KSPlayerFallbackView: UIViewRepresentable {
     let title: String
     let onBack: () -> Void
 
-    final class Coordinator: NSObject {
+    final class Coordinator {
         var loadedURL: URL?
 
         weak var controlledView: IOSVideoPlayerView?
@@ -48,6 +48,36 @@ struct KSPlayerFallbackView: UIViewRepresentable {
         Coordinator()
     }
 
+
+    private func normalizeSinglePlayerUI(_ root: UIView) {
+        root.backgroundColor = .black
+        root.clipsToBounds = true
+
+        func walk(_ view: UIView) {
+            if let button = view as? UIButton {
+                let text = [
+                    button.accessibilityIdentifier,
+                    button.accessibilityLabel,
+                    button.currentTitle
+                ]
+                .compactMap { $0?.lowercased() }
+                .joined(separator: " ")
+
+                // PlayerScreen is already true fullscreen. Suppress KSPlayer's second fullscreen
+                // presentation path, which can detach/recreate the player and interrupt audio.
+                if text.contains("fullscreen") ||
+                   text.contains("full screen") ||
+                   text.contains("enter full") ||
+                   text.contains("exit full") {
+                    button.isHidden = true
+                    button.isUserInteractionEnabled = false
+                }
+            }
+            view.subviews.forEach(walk)
+        }
+        walk(root)
+    }
+
     func makeUIView(context: Context) -> IOSVideoPlayerView {
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
@@ -68,11 +98,12 @@ struct KSPlayerFallbackView: UIViewRepresentable {
         context.coordinator.loadedURL = url
         let resource = KSPlayerResource(url: url, name: title)
         view.set(resource: resource)
-        context.coordinator.installControls(on: view)
+        normalizeSinglePlayerUI(view)
         return view
     }
 
     func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {
+        normalizeSinglePlayerUI(uiView)
         guard context.coordinator.loadedURL != url else { return }
         context.coordinator.loadedURL = url
         let resource = KSPlayerResource(url: url, name: title)

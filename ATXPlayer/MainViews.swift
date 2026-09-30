@@ -1,7 +1,6 @@
 // ATX PLAYER 4.0 BUILD 140 — PROFILE EXPERIENCE + CATALOG CLEANUP
 import Foundation
 import SwiftUI
-import MediaPlayer
 import AVKit
 import AVFoundation
 import UIKit
@@ -334,23 +333,7 @@ final class PlayerPresentationState: ObservableObject {
     private init() {}
 }
 
-extension Notification.Name {
-    static let atxKSTogglePlay = Notification.Name("ATX.KS.TogglePlay")
-    static let atxKSSeekBack = Notification.Name("ATX.KS.SeekBack")
-    static let atxKSSeekForward = Notification.Name("ATX.KS.SeekForward")
-}
 
-struct ATXAirPlayButton: UIViewRepresentable {
-    func makeUIView(context: Context) -> AVRoutePickerView {
-        let view = AVRoutePickerView(frame: .zero)
-        view.prioritizesVideoDevices = true
-        view.tintColor = .white
-        view.activeTintColor = .white
-        return view
-    }
-
-    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
-}
 
 struct MainTabView: View {
     @EnvironmentObject private var session: AppSession
@@ -2780,46 +2763,11 @@ struct PlayerScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if useKSPlayerFallback, let fallbackURL = currentURL {
-                ZStack {
-                    KSPlayerFallbackView(url: fallbackURL, title: displayedTitle) {
-                        dismiss()
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 30) {
-                            Button {
-                                NotificationCenter.default.post(name: .atxKSSeekBack, object: nil)
-                            } label: {
-                                Image(systemName: "gobackward.10")
-                                    .font(.system(size: 27, weight: .semibold))
-                            }
-
-                            Button {
-                                NotificationCenter.default.post(name: .atxKSTogglePlay, object: nil)
-                            } label: {
-                                Image(systemName: "playpause.fill")
-                                    .font(.system(size: 32, weight: .semibold))
-                            }
-
-                            Button {
-                                NotificationCenter.default.post(name: .atxKSSeekForward, object: nil)
-                            } label: {
-                                Image(systemName: "goforward.10")
-                                    .font(.system(size: 27, weight: .semibold))
-                            }
-
-                            ATXAirPlayButton()
-                                .frame(width: 30, height: 30)
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 26)
-                        .padding(.vertical, 15)
-                        .background(.black.opacity(0.65), in: Capsule())
-                        .padding(.bottom, 28)
-                    }
+                KSPlayerFallbackView(url: fallbackURL, title: displayedTitle) {
+                    dismiss()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
                     .ignoresSafeArea()
             } else if let player {
                 NativePlayerController(
