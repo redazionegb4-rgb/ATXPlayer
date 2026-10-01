@@ -2763,7 +2763,9 @@ struct PlayerScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if useKSPlayerFallback, let fallbackURL = currentURL {
-                KSPlayerFallbackView(url: fallbackURL, title: displayedTitle) { dismiss() }
+                KSPlayerFallbackView(url: fallbackURL, title: displayedTitle) {
+                    dismiss()
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
                     .ignoresSafeArea()
@@ -2810,8 +2812,8 @@ struct PlayerScreen: View {
                 .animation(.easeInOut(duration: 0.25), value: showNextEpisodeCountdown)
             }
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle(displayedTitle)
+        .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .alert("Riprendere la visione?", isPresented: $showResumePrompt) {
             Button("Ricomincia") {
