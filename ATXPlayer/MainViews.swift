@@ -2812,9 +2812,8 @@ struct PlayerScreen: View {
                 .animation(.easeInOut(duration: 0.25), value: showNextEpisodeCountdown)
             }
         }
-        .navigationTitle(displayedTitle)
-        .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .alert("Riprendere la visione?", isPresented: $showResumePrompt) {
             Button("Ricomincia") {
                 player?.seek(to: .zero) { _ in
@@ -2906,7 +2905,7 @@ struct PlayerScreen: View {
             return
         }
 
-        // Build 184: KSPlayer/FFmpeg is the single playback engine for
+        // Build 199: MPVKit/libmpv is the single playback engine for
         // Live channels, films and series episodes.
         failed = false
         useKSPlayerFallback = true

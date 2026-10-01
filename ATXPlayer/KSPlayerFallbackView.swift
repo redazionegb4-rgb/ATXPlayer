@@ -1,56 +1,40 @@
 import SwiftUI
-import UIKit
-import KSPlayer
+import MPVKit
 
-struct KSPlayerFallbackView: UIViewRepresentable {
+// Build 199 test:
+// the old type name is intentionally retained so MainViews does not need a risky
+// navigation rewrite. Internally this is now MPVKit/libmpv, NOT KSPlayer.
+struct KSPlayerFallbackView: View {
     let url: URL
     let title: String
     let onBack: () -> Void
 
-    final class Coordinator {
-        var loadedURL: URL?
-    }
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
+            MPVVideoPlayer(url: url)
+                .ignoresSafeArea()
 
-    private func configurePlayer(_ view: IOSVideoPlayerView) {
-        view.backgroundColor = .black
-        view.contentMode = .scaleAspectFit
-        view.clipsToBounds = true
-    }
+            // Keep navigation outside libmpv. No custom playback/fullscreen commands
+            // are wired in this first compatibility build.
+            HStack(spacing: 12) {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(.black.opacity(0.45), in: Circle())
+                }
 
-    func makeUIView(context: Context) -> IOSVideoPlayerView {
-        KSOptions.firstPlayerType = KSMEPlayer.self
-        KSOptions.secondPlayerType = KSMEPlayer.self
-        KSOptions.isAutoPlay = true
+                Text(title)
+                    .font(.headline)
+                    .lineLimit(1)
 
-        let view = IOSVideoPlayerView()
-        configurePlayer(view)
-
-        view.backBlock = {
-            DispatchQueue.main.async {
-                onBack()
+                Spacer()
             }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
         }
-
-        context.coordinator.loadedURL = url
-        let resource = KSPlayerResource(url: url, name: title)
-        view.set(resource: resource)
-
-        return view
-    }
-
-    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {
-        configurePlayer(uiView)
-
-        guard context.coordinator.loadedURL != url else {
-            return
-        }
-
-        context.coordinator.loadedURL = url
-        let resource = KSPlayerResource(url: url, name: title)
-        uiView.set(resource: resource)
     }
 }
