@@ -1,0 +1,4 @@
+framework module ffmpegkitcore {
+  umbrella "../Headers"
+  export *
+}
