@@ -2696,7 +2696,7 @@ private final class ActivePlaybackRegistry {
     }
 }
 
-struct LegacyAVPlayerScreen: View {
+struct LegacyBuild164PlayerScreen: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.scenePhase) private var scenePhase
     let title: String
