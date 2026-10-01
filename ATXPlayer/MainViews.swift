@@ -2726,6 +2726,7 @@ struct PlayerScreen: View {
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
+    @State private var mkvPreparing = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2771,8 +2772,15 @@ struct PlayerScreen: View {
                     .padding(24)
                     .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
+            } else if mkvPreparing {
+                VStack(spacing: 14) {
+                    ProgressView().controlSize(.large).tint(.white)
+                    Text("Preparazione MKV…").font(.headline).foregroundStyle(.white)
+                    Text("ATX sta adattando il contenitore al player originale senza ricodificare il video.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
+                }.padding(24)
             } else if failed || currentURL == nil {
-                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.primary)
+                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o usare codec non supportati da iPhone.").foregroundStyle(.primary)
             } else {
                 ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary)
             }
@@ -2873,27 +2881,27 @@ struct PlayerScreen: View {
         .shadow(color: .black.opacity(0.5), radius: 18)
     }
 
-    // VOD compatibility for Xtream-style endpoints:
-    // AVPlayer does not natively accept Matroska (.mkv). Many Xtream-compatible
-    // servers expose the same VOD/episode through an MP4 container simply by
-    // requesting the same stream id with .mp4. This keeps the ORIGINAL AVPlayer,
-    // native fullscreen, PiP and AirPlay; no third-party player is loaded.
-    private func nativeVODURL(for sourceURL: URL) -> URL {
-        guard !isLive,
-              sourceURL.pathExtension.lowercased() == "mkv",
-              var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false)
-        else { return sourceURL }
-
-        let path = components.path
-        guard path.lowercased().hasSuffix(".mkv") else { return sourceURL }
-        components.path = String(path.dropLast(4)) + ".mp4"
-        return components.url ?? sourceURL
-    }
-
     private func configurePlayer() {
         guard player == nil else { return }
-        guard let sourceURL = currentURL else { failed = true; return }
-        let currentURL = nativeVODURL(for: sourceURL)
+        guard let currentURL else { failed = true; return }
+
+        // Keep the original AVPlayer UI. For VOD/episodes in Matroska, remux the
+        // original bytes locally to fragmented MP4, then feed that file to AVPlayer.
+        if !isLive, compatibilityURL == nil, currentURL.pathExtension.lowercased() == "mkv" {
+            mkvPreparing = true
+            failed = false
+            MKVRemuxService.shared.prepare(currentURL) { result in
+                mkvPreparing = false
+                switch result {
+                case .success(let localMP4):
+                    compatibilityURL = localMP4
+                    configurePlayer()
+                case .failure:
+                    failed = true
+                }
+            }
+            return
+        }
 
         do {
             let audioSession = AVAudioSession.sharedInstance()
@@ -3114,8 +3122,18 @@ struct PlayerScreen: View {
         session.recordHistory(for: next.descriptor)
         failed = false
 
-        let playableNextURL = nativeVODURL(for: nextURL)
-        let nextItem = AVPlayerItem(url: playableNextURL)
+        if nextURL.pathExtension.lowercased() == "mkv" {
+            removeObservers(from: player)
+            player.pause()
+            ActivePlaybackRegistry.shared.deactivate(player)
+            self.player = nil
+            compatibilityURL = nil
+            MKVRemuxService.shared.cancel()
+            configurePlayer()
+            return
+        }
+
+        let nextItem = AVPlayerItem(url: nextURL)
         nextItem.preferredForwardBufferDuration = 3.0
         player.replaceCurrentItem(with: nextItem)
         installObservers(on: player, item: nextItem)
@@ -3136,6 +3154,7 @@ struct PlayerScreen: View {
         liveStartupTask = nil
         videoProbeTask?.cancel()
         videoProbeTask = nil
+        MKVRemuxService.shared.cancel()
         if let currentDescriptor, let player {
             session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
         }
