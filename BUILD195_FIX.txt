@@ -1,0 +1,2 @@
+ATX Player 5.1 Build 195
+Removed custom Play/Pause bridge that crashed on tap. KSPlayer/KSMEPlayer remains playback engine. Seek, AirPlay, Back and fullscreen overlay remain.

@@ -12,7 +12,6 @@ final class ATXKSPlayerHostController: UIViewController {
     private let overlay = UIView()
     private let atxTitleLabel = UILabel()
     private let atxBackButton = UIButton(type: .system)
-    private let atxPlayButton = UIButton(type: .system)
     private let atxBack10Button = UIButton(type: .system)
     private let atxForward10Button = UIButton(type: .system)
     private let atxFullscreenButton = UIButton(type: .system)
@@ -77,7 +76,6 @@ final class ATXKSPlayerHostController: UIViewController {
 
         setupButton(atxBackButton, symbol: "chevron.left", selector: #selector(closePlayer))
         setupButton(atxBack10Button, symbol: "gobackward.10", selector: #selector(seekBack))
-        setupButton(atxPlayButton, symbol: "playpause.fill", selector: #selector(togglePlayback))
         setupButton(atxForward10Button, symbol: "goforward.10", selector: #selector(seekForward))
         setupButton(atxFullscreenButton, symbol: "arrow.up.left.and.arrow.down.right", selector: #selector(toggleFullscreen))
 
@@ -88,7 +86,6 @@ final class ATXKSPlayerHostController: UIViewController {
 
         let bottom = UIStackView(arrangedSubviews: [
             atxBack10Button,
-            atxPlayButton,
             atxForward10Button,
             atxRoutePicker,
             atxFullscreenButton
@@ -141,16 +138,6 @@ final class ATXKSPlayerHostController: UIViewController {
         }
     }
 
-    @objc private func togglePlayback() {
-        guard let layer = playerView.playerLayer else { return }
-        let player = layer.player
-        if player.isPlaying {
-            player.pause()
-        } else {
-            player.play()
-        }
-    }
-
     @objc private func seekBack() {
         guard let layer = playerView.playerLayer else { return }
         let player = layer.player
@@ -195,9 +182,6 @@ final class ATXKSPlayerHostController: UIViewController {
         isATXFullscreen ? .landscape : .portrait
     }
 
-    deinit {
-        playerView.playerLayer?.player.pause()
-    }
 }
 
 struct KSPlayerFallbackView: UIViewControllerRepresentable {
