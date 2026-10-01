@@ -2726,8 +2726,6 @@ struct PlayerScreen: View {
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
-    @State private var ffmpegCompatibilityAttempted = false
-    @State private var preparingLocalCompatibility = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2773,14 +2771,8 @@ struct PlayerScreen: View {
                     .padding(24)
                     .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
-            } else if preparingLocalCompatibility {
-                VStack(spacing: 14) {
-                    ProgressView().controlSize(.large).tint(.white)
-                    Text("Ottimizzazione compatibilità video…").font(.headline).foregroundStyle(.white)
-                    Text("Preparazione locale con FFmpeg").font(.caption).foregroundStyle(.white.opacity(0.65))
-                }
             } else if failed || currentURL == nil {
-                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o non riproducibile.").foregroundStyle(.primary)
+                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.primary)
             } else {
                 ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary)
             }
@@ -2881,9 +2873,27 @@ struct PlayerScreen: View {
         .shadow(color: .black.opacity(0.5), radius: 18)
     }
 
+    // VOD compatibility for Xtream-style endpoints:
+    // AVPlayer does not natively accept Matroska (.mkv). Many Xtream-compatible
+    // servers expose the same VOD/episode through an MP4 container simply by
+    // requesting the same stream id with .mp4. This keeps the ORIGINAL AVPlayer,
+    // native fullscreen, PiP and AirPlay; no third-party player is loaded.
+    private func nativeVODURL(for sourceURL: URL) -> URL {
+        guard !isLive,
+              sourceURL.pathExtension.lowercased() == "mkv",
+              var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false)
+        else { return sourceURL }
+
+        let path = components.path
+        guard path.lowercased().hasSuffix(".mkv") else { return sourceURL }
+        components.path = String(path.dropLast(4)) + ".mp4"
+        return components.url ?? sourceURL
+    }
+
     private func configurePlayer() {
         guard player == nil else { return }
-        guard let currentURL else { failed = true; return }
+        guard let sourceURL = currentURL else { failed = true; return }
+        let currentURL = nativeVODURL(for: sourceURL)
 
         do {
             let audioSession = AVAudioSession.sharedInstance()
@@ -3051,37 +3061,12 @@ struct PlayerScreen: View {
     }
 
     private func validate(item: AVPlayerItem, player: AVPlayer) {
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_500_000_000)
-            guard self.player === player else { return }
+        Task {
+            try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_000_000_000)
             if item.status == .failed {
-                let originalSource: URL? = {
-                    if !episodeQueue.isEmpty, episodeQueue.indices.contains(currentQueueIndex) { return episodeQueue[currentQueueIndex].url }
-                    return url
-                }()
-                if !ffmpegCompatibilityAttempted, let originalSource {
-                    ffmpegCompatibilityAttempted = true
-                    preparingLocalCompatibility = true
-                    removeObservers(from: player)
-                    ActivePlaybackRegistry.shared.deactivate(player)
-                    player.pause()
-                    self.player = nil
-                    FFmpegLocalRemuxer.shared.prepare(source: originalSource, isLive: isLive) { result in
-                        preparingLocalCompatibility = false
-                        switch result {
-                        case .success(let localHLS):
-                            failed = false
-                            compatibilityURL = localHLS
-                            configurePlayer()
-                        case .failure:
-                            failed = true
-                        }
-                    }
-                } else {
-                    failed = true
-                    player.pause()
-                    self.player = nil
-                }
+                failed = true
+                player.pause()
+                self.player = nil
             }
         }
     }
@@ -3128,12 +3113,9 @@ struct PlayerScreen: View {
         currentDescriptor = next.descriptor
         session.recordHistory(for: next.descriptor)
         failed = false
-        compatibilityURL = nil
-        ffmpegCompatibilityAttempted = false
-        preparingLocalCompatibility = false
-        FFmpegLocalRemuxer.shared.stop()
 
-        let nextItem = AVPlayerItem(url: nextURL)
+        let playableNextURL = nativeVODURL(for: nextURL)
+        let nextItem = AVPlayerItem(url: playableNextURL)
         nextItem.preferredForwardBufferDuration = 3.0
         player.replaceCurrentItem(with: nextItem)
         installObservers(on: player, item: nextItem)
@@ -3154,7 +3136,6 @@ struct PlayerScreen: View {
         liveStartupTask = nil
         videoProbeTask?.cancel()
         videoProbeTask = nil
-        FFmpegLocalRemuxer.shared.stop()
         if let currentDescriptor, let player {
             session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
         }
