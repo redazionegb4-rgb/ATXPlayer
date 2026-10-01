@@ -1,0 +1,11 @@
+ATX Player 5.1 - Build 197
+
+Requested architecture:
+- KEEP KSPlayer/KSMEPlayer as the decoder because it opens the problematic episodes.
+- REMOVE KSPlayer's own toolbar and fullscreen controls.
+- RESTORE ATX controls over the same KSPlayer engine.
+- ATX controls: back, -10, play/pause, +10, AirPlay, fullscreen.
+- Title is an ATX label constrained to safeAreaLayoutGuide.
+- Fullscreen never invokes KSPlayer fullscreen and never removes/recreates/reparents
+  IOSVideoPlayerView. It only requests portrait/landscape geometry on the SAME view/player.
+- Exiting fullscreen uses the same mechanism, avoiding a second player/view.
