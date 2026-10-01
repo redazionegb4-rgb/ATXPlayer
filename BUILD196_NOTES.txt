@@ -1,0 +1,17 @@
+ATX Player 5.1 - Build 196
+
+This is a clean rollback of the custom playback bridge added in the recent builds.
+
+The previous fixes still left custom code between the UI and KSPlayer. Build 196 removes
+that bridge completely.
+
+- One KSPlayer/KSMEPlayer playback path.
+- No direct access anywhere to playerLayer.player.
+- No custom play(), pause(), isPlaying or playback-state bridge.
+- No custom seek/play overlay from the broken builds.
+- KSPlayer owns creation, playback controls and lifecycle.
+- Only ATX-owned overlay is the safe-area title/back header.
+- Build number 196.
+
+This targets the runtime crash occurring when playback is started, rather than merely
+changing the same button implementation again.
