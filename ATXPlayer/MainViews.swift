@@ -327,17 +327,8 @@ private struct ATXProfileChooserView: View {
     }
 }
 
-final class PlayerPresentationState: ObservableObject {
-    static let shared = PlayerPresentationState()
-    @Published var isPlayerPresented = false
-    private init() {}
-}
-
-
-
 struct MainTabView: View {
     @EnvironmentObject private var session: AppSession
-    @ObservedObject private var playerPresentation = PlayerPresentationState.shared
     enum AppTab: String, CaseIterable {
         case home = "Home"
         case live = "Diretta"
@@ -377,10 +368,7 @@ struct MainTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if !playerPresentation.isPlayerPresented {
-                RebornTabBar(selectedTab: $selectedTab, showsLive: !session.allLive.isEmpty)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            RebornTabBar(selectedTab: $selectedTab, showsLive: !session.allLive.isEmpty)
         }
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -2708,10 +2696,9 @@ private final class ActivePlaybackRegistry {
     }
 }
 
-struct PlayerScreen: View {
+struct LegacyAVPlayerScreen: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dismiss) private var dismiss
     let title: String
     let url: URL?
     let isLive: Bool
@@ -2739,7 +2726,6 @@ struct PlayerScreen: View {
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
-    @State private var useKSPlayerFallback = false
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2762,14 +2748,7 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if useKSPlayerFallback, let fallbackURL = currentURL {
-                KSPlayerFallbackView(url: fallbackURL, title: displayedTitle) {
-                    dismiss()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea()
-                    .ignoresSafeArea()
-            } else if let player {
+            if let player {
                 NativePlayerController(
                     player: player,
                     isLive: isLive,
@@ -2812,8 +2791,8 @@ struct PlayerScreen: View {
                 .animation(.easeInOut(duration: 0.25), value: showNextEpisodeCountdown)
             }
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle(displayedTitle)
+        .navigationBarTitleDisplayMode(.inline)
         .alert("Riprendere la visione?", isPresented: $showResumePrompt) {
             Button("Ricomincia") {
                 player?.seek(to: .zero) { _ in
@@ -2838,13 +2817,8 @@ struct PlayerScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             resumePlaybackIfNeeded(delay: 0.12)
         }
-        .toolbar(.hidden, for: .tabBar)
-        .onAppear {
-            PlayerPresentationState.shared.isPlayerPresented = true
-        }
         .onDisappear {
-            PlayerPresentationState.shared.isPlayerPresented = false
-            // PlayerScreen chiude la riproduzione quando si torna ai contenuti.
+            // AVPlayerViewController presenta il fullscreen fuori dalla gerarchia SwiftUI.
             // In quel passaggio PlayerScreen può ricevere onDisappear: NON dobbiamo
             // distruggere l'AVPlayerItem, altrimenti la riproduzione si interrompe.
             guard !fullScreenTransitionActive else { return }
@@ -2900,17 +2874,62 @@ struct PlayerScreen: View {
     }
 
     private func configurePlayer() {
-        guard currentURL != nil else {
-            failed = true
-            return
+        guard player == nil else { return }
+        guard let currentURL else { failed = true; return }
+
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])
+            try audioSession.setActive(true)
+        } catch { }
+
+        if !episodeQueue.isEmpty, episodeQueue.indices.contains(currentQueueIndex) {
+            displayedTitle = episodeQueue[currentQueueIndex].title
+            currentDescriptor = episodeQueue[currentQueueIndex].descriptor
         }
 
-        // Build 199: MPVKit/libmpv is the single playback engine for
-        // Live channels, films and series episodes.
-        failed = false
-        useKSPlayerFallback = true
+        if let currentDescriptor { session.recordHistory(for: currentDescriptor) }
+
+        // Chiude completamente un eventuale stream precedente PRIMA di creare
+        // il nuovo asset, evitando due sessioni contemporanee lato provider.
+        ActivePlaybackRegistry.shared.stopCurrent()
+
+        let assetOptions: [String: Any] = [
+            AVURLAssetPreferPreciseDurationAndTimingKey: false
+        ]
+        let asset = AVURLAsset(url: currentURL, options: assetOptions)
+        let item = AVPlayerItem(asset: asset)
+        item.preferredForwardBufferDuration = isLive ? 1.25 : 3.0
+        item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive
+        if isLive {
+            // Buffer molto ridotto, ma non azzerato: migliora la compatibilità
+            // con i server HLS più lenti senza ritardare visibilmente l'avvio.
+            item.preferredPeakBitRate = 0
+            livePlaybackStarted = false
+            liveStartupAttempts = 0
+        }
+        let newPlayer = AVPlayer(playerItem: item)
+        ActivePlaybackRegistry.shared.activate(newPlayer)
+        newPlayer.automaticallyWaitsToMinimizeStalling = true
+        newPlayer.preventsDisplaySleepDuringVideoPlayback = true
+        player = newPlayer
+        installObservers(on: newPlayer, item: item)
+
+        if !isLive, let currentDescriptor, let saved = session.savedProgress(for: currentDescriptor), saved.position >= 20 {
+            pendingResumePosition = saved.position
+            showResumePrompt = true
+        } else {
+            startPlayback(newPlayer)
+        }
+
+        validate(item: item, player: newPlayer)
+        if isLive { startVideoProbe(item: item, player: newPlayer, sourceURL: currentURL) }
     }
 
+    // Some IPTV servers expose the same live stream as MPEG-TS and HLS.
+    // AVPlayer can successfully decode the audio track of a TS stream while producing
+    // no video frames for some stream/container combinations. In that case retry the
+    // same channel through the HLS endpoint without adding third-party codecs.
     private func compatibilityCandidate(for sourceURL: URL) -> URL? {
         guard var components = URLComponents(url: sourceURL, resolvingAgainstBaseURL: false) else { return nil }
         let path = components.path
@@ -2966,7 +2985,6 @@ struct PlayerScreen: View {
         }
         player = nil
         failed = false
-        useKSPlayerFallback = false
         livePlaybackStarted = false
         compatibilityURL = fallback
         configurePlayer()
@@ -3024,39 +3042,10 @@ struct PlayerScreen: View {
         }
     }
 
-    private func retryVODCompatibilityIfPossible(sourceURL: URL) -> Bool {
-        guard !isLive, !useKSPlayerFallback else { return false }
-
-        videoProbeTask?.cancel()
-        liveStartupTask?.cancel()
-        if let player {
-            removeObservers(from: player)
-            ActivePlaybackRegistry.shared.deactivate(player)
-            player.pause()
-        }
-        player = nil
-        failed = false
-        compatibilityURL = nil
-        useKSPlayerFallback = true
-        return true
-    }
-
     private func validate(item: AVPlayerItem, player: AVPlayer) {
-        guard let sourceURL = currentURL else {
-            failed = true
-            player.pause()
-            self.player = nil
-            return
-        }
-
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_500_000_000)
-            guard self.player === player else { return }
-
+        Task {
+            try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_000_000_000)
             if item.status == .failed {
-                if !isLive, retryVODCompatibilityIfPossible(sourceURL: sourceURL) {
-                    return
-                }
                 failed = true
                 player.pause()
                 self.player = nil

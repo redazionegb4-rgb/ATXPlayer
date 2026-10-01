@@ -1,0 +1,28 @@
+ATX Player 5.1 - Build 201
+
+Clean rebuild from the user-supplied Build 164 baseline.
+
+PLAYER
+- Old AVPlayer PlayerScreen preserved as LegacyAVPlayerScreen but no longer used.
+- New PlayerScreen uses libmpv through official mpvkit/MPVKit 1.0.0.
+- Exact MPVKit version pinned to 1.0.0.
+- Package.resolved included with release commit:
+  288527dffbc6d3e63cce147fc7b520c64a791603
+- No ci_post_clone dependency-resolution workaround.
+- Single player engine only.
+- H.264/H.265/HEVC/MKV and network playback handled by libmpv/FFmpeg.
+- Hardware decode requested through VideoToolbox.
+
+ATX CONTROLS
+- Back
+- Play/Pause
+- -10 / +10 seconds for VOD
+- Timeline for VOD
+- Live mode
+- Fullscreen changes orientation without replacing/recreating the player
+- App tab bar and navigation bar hidden during playback
+
+IMPORTANT
+This package is prepared to fix the Xcode Cloud Package.resolved failure seen in
+the previous experiment. A real Xcode/iPhone Archive/runtime test still has to
+be performed by Xcode Cloud/TestFlight; this environment cannot execute Xcode.
