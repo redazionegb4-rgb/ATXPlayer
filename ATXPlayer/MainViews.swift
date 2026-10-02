@@ -4699,7 +4699,7 @@ private struct RebornHomeView: View {
             HStack(spacing: 10) {
                 NavigationLink { RebornMyListView() } label: { RebornQuickTile(icon: "plus", title: "La mia lista") }
                 NavigationLink { RebornHistoryView() } label: { RebornQuickTile(icon: "clock.arrow.circlepath", title: "Cronologia") }
-                Button { selectedTab = .downloads } label: { RebornQuickTile(icon: "arrow.down", title: "Download") }
+                NavigationLink { ATXFeatureHubView() } label: { RebornQuickTile(icon: "sparkles", title: "ATX Labs") }
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 16)
@@ -5099,6 +5099,319 @@ private struct RebornSearchView: View {
                 }
             }
         }
+    }
+}
+
+
+// MARK: - ATX 5.2 New Experiences
+
+private struct ATXFeatureHubView: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    RebornPageHeader(title: "ATX Labs", onBack: { dismiss() })
+                    Text("Nuovi modi di guardare")
+                        .font(.title2.bold()).foregroundStyle(.white).padding(.horizontal, 16)
+
+                    NavigationLink { ATXLiveMosaicView() } label: {
+                        ATXFeatureCard(icon: "square.grid.2x2.fill", title: "Live Mosaic",
+                                       subtitle: "Scegli fino a 4 canali e guardali insieme.")
+                    }
+                    NavigationLink { ATXDiscoverView() } label: {
+                        ATXFeatureCard(icon: "sparkles.tv.fill", title: "Discover",
+                                       subtitle: "Trova qualcosa da vedere in base al tuo mood.")
+                    }
+                    NavigationLink { ATXRandomPlayView() } label: {
+                        ATXFeatureCard(icon: "dice.fill", title: "Non so cosa guardare",
+                                       subtitle: "ATX sceglie un titolo dal tuo catalogo.")
+                    }
+                    NavigationLink { ATXStatsView() } label: {
+                        ATXFeatureCard(icon: "chart.bar.xaxis", title: "ATX Stats",
+                                       subtitle: "Il tuo utilizzo e i contenuti salvati.")
+                    }
+                }
+                .padding(.bottom, 60)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+private struct ATXFeatureCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    var body: some View {
+        HStack(spacing: 15) {
+            Image(systemName: icon)
+                .font(.system(size: 25, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(rebornRed, in: RoundedRectangle(cornerRadius: 14))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline.bold()).foregroundStyle(.white)
+                Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(2)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.35))
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+        .padding(.horizontal, 16)
+    }
+}
+
+private struct ATXLiveMosaicView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected: [LiveStream] = []
+    @State private var search = ""
+    @State private var showingPlayer = false
+
+    private var filtered: [LiveStream] {
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        if q.isEmpty { return Array(session.allLive.prefix(300)) }
+        return Array(session.allLive.filter { $0.name.localizedCaseInsensitiveContains(q) }.prefix(300))
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 0) {
+                RebornPageHeader(title: "Live Mosaic", onBack: { dismiss() })
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Cerca canale", text: $search).foregroundStyle(.white)
+                }
+                .padding(12).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16)
+
+                HStack {
+                    Text("Selezionati \(selected.count)/4").font(.subheadline.bold()).foregroundStyle(.white)
+                    Spacer()
+                    Button("AVVIA MOSAICO") { showingPlayer = selected.count >= 2 }
+                        .font(.caption.bold())
+                        .foregroundStyle(selected.count >= 2 ? .white : .secondary)
+                        .disabled(selected.count < 2)
+                }.padding(16)
+
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(filtered) { item in
+                            Button { toggle(item) } label: {
+                                HStack(spacing: 12) {
+                                    OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
+                                        if let image = phase.image { image.resizable().scaledToFit() }
+                                        else { Image(systemName: "tv").foregroundStyle(.secondary) }
+                                    }
+                                    .frame(width: 46, height: 38)
+                                    Text(item.name).font(.subheadline.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
+                                    Spacer()
+                                    Image(systemName: selected.contains(item) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selected.contains(item) ? rebornRed : .white.opacity(0.3))
+                                }.padding(.horizontal, 16).frame(height: 58)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .fullScreenCover(isPresented: $showingPlayer) {
+            ATXMosaicPlayerView(channels: selected)
+        }
+    }
+
+    private func toggle(_ item: LiveStream) {
+        if let i = selected.firstIndex(of: item) { selected.remove(at: i) }
+        else if selected.count < 4 { selected.append(item) }
+    }
+}
+
+private struct ATXMosaicPlayerView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    let channels: [LiveStream]
+    @State private var audibleID: Int?
+
+    private let columns = [GridItem(.flexible(), spacing: 3), GridItem(.flexible(), spacing: 3)]
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
+            LazyVGrid(columns: columns, spacing: 3) {
+                ForEach(channels) { channel in
+                    ATXMosaicCell(
+                        channel: channel,
+                        url: session.streamURL(type: .live, id: channel.streamID),
+                        muted: audibleID != channel.streamID
+                    )
+                    .onTapGesture { audibleID = channel.streamID }
+                }
+            }
+            .padding(.top, 54)
+
+            Button { dismiss() } label: {
+                Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
+                    .frame(width: 40, height: 40).background(.black.opacity(0.7), in: Circle())
+            }.padding(10)
+        }
+        .onAppear { audibleID = channels.first?.streamID }
+    }
+}
+
+private struct ATXMosaicCell: View {
+    let channel: LiveStream
+    let url: URL?
+    let muted: Bool
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Color.black
+            if let player {
+                VideoPlayer(player: player)
+                    .onAppear { player.isMuted = muted; player.play() }
+                    .onChange(of: muted) { value in player.isMuted = value }
+            } else {
+                ProgressView().tint(.white)
+            }
+            LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .top, endPoint: .bottom)
+            HStack {
+                Circle().fill(Color.red).frame(width: 7, height: 7)
+                Text(channel.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1)
+                Spacer()
+                if !muted { Image(systemName: "speaker.wave.2.fill").foregroundStyle(.white) }
+            }.padding(8)
+        }
+        .aspectRatio(16/9, contentMode: .fit)
+        .task {
+            guard player == nil, let url else { return }
+            let p = AVPlayer(url: url)
+            p.isMuted = muted
+            player = p
+            p.play()
+        }
+        .onDisappear { player?.pause(); player = nil }
+    }
+}
+
+private struct ATXDiscoverView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var mood = "NOVITÀ"
+    private let moods = ["NOVITÀ","AZIONE","COMMEDIA","HORROR","DRAMMA","FAMIGLIA"]
+
+    private var results: [VODStream] {
+        if mood == "NOVITÀ" { return Array(session.allMovies.prefix(40)) }
+        return Array(session.allMovies.filter {
+            ($0.genre ?? "").localizedCaseInsensitiveContains(mood)
+        }.prefix(40))
+    }
+
+    var body: some View {
+        ZStack { Color.black.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    RebornPageHeader(title: "Discover", onBack: { dismiss() })
+                    Text("Stasera guarderei…").font(.title.bold()).foregroundStyle(.white).padding(.horizontal,16)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(moods,id:\.self) { x in
+                                Button { mood=x } label: {
+                                    Text(x).font(.caption.bold()).foregroundStyle(.white)
+                                        .padding(.horizontal,14).frame(height:34)
+                                        .background(mood==x ? rebornRed : Color.white.opacity(0.08), in: Capsule())
+                                }.buttonStyle(.plain)
+                            }
+                        }.padding(.horizontal,16)
+                    }
+                    LazyVGrid(columns:[GridItem(.adaptive(minimum:104,maximum:150),spacing:8)],spacing:14) {
+                        ForEach(results) { item in
+                            NavigationLink { MovieDetailView(item:item) } label: {
+                                RebornPoster(title:item.name,imageURL:item.streamIcon,width:nil,height:170)
+                            }.buttonStyle(.plain)
+                        }
+                    }.padding(.horizontal,16)
+                }.padding(.bottom,50)
+            }
+        }.toolbar(.hidden,for:.navigationBar)
+    }
+}
+
+private struct ATXRandomPlayView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    @State private var movie: VODStream?
+    @State private var series: SeriesItem?
+    @State private var chooseSeries = false
+
+    var body: some View {
+        ZStack { Color.black.ignoresSafeArea()
+            VStack(spacing:24) {
+                RebornPageHeader(title:"Scelta casuale",onBack:{dismiss()})
+                Spacer()
+                Image(systemName:"dice.fill").font(.system(size:64)).foregroundStyle(rebornRed)
+                if let movie {
+                    Text(movie.name).font(.title.bold()).foregroundStyle(.white).multilineTextAlignment(.center)
+                    NavigationLink { MovieDetailView(item:movie) } label: {
+                        Text("VEDI FILM").font(.headline.bold()).foregroundStyle(.black)
+                            .padding(.horizontal,30).frame(height:48).background(.white,in:Capsule())
+                    }
+                } else if let series {
+                    Text(series.name).font(.title.bold()).foregroundStyle(.white).multilineTextAlignment(.center)
+                    NavigationLink { SeriesDetailView(item:series) } label: {
+                        Text("VEDI SERIE").font(.headline.bold()).foregroundStyle(.black)
+                            .padding(.horizontal,30).frame(height:48).background(.white,in:Capsule())
+                    }
+                }
+                Button { roll() } label: {
+                    Label("SCEGLI DI NUOVO",systemImage:"arrow.clockwise")
+                        .font(.subheadline.bold()).foregroundStyle(.white)
+                }.buttonStyle(.plain)
+                Spacer()
+            }.padding(.horizontal,18)
+        }.toolbar(.hidden,for:.navigationBar).onAppear{roll()}
+    }
+
+    private func roll() {
+        chooseSeries.toggle()
+        if chooseSeries, let x=session.allSeries.randomElement() { series=x; movie=nil }
+        else if let x=session.allMovies.randomElement() { movie=x; series=nil }
+    }
+}
+
+private struct ATXStatsView: View {
+    @EnvironmentObject var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        ZStack { Color.black.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(alignment:.leading,spacing:16) {
+                    RebornPageHeader(title:"ATX Stats",onBack:{dismiss()})
+                    ATXStatRow(icon:"tv.fill",title:"Canali disponibili",value:"\(session.allLive.count)")
+                    ATXStatRow(icon:"film.fill",title:"Film disponibili",value:"\(session.allMovies.count)")
+                    ATXStatRow(icon:"rectangle.stack.fill",title:"Serie disponibili",value:"\(session.allSeries.count)")
+                    ATXStatRow(icon:"clock.arrow.circlepath",title:"Visti di recente",value:"\(session.accountWatchHistory.count)")
+                    ATXStatRow(icon:"heart.fill",title:"Nella tua lista",value:"\(session.accountFavorites.count)")
+                }.padding(.bottom,50)
+            }
+        }.toolbar(.hidden,for:.navigationBar)
+    }
+}
+
+private struct ATXStatRow: View {
+    let icon:String; let title:String; let value:String
+    var body: some View {
+        HStack {
+            Image(systemName:icon).font(.title3).foregroundStyle(rebornRed).frame(width:40)
+            Text(title).foregroundStyle(.white)
+            Spacer()
+            Text(value).font(.title3.bold()).foregroundStyle(.white)
+        }.padding(16).background(Color.white.opacity(0.07),in:RoundedRectangle(cornerRadius:16)).padding(.horizontal,16)
     }
 }
 
