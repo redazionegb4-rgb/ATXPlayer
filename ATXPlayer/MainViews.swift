@@ -327,8 +327,19 @@ private struct ATXProfileChooserView: View {
     }
 }
 
+private struct ATXPlayerPresentedKey: EnvironmentKey {
+    static let defaultValue: Binding<Bool> = .constant(false)
+}
+private extension EnvironmentValues {
+    var atxPlayerPresented: Binding<Bool> {
+        get { self[ATXPlayerPresentedKey.self] }
+        set { self[ATXPlayerPresentedKey.self] = newValue }
+    }
+}
+
 struct MainTabView: View {
     @EnvironmentObject private var session: AppSession
+    @State private var playerPresented = false
     enum AppTab: String, CaseIterable {
         case home = "Home"
         case live = "Diretta"
@@ -368,8 +379,11 @@ struct MainTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            RebornTabBar(selectedTab: $selectedTab, showsLive: !session.allLive.isEmpty)
+            if !playerPresented {
+                RebornTabBar(selectedTab: $selectedTab, showsLive: !session.allLive.isEmpty)
+            }
         }
+        .environment(\.atxPlayerPresented, $playerPresented)
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .task {
@@ -2697,6 +2711,7 @@ private final class ActivePlaybackRegistry {
 }
 
 struct PlayerScreen: View {
+    @Environment(\.atxPlayerPresented) private var playerPresented
     @EnvironmentObject var session: AppSession
     @Environment(\.scenePhase) private var scenePhase
     let title: String
@@ -2809,6 +2824,8 @@ struct PlayerScreen: View {
             Text("Hai già iniziato questo contenuto.")
         }
         .task { configurePlayer() }
+        .onAppear { playerPresented.wrappedValue = true }
+        .onDisappear { playerPresented.wrappedValue = false }
         .onChange(of: scenePhase) { newPhase in
             if newPhase == .active {
                 resumePlaybackIfNeeded()
@@ -2899,7 +2916,7 @@ struct PlayerScreen: View {
         ]
         let asset = AVURLAsset(url: currentURL, options: assetOptions)
         let item = AVPlayerItem(asset: asset)
-        item.preferredForwardBufferDuration = isLive ? 1.25 : 3.0
+        item.preferredForwardBufferDuration = isLive ? 0.35 : 3.0
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive
         if isLive {
             // Buffer molto ridotto, ma non azzerato: migliora la compatibilità
@@ -2961,8 +2978,8 @@ struct PlayerScreen: View {
 
         videoProbeTask = Task { @MainActor in
             // Give the original stream enough time to produce its first decoded frame.
-            for _ in 0..<14 {
-                do { try await Task.sleep(nanoseconds: 350_000_000) } catch { return }
+            for _ in 0..<8 {
+                do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
                 guard !Task.isCancelled, self.player === player else { return }
                 let t = player.currentTime()
                 if output.hasNewPixelBuffer(forItemTime: t) { return }
@@ -3013,24 +3030,27 @@ struct PlayerScreen: View {
         liveStartupTask?.cancel()
         livePlaybackStarted = false
         liveStartupAttempts = 0
-        player.currentItem?.preferredForwardBufferDuration = 1.25
+        player.currentItem?.preferredForwardBufferDuration = 0.35
         player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
 
+        // Do not wait for readyToPlay: AVPlayer starts loading and decoding immediately.
+        player.playImmediately(atRate: 1.0)
+
         liveStartupTask = Task { @MainActor in
-            let readyDeadline = Date().addingTimeInterval(8)
-            while player.currentItem?.status == .unknown && Date() < readyDeadline {
+            for _ in 0..<40 {
                 do { try await Task.sleep(nanoseconds: 100_000_000) } catch { return }
                 guard !Task.isCancelled, self.player === player else { return }
+                if player.currentItem?.status == .failed {
+                    self.failed = true
+                    return
+                }
+                if player.timeControlStatus == .playing || player.rate > 0 {
+                    self.livePlaybackStarted = true
+                    return
+                }
             }
             guard !Task.isCancelled, self.player === player else { return }
-            guard player.currentItem?.status != .failed else { self.failed = true; return }
-
-            // Un solo avvio del flusso: niente cicli pausa/play che alcuni server
-            // IPTV interpretano come una seconda connessione concorrente.
             player.playImmediately(atRate: 1.0)
-            do { try await Task.sleep(nanoseconds: 650_000_000) } catch { return }
-            guard !Task.isCancelled, self.player === player else { return }
-            self.livePlaybackStarted = player.timeControlStatus == .playing || player.rate > 0
         }
     }
 
@@ -5348,28 +5368,50 @@ private struct ATXMosaicPlayerView: View {
     let channels: [LiveStream]
     @State private var audibleID: Int?
 
-    private let columns = [GridItem(.flexible(), spacing: 3), GridItem(.flexible(), spacing: 3)]
-
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            Color.black.ignoresSafeArea()
-            LazyVGrid(columns: columns, spacing: 3) {
-                ForEach(channels) { channel in
-                    ATXMosaicCell(
-                        channel: channel,
-                        url: session.streamURL(type: .live, id: channel.streamID),
-                        muted: audibleID != channel.streamID
-                    )
-                    .onTapGesture { audibleID = channel.streamID }
-                }
-            }
-            .padding(.top, 54)
+        GeometryReader { geo in
+            let landscape = geo.size.width > geo.size.height
+            let columns = channels.count == 2 ? (landscape ? 2 : 1) : 2
+            let rows = channels.count == 2 ? (landscape ? 1 : 2) : 2
+            let cellWidth = geo.size.width / CGFloat(columns)
+            let cellHeight = geo.size.height / CGFloat(rows)
 
-            Button { dismiss() } label: {
-                Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
-                    .frame(width: 40, height: 40).background(.black.opacity(0.7), in: Circle())
-            }.padding(10)
+            ZStack(alignment: .topLeading) {
+                Color.black.ignoresSafeArea()
+                VStack(spacing: 2) {
+                    ForEach(0..<rows, id: \.self) { row in
+                        HStack(spacing: 2) {
+                            ForEach(0..<columns, id: \.self) { column in
+                                let index = row * columns + column
+                                if channels.indices.contains(index) {
+                                    let channel = channels[index]
+                                    ATXMosaicCell(
+                                        channel: channel,
+                                        url: session.streamURL(type: .live, id: channel.streamID),
+                                        muted: audibleID != channel.streamID
+                                    )
+                                    .frame(width: cellWidth, height: cellHeight)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { audibleID = channel.streamID }
+                                } else {
+                                    Color.black.frame(width: cellWidth, height: cellHeight)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+                .ignoresSafeArea()
+
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
+                        .frame(width: 42, height: 42).background(.black.opacity(0.72), in: Circle())
+                }.padding(12)
+            }
         }
+        .background(Color.black.ignoresSafeArea())
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
         .onAppear { audibleID = channels.first?.streamID }
     }
 }
@@ -5398,7 +5440,7 @@ private struct ATXMosaicCell: View {
                 if !muted { Image(systemName: "speaker.wave.2.fill").foregroundStyle(.white) }
             }.padding(8)
         }
-        .aspectRatio(16/9, contentMode: .fit)
+        .clipped()
         .task {
             guard player == nil, let url else { return }
             let p = AVPlayer(url: url)
