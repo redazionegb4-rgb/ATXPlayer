@@ -4529,6 +4529,7 @@ private struct RebornHomeView: View {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     hero
                     if !session.continueWatching.isEmpty { continueWatching }
+                    newExperiences
                     movieRail(title: "Film popolari", items: movies)
                     seriesRail(title: "Serie TV da guardare", items: series)
                     if !session.accountWatchHistory.isEmpty { historyRail }
@@ -4693,13 +4694,75 @@ private struct RebornHomeView: View {
         }
     }
 
+    private var newExperiences: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("NUOVO IN ATX")
+                        .font(.caption.bold())
+                        .tracking(1.4)
+                        .foregroundStyle(rebornRed)
+                    Text("Scopri un nuovo modo di guardare")
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundStyle(.white)
+                }
+                Spacer()
+                NavigationLink { ATXFeatureHubView() } label: {
+                    Text("VEDI TUTTO")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                }.buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    NavigationLink { ATXLiveMosaicView() } label: {
+                        RebornFeatureHeroCard(
+                            icon: "square.grid.2x2.fill",
+                            eyebrow: "LIVE",
+                            title: "MultiView",
+                            subtitle: "Fino a 4 canali insieme"
+                        )
+                    }
+                    NavigationLink { ATXDiscoverView() } label: {
+                        RebornFeatureHeroCard(
+                            icon: "sparkles.tv.fill",
+                            eyebrow: "PER TE",
+                            title: "Discover",
+                            subtitle: "Scegli cosa guardare"
+                        )
+                    }
+                    NavigationLink { ATXRandomPlayView() } label: {
+                        RebornFeatureHeroCard(
+                            icon: "dice.fill",
+                            eyebrow: "SORPRENDIMI",
+                            title: "Random",
+                            subtitle: "Lascia scegliere ATX"
+                        )
+                    }
+                    NavigationLink { ATXStatsView() } label: {
+                        RebornFeatureHeroCard(
+                            icon: "chart.bar.xaxis",
+                            eyebrow: "IL TUO ATX",
+                            title: "Stats",
+                            subtitle: "La tua attività"
+                        )
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
     private var quickLinks: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("La tua libreria")
             HStack(spacing: 10) {
                 NavigationLink { RebornMyListView() } label: { RebornQuickTile(icon: "plus", title: "La mia lista") }
                 NavigationLink { RebornHistoryView() } label: { RebornQuickTile(icon: "clock.arrow.circlepath", title: "Cronologia") }
-                NavigationLink { ATXFeatureHubView() } label: { RebornQuickTile(icon: "sparkles", title: "ATX Labs") }
+                Button { selectedTab = .downloads } label: { RebornQuickTile(icon: "arrow.down", title: "Download") }
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 16)
@@ -5110,30 +5173,38 @@ private struct ATXFeatureHubView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    RebornPageHeader(title: "ATX Labs", onBack: { dismiss() })
-                    Text("Nuovi modi di guardare")
-                        .font(.title2.bold()).foregroundStyle(.white).padding(.horizontal, 16)
+                    RebornPageHeader(title: "Novità ATX", onBack: { dismiss() })
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("ATX 5.2")
+                            .font(.caption.bold()).tracking(1.5).foregroundStyle(rebornRed)
+                        Text("Più di un semplice player.")
+                            .font(.system(size: 31, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text("MultiView, Discover, scelta casuale e statistiche: tutte le nuove esperienze sono qui.")
+                            .font(.subheadline).foregroundStyle(.white.opacity(0.58))
+                    }.padding(.horizontal, 16)
 
                     NavigationLink { ATXLiveMosaicView() } label: {
-                        ATXFeatureCard(icon: "square.grid.2x2.fill", title: "Live Mosaic",
-                                       subtitle: "Scegli fino a 4 canali e guardali insieme.")
+                        ATXFeatureCard(icon: "square.grid.2x2.fill", title: "MultiView Live",
+                                       subtitle: "Seleziona da 2 a 4 canali e guardali contemporaneamente.", badge: "LIVE")
                     }
                     NavigationLink { ATXDiscoverView() } label: {
-                        ATXFeatureCard(icon: "sparkles.tv.fill", title: "Discover",
-                                       subtitle: "Trova qualcosa da vedere in base al tuo mood.")
+                        ATXFeatureCard(icon: "sparkles.tv.fill", title: "ATX Discover",
+                                       subtitle: "Dimmi cosa ti va e trova subito qualcosa da guardare.", badge: "SCOPRI")
                     }
                     NavigationLink { ATXRandomPlayView() } label: {
-                        ATXFeatureCard(icon: "dice.fill", title: "Non so cosa guardare",
-                                       subtitle: "ATX sceglie un titolo dal tuo catalogo.")
+                        ATXFeatureCard(icon: "dice.fill", title: "Sorprendimi",
+                                       subtitle: "Un tap e ATX sceglie casualmente Film o Serie.", badge: "RANDOM")
                     }
                     NavigationLink { ATXStatsView() } label: {
-                        ATXFeatureCard(icon: "chart.bar.xaxis", title: "ATX Stats",
-                                       subtitle: "Il tuo utilizzo e i contenuti salvati.")
+                        ATXFeatureCard(icon: "chart.bar.xaxis", title: "Le mie Stats",
+                                       subtitle: "Una panoramica del tuo catalogo, lista e cronologia.", badge: "STATS")
                     }
                 }
-                .padding(.bottom, 60)
+                .padding(.bottom, 70)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -5144,23 +5215,63 @@ private struct ATXFeatureCard: View {
     let icon: String
     let title: String
     let subtitle: String
+    let badge: String
     var body: some View {
-        HStack(spacing: 15) {
-            Image(systemName: icon)
-                .font(.system(size: 25, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 52, height: 52)
-                .background(rebornRed, in: RoundedRectangle(cornerRadius: 14))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline.bold()).foregroundStyle(.white)
-                Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(2)
-            }
-            Spacer()
-            Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.35))
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [rebornRed.opacity(0.65), Color.white.opacity(0.10), Color.white.opacity(0.04)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: icon)
+                        .font(.system(size: 29, weight: .bold))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text(badge).font(.caption2.bold()).tracking(1)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).frame(height: 25)
+                        .background(.black.opacity(0.35), in: Capsule())
+                }
+                Spacer()
+                Text(title).font(.system(size: 23, weight: .black)).foregroundStyle(.white)
+                Text(subtitle).font(.subheadline).foregroundStyle(.white.opacity(0.72)).lineLimit(2)
+                HStack {
+                    Text("APRI").font(.caption.bold()).foregroundStyle(.white)
+                    Image(systemName: "arrow.right").font(.caption.bold()).foregroundStyle(.white)
+                }
+            }.padding(18)
         }
-        .padding(14)
-        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+        .frame(height: 190)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 16)
+    }
+}
+
+private struct RebornFeatureHeroCard: View {
+    let icon: String
+    let eyebrow: String
+    let title: String
+    let subtitle: String
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [rebornRed.opacity(0.70), Color.white.opacity(0.09)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Image(systemName: icon).font(.title2.bold()).foregroundStyle(.white)
+                    Spacer()
+                }
+                Spacer()
+                Text(eyebrow).font(.caption2.bold()).tracking(1.1).foregroundStyle(.white.opacity(0.65))
+                Text(title).font(.title3.bold()).foregroundStyle(.white)
+                Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.62)).lineLimit(1)
+            }.padding(14)
+        }
+        .frame(width: 190, height: 145)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
@@ -5181,7 +5292,7 @@ private struct ATXLiveMosaicView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             VStack(spacing: 0) {
-                RebornPageHeader(title: "Live Mosaic", onBack: { dismiss() })
+                RebornPageHeader(title: "MultiView Live", onBack: { dismiss() })
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                     TextField("Cerca canale", text: $search).foregroundStyle(.white)
