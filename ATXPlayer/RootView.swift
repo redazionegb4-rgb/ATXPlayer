@@ -87,7 +87,12 @@ struct LoginView: View {
                     VStack(spacing: 18) {
                         Text("CODICE DISPOSITIVO").font(.caption.weight(.bold)).tracking(1.4).foregroundStyle(.white.opacity(0.5))
                         Text(session.deviceCode).font(.system(size: 24, weight: .bold, design: .monospaced)).foregroundStyle(.white).minimumScaleFactor(0.7).lineLimit(1)
-                        Button { UIPasteboard.general.string = session.deviceCode } label: {
+                        Button {
+                            let codeOnly = session.deviceCode.hasPrefix("ATX-")
+                                ? String(session.deviceCode.dropFirst(4))
+                                : session.deviceCode
+                            UIPasteboard.general.string = codeOnly
+                        } label: {
                             Label("COPIA CODICE", systemImage: "doc.on.doc").font(.subheadline.weight(.bold)).foregroundStyle(.white.opacity(0.9))
                         }
                         Divider().overlay(.white.opacity(0.12))

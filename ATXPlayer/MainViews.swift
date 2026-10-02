@@ -2729,6 +2729,7 @@ struct PlayerScreen: View {
     @State private var mkvPreparing = false
     @State private var mkvWorkDirectory: URL?
     @State private var mkvPreparationTask: Task<Void, Never>?
+    @State private var mkvHTTPServer: LocalHLSHTTPServer?
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2953,18 +2954,31 @@ struct PlayerScreen: View {
         catch { mkvPreparing = false; failed = true; return }
         mkvWorkDirectory = base
 
+        let server = LocalHLSHTTPServer(root: base)
+        do { try server.start() }
+        catch { mkvPreparing = false; failed = true; return }
+        mkvHTTPServer = server
+
         let playlist = base.appendingPathComponent("stream.m3u8")
         let segmentPattern = base.appendingPathComponent("segment-%05d.m4s").path
+
+        // Real MKV demux/remux. FFmpeg writes short fMP4/HLS fragments while
+        // AVPlayer reads them through the app's localhost server. This avoids
+        // waiting for the entire film/episode to be converted before playback.
         let arguments = [
             "-hide_banner", "-loglevel", "error", "-y",
+            "-fflags", "+genpts",
             "-i", sourceURL.absoluteString,
             "-map", "0:v:0?", "-map", "0:a:0?",
-            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-            "-f", "hls", "-hls_time", "4", "-hls_list_size", "0",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "160k",
+            "-f", "hls",
+            "-hls_time", "2",
+            "-hls_list_size", "8",
             "-hls_segment_type", "fmp4",
             "-hls_fmp4_init_filename", "init.mp4",
             "-hls_segment_filename", segmentPattern,
-            "-hls_flags", "independent_segments+append_list",
+            "-hls_flags", "independent_segments+delete_segments+temp_file",
             playlist.path
         ]
 
@@ -2973,18 +2987,21 @@ struct PlayerScreen: View {
             let ffmpegTask = Task.detached(priority: .userInitiated) {
                 runMunimFFmpeg(arguments)
             }
-            for _ in 0..<120 {
+
+            // Normally this becomes ready after the first 2-second fragment.
+            for _ in 0..<240 {
                 if Task.isCancelled { munim_ffmpeg_cancel(); return }
                 let firstSegment = base.appendingPathComponent("segment-00000.m4s")
                 if FileManager.default.fileExists(atPath: playlist.path),
                    FileManager.default.fileExists(atPath: firstSegment.path) {
                     self.mkvPreparing = false
-                    self.compatibilityURL = playlist
+                    self.compatibilityURL = server.playlistURL
                     self.configurePlayer()
                     break
                 }
-                try? await Task.sleep(nanoseconds: 250_000_000)
+                try? await Task.sleep(nanoseconds: 125_000_000)
             }
+
             let result = await ffmpegTask.value
             if self.player == nil && self.compatibilityURL == nil {
                 self.mkvPreparing = false
@@ -3196,6 +3213,8 @@ struct PlayerScreen: View {
         mkvPreparationTask?.cancel()
         mkvPreparationTask = nil
         munim_ffmpeg_cancel()
+        mkvHTTPServer?.stop()
+        mkvHTTPServer = nil
         if let mkvWorkDirectory {
             try? FileManager.default.removeItem(at: mkvWorkDirectory)
             self.mkvWorkDirectory = nil
@@ -3280,16 +3299,16 @@ struct GlobalSearchView: View {
                         Text("Cerca film, serie TV e canali live nel tuo catalogo.")
                             .font(.subheadline).foregroundStyle(.white.opacity(0.45)).padding(.horizontal, 16).padding(.top, 10)
                     } else {
-                        if !movies.isEmpty { posterSection("Film", movies.map { ($0.name, $0.streamIcon, AnyView(MovieDetailView(item: $0))) }) }
-                        if !series.isEmpty { posterSection("Serie TV", series.map { ($0.name, $0.cover, AnyView(SeriesDetailView(item: $0))) }) }
                         if !live.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Diretta").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal, 16)
+                                Text("Canali live").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal, 16)
                                 ForEach(live) { item in
                                     NavigationLink { LiveDetailView(item: item) } label: { LiveChannelCard(item: item) }.buttonStyle(.plain).padding(.horizontal, 16)
                                 }
                             }
                         }
+                        if !movies.isEmpty { posterSection("Film", movies.map { ($0.name, $0.streamIcon, AnyView(MovieDetailView(item: $0))) }) }
+                        if !series.isEmpty { posterSection("Serie TV", series.map { ($0.name, $0.cover, AnyView(SeriesDetailView(item: $0))) }) }
                         if movies.isEmpty && series.isEmpty && live.isEmpty { EmptyStateView(title: "Nessun risultato", icon: "magnifyingglass", message: "Prova con un altro titolo.") }
                     }
                 }.padding(.top, 12).padding(.bottom, 40)
