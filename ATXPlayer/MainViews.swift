@@ -2742,6 +2742,8 @@ struct PlayerScreen: View {
     @State private var liveStartupTask: Task<Void, Never>?
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
+    @State private var liveVideoOutput: AVPlayerItemVideoOutput?
+    @State private var liveVideoProbeTask: Task<Void, Never>?
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2930,12 +2932,19 @@ struct PlayerScreen: View {
         ]
         let asset = AVURLAsset(url: currentURL, options: assetOptions)
         let item = AVPlayerItem(asset: asset)
-        item.preferredForwardBufferDuration = isLive ? 0.35 : 3.0
+        item.preferredForwardBufferDuration = isLive ? 1.0 : 3.0
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive
         if isLive {
             // Buffer molto ridotto, ma non azzerato: migliora la compatibilità
             // con i server HLS più lenti senza ritardare visibilmente l'avvio.
             item.preferredPeakBitRate = 0
+            // Keep a lightweight video output attached so we can distinguish
+            // “audio is playing” from “real video frames are being decoded”.
+            // This fixes Live streams that AVPlayer reports as playing while the
+            // picture remains frozen on the first frame.
+            let output = AVPlayerItemVideoOutput(pixelBufferAttributes: nil)
+            item.add(output)
+            liveVideoOutput = output
             livePlaybackStarted = false
             liveStartupAttempts = 0
         }
@@ -2985,6 +2994,8 @@ struct PlayerScreen: View {
     private func switchToCompatibilityURL(_ fallback: URL) {
         validationTask?.cancel()
         liveStartupTask?.cancel()
+        liveVideoProbeTask?.cancel()
+        liveVideoOutput = nil
         if let player {
             removeObservers(from: player)
             ActivePlaybackRegistry.shared.deactivate(player)
@@ -3010,9 +3021,10 @@ struct PlayerScreen: View {
 
     private func startLivePlayback(_ player: AVPlayer) {
         liveStartupTask?.cancel()
+        liveVideoProbeTask?.cancel()
         livePlaybackStarted = false
         liveStartupAttempts = 0
-        player.currentItem?.preferredForwardBufferDuration = 0.35
+        player.currentItem?.preferredForwardBufferDuration = 1.0
         player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
 
         // Do not wait for readyToPlay: AVPlayer starts loading and decoding immediately.
@@ -3026,12 +3038,49 @@ struct PlayerScreen: View {
                     return // The item-scoped validation task handles failures.
                 }
                 if player.timeControlStatus == .playing {
-                    self.livePlaybackStarted = true
-                    return
+                    // Audio alone can make timeControlStatus == .playing. Keep the
+                    // loading state until the video decoder has produced a frame.
+                    if let output = self.liveVideoOutput {
+                        let itemTime = output.itemTime(forHostTime: CACurrentMediaTime())
+                        if output.hasNewPixelBuffer(forItemTime: itemTime) {
+                            self.livePlaybackStarted = true
+                            self.monitorLiveVideoFrames(player: player, output: output)
+                            return
+                        }
+                    } else {
+                        self.livePlaybackStarted = true
+                        return
+                    }
                 }
             }
             guard !Task.isCancelled, self.player === player else { return }
             player.playImmediately(atRate: 1.0)
+        }
+    }
+
+    private func monitorLiveVideoFrames(player: AVPlayer, output: AVPlayerItemVideoOutput) {
+        liveVideoProbeTask?.cancel()
+        liveVideoProbeTask = Task { @MainActor in
+            var lastFrame = Date()
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 500_000_000) } catch { return }
+                guard self.player === player, player.currentItem != nil else { return }
+                let itemTime = output.itemTime(forHostTime: CACurrentMediaTime())
+                if output.hasNewPixelBuffer(forItemTime: itemTime) {
+                    lastFrame = Date()
+                    continue
+                }
+                // If audio/time keeps advancing but video produces no new frames for
+                // several seconds, retry the same Live channel through its compatible
+                // endpoint instead of leaving a permanently frozen image.
+                if player.timeControlStatus == .playing, Date().timeIntervalSince(lastFrame) > 4.0 {
+                    guard !self.compatibilityAttempted, let source = self.currentURL,
+                          let fallback = self.compatibilityCandidate(for: source) else { return }
+                    self.compatibilityAttempted = true
+                    self.switchToCompatibilityURL(fallback)
+                    return
+                }
+            }
         }
     }
 
