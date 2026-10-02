@@ -3141,21 +3141,25 @@ struct GlobalSearchView: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.dismiss) var dismiss
     @State private var search = ""
-    @State private var selectedType = "Tutto"
+    @State private var selectedType = "TUTTO"
     @AppStorage("recentSearches") private var recentSearchesData = ""
 
     private var recentSearches: [String] { recentSearchesData.split(separator: "|").map(String.init).filter { !$0.isEmpty } }
     private var movies: [VODStream] {
-        guard !search.isEmpty, selectedType == "Tutto" || selectedType == "Film" else { return [] }
-        return Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(40))
+        guard !search.isEmpty, selectedType == "TUTTO" || selectedType == "FILM" else { return [] }
+        return Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(selectedType == "FILM" ? 150 : 60))
     }
     private var series: [SeriesItem] {
-        guard !search.isEmpty, selectedType == "Tutto" || selectedType == "Serie" else { return [] }
-        return Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(40))
+        guard !search.isEmpty, selectedType == "TUTTO" || selectedType == "SERIE" else { return [] }
+        return Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(selectedType == "SERIE" ? 150 : 60))
     }
     private var live: [LiveStream] {
-        guard !search.isEmpty, selectedType == "Tutto" || selectedType == "Diretta" else { return [] }
-        return Array(session.allLive.filter { $0.name.localizedCaseInsensitiveContains(search) }.prefix(40))
+        guard !search.isEmpty, selectedType == "TUTTO" || selectedType == "LIVE" else { return [] }
+        let clean = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Array(session.allLive.filter {
+            $0.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                .contains(clean.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current))
+        }.prefix(selectedType == "LIVE" ? 250 : 80))
     }
     private let cols = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
 
@@ -3175,7 +3179,7 @@ struct GlobalSearchView: View {
                     .padding(.horizontal, 16)
 
                     HStack(spacing: 8) {
-                        ForEach(["Tutto","Film","Serie","Diretta"], id: \.self) { kind in
+                        ForEach(["TUTTO","LIVE","FILM","SERIE"], id: \.self) { kind in
                             Button { selectedType = kind } label: {
                                 Text(kind).font(.caption.bold()).foregroundStyle(.white)
                                     .padding(.horizontal, 12).frame(height: 34)
