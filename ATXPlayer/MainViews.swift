@@ -2727,6 +2727,8 @@ struct PlayerScreen: View {
     @State private var compatibilityAttempted = false
     @State private var videoProbeTask: Task<Void, Never>?
     @State private var mkvPreparing = false
+    @State private var mkvWorkDirectory: URL?
+    @State private var mkvPreparationTask: Task<Void, Never>?
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2772,15 +2774,15 @@ struct PlayerScreen: View {
                     .padding(24)
                     .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
+            } else if failed || currentURL == nil {
+                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.primary)
             } else if mkvPreparing {
                 VStack(spacing: 14) {
                     ProgressView().controlSize(.large).tint(.white)
                     Text("Preparazione MKV…").font(.headline).foregroundStyle(.white)
-                    Text("ATX sta adattando il contenitore al player originale senza ricodificare il video.")
-                        .font(.caption).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
-                }.padding(24)
-            } else if failed || currentURL == nil {
-                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o usare codec non supportati da iPhone.").foregroundStyle(.primary)
+                    Text("Preparazione del video per il player iPhone.")
+                        .font(.caption).foregroundStyle(.white.opacity(0.7))
+                }
             } else {
                 ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary)
             }
@@ -2883,25 +2885,13 @@ struct PlayerScreen: View {
 
     private func configurePlayer() {
         guard player == nil else { return }
-        guard let currentURL else { failed = true; return }
+        guard let sourceURL = currentURL else { failed = true; return }
 
-        // Keep the original AVPlayer UI. For VOD/episodes in Matroska, remux the
-        // original bytes locally to fragmented MP4, then feed that file to AVPlayer.
-        if !isLive, compatibilityURL == nil, currentURL.pathExtension.lowercased() == "mkv" {
-            mkvPreparing = true
-            failed = false
-            MKVRemuxService.shared.prepare(currentURL) { result in
-                mkvPreparing = false
-                switch result {
-                case .success(let localMP4):
-                    compatibilityURL = localMP4
-                    configurePlayer()
-                case .failure:
-                    failed = true
-                }
-            }
+        if !isLive && sourceURL.pathExtension.lowercased() == "mkv" && compatibilityURL == nil {
+            prepareMKVForNativePlayer(sourceURL)
             return
         }
+        let currentURL = sourceURL
 
         do {
             let audioSession = AVAudioSession.sharedInstance()
@@ -2950,6 +2940,66 @@ struct PlayerScreen: View {
 
         validate(item: item, player: newPlayer)
         if isLive { startVideoProbe(item: item, player: newPlayer, sourceURL: currentURL) }
+    }
+
+    private func prepareMKVForNativePlayer(_ sourceURL: URL) {
+        guard !mkvPreparing else { return }
+        mkvPreparing = true
+        failed = false
+
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ATX-MKV-\(UUID().uuidString)", isDirectory: true)
+        do { try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true) }
+        catch { mkvPreparing = false; failed = true; return }
+        mkvWorkDirectory = base
+
+        let playlist = base.appendingPathComponent("stream.m3u8")
+        let segmentPattern = base.appendingPathComponent("segment-%05d.m4s").path
+        let arguments = [
+            "-hide_banner", "-loglevel", "error", "-y",
+            "-i", sourceURL.absoluteString,
+            "-map", "0:v:0?", "-map", "0:a:0?",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-f", "hls", "-hls_time", "4", "-hls_list_size", "0",
+            "-hls_segment_type", "fmp4",
+            "-hls_fmp4_init_filename", "init.mp4",
+            "-hls_segment_filename", segmentPattern,
+            "-hls_flags", "independent_segments+append_list",
+            playlist.path
+        ]
+
+        mkvPreparationTask?.cancel()
+        mkvPreparationTask = Task { @MainActor in
+            let ffmpegTask = Task.detached(priority: .userInitiated) {
+                runMunimFFmpeg(arguments)
+            }
+            for _ in 0..<120 {
+                if Task.isCancelled { munim_ffmpeg_cancel(); return }
+                let firstSegment = base.appendingPathComponent("segment-00000.m4s")
+                if FileManager.default.fileExists(atPath: playlist.path),
+                   FileManager.default.fileExists(atPath: firstSegment.path) {
+                    self.mkvPreparing = false
+                    self.compatibilityURL = playlist
+                    self.configurePlayer()
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            let result = await ffmpegTask.value
+            if self.player == nil && self.compatibilityURL == nil {
+                self.mkvPreparing = false
+                self.failed = (result != 0)
+            }
+        }
+    }
+
+    private func runMunimFFmpeg(_ arguments: [String]) -> Int32 {
+        let strings = arguments.map { strdup($0) }
+        defer { strings.forEach { free($0) } }
+        var argv: [UnsafePointer<CChar>?] = strings.map { $0.map { UnsafePointer($0) } }
+        return argv.withUnsafeMutableBufferPointer {
+            munim_ffmpeg_execute(Int32(arguments.count), $0.baseAddress, nil)
+        }
     }
 
     // Some IPTV servers expose the same live stream as MPEG-TS and HLS.
@@ -3122,17 +3172,6 @@ struct PlayerScreen: View {
         session.recordHistory(for: next.descriptor)
         failed = false
 
-        if nextURL.pathExtension.lowercased() == "mkv" {
-            removeObservers(from: player)
-            player.pause()
-            ActivePlaybackRegistry.shared.deactivate(player)
-            self.player = nil
-            compatibilityURL = nil
-            MKVRemuxService.shared.cancel()
-            configurePlayer()
-            return
-        }
-
         let nextItem = AVPlayerItem(url: nextURL)
         nextItem.preferredForwardBufferDuration = 3.0
         player.replaceCurrentItem(with: nextItem)
@@ -3154,7 +3193,13 @@ struct PlayerScreen: View {
         liveStartupTask = nil
         videoProbeTask?.cancel()
         videoProbeTask = nil
-        MKVRemuxService.shared.cancel()
+        mkvPreparationTask?.cancel()
+        mkvPreparationTask = nil
+        munim_ffmpeg_cancel()
+        if let mkvWorkDirectory {
+            try? FileManager.default.removeItem(at: mkvWorkDirectory)
+            self.mkvWorkDirectory = nil
+        }
         if let currentDescriptor, let player {
             session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
         }

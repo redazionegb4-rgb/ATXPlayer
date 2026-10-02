@@ -1,0 +1,106 @@
+/*
+ * Platform-neutral core for running FFmpeg 9's own command-line tools inside an
+ * app process. The Android JNI bridge and the iOS Swift layer both sit on top
+ * of this.
+ */
+#ifndef MUNIM_FFMPEG_CORE_H
+#define MUNIM_FFMPEG_CORE_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef void (*munim_log_callback)(void *context, const char *message);
+
+typedef void (*munim_statistics_callback)(void *context, double time_ms,
+                                          double size_bytes,
+                                          double bitrate_kbits, double speed,
+                                          double video_frame_number, double fps,
+                                          double quality);
+
+/** Version string of the linked FFmpeg, e.g. "9.0.1". */
+const char *munim_ffmpeg_version(void);
+
+/**
+ * Installs the callback functions. `context` is the default value handed to
+ * them; an execution started through one of the `_ctx` variants overrides it
+ * for exactly as long as that execution holds the core's lock, which is how
+ * callers waiting concurrently keep their callbacks apart.
+ */
+void munim_ffmpeg_set_callbacks(munim_log_callback on_log,
+                                munim_statistics_callback on_statistics,
+                                void *context);
+
+/**
+ * Runs `ffmpeg` with the given arguments; `argv[0]` is supplied internally.
+ *
+ * `stdout_path` receives anything the tool prints rather than logs, such as the
+ * `-encoders` and `-protocols` reports. Pass NULL to discard it.
+ *
+ * fftools keeps its parsed command in file-scope globals, so calls are
+ * serialised: a second execution waits for the first to finish.
+ */
+int munim_ffmpeg_execute(int argc, const char *const *argv,
+                         const char *stdout_path);
+
+/** Like munim_ffmpeg_execute, with a per-run callback context. */
+int munim_ffmpeg_execute_ctx(int argc, const char *const *argv,
+                             const char *stdout_path, void *session);
+
+/** Runs `ffprobe`, writing its report to `output_path` via `-o`. */
+int munim_ffmpeg_probe(int argc, const char *const *argv,
+                       const char *output_path);
+
+/** Like munim_ffmpeg_probe, with a per-run callback context. */
+int munim_ffmpeg_probe_ctx(int argc, const char *const *argv,
+                           const char *output_path, void *session);
+
+/**
+ * Requests cancellation of the running execution, and of any execution already
+ * queued behind it.
+ */
+void munim_ffmpeg_cancel(void);
+
+/**
+ * Like munim_ffmpeg_execute_ctx, for a run identified by `session_id` (> 0) so
+ * it can be paused and resumed. munim_ffmpeg_execute_ctx runs with id 0, which
+ * cannot be paused.
+ */
+int munim_ffmpeg_execute_session(int argc, const char *const *argv,
+                                 const char *stdout_path, void *context,
+                                 long long session_id);
+
+/**
+ * Pauses the execution with `session_id`. If it is running, its input threads
+ * stop reading and the rest of the pipeline idles once it has drained; if it is
+ * still queued, it will start paused. Output files stay open and
+ * munim_ffmpeg_resume() continues exactly where it stopped. Cancelling works
+ * as usual and also clears every pause. Returns 1 if the session is running.
+ */
+int munim_ffmpeg_pause(long long session_id);
+
+/** Resumes `session_id`. Returns 1 if it was paused. */
+int munim_ffmpeg_resume(long long session_id);
+
+/** Returns 1 while `session_id` is paused. */
+int munim_ffmpeg_is_paused(long long session_id);
+
+/**
+ * Id of the execution or probe currently running, or 0. Probes started through
+ * munim_ffmpeg_probe_session report their id here but cannot be paused.
+ */
+long long munim_ffmpeg_running_session(void);
+
+/** Like munim_ffmpeg_probe_ctx, for a run identified by `session_id`. */
+int munim_ffmpeg_probe_session(int argc, const char *const *argv,
+                               const char *output_path, void *context,
+                               long long session_id);
+
+/** Return code reported when a run was cancelled. */
+#define MUNIM_FFMPEG_CANCELLED 255
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* MUNIM_FFMPEG_CORE_H */
