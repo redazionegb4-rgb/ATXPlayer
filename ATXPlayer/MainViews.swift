@@ -2740,7 +2740,6 @@ struct PlayerScreen: View {
     @State private var livePlaybackStarted = false
     @State private var liveStartupAttempts = 0
     @State private var liveStartupTask: Task<Void, Never>?
-    @State private var vodStartupTask: Task<Void, Never>?
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
 
@@ -2774,22 +2773,19 @@ struct PlayerScreen: View {
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
-                    .opacity(1)
+                    .opacity(isLive && !livePlaybackStarted ? 0.001 : 1)
 
                 if isLive && !livePlaybackStarted {
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 8) {
-                            ProgressView().tint(.white)
-                            Text("Connessione alla diretta…")
-                                .font(.caption.bold())
-                                .foregroundStyle(.white)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(.black.opacity(0.55), in: Capsule())
-                        .padding(.bottom, 28)
+                    VStack(spacing: 14) {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(.white)
+                        Text("Avvio diretta…")
+                            .font(.headline)
+                            .foregroundStyle(.white)
                     }
-                    .allowsHitTesting(false)
+                    .padding(24)
+                    .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
             } else if failed || currentURL == nil {
                 VStack(spacing: 16) {
@@ -3006,25 +3002,9 @@ struct PlayerScreen: View {
             return
         }
 
-        // VOD/Serie: alcuni server non partono se play() arriva mentre l'item è ancora
-        // unknown. Manteniamo lo stesso AVPlayerItem e ripetiamo SOLO la richiesta di
-        // avvio durante la fase iniziale; appena il player entra in playing smettiamo,
-        // così una successiva pausa manuale dell'utente non viene annullata.
-        vodStartupTask?.cancel()
+        // Let AVPlayer manage readiness and buffering; pausing during preparation
+        // can interrupt the initial request on some providers.
         player.play()
-        vodStartupTask = Task { @MainActor in
-            for _ in 0..<30 {
-                do { try await Task.sleep(nanoseconds: 150_000_000) } catch { return }
-                guard !Task.isCancelled, self.player === player, player.currentItem != nil else { return }
-                if player.currentItem?.status == .failed { return }
-                if player.timeControlStatus == .playing || player.rate > 0 { return }
-                if player.currentItem?.status == .readyToPlay {
-                    player.playImmediately(atRate: 1.0)
-                } else {
-                    player.play()
-                }
-            }
-        }
     }
 
 
@@ -3032,43 +3012,22 @@ struct PlayerScreen: View {
         liveStartupTask?.cancel()
         livePlaybackStarted = false
         liveStartupAttempts = 0
-        // Zero buffer + automaticallyWaits=false lasciava alcuni TS con audio avviato
-        // ma video/controllo ancora in pausa. Un piccolo buffer è più rapido del fallback
-        // e permette ad AVPlayer di agganciare audio e video insieme.
         player.currentItem?.preferredForwardBufferDuration = 0.35
         player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
-        player.automaticallyWaitsToMinimizeStalling = true
-        player.play()
+
+        // Do not wait for readyToPlay: AVPlayer starts loading and decoding immediately.
+        player.playImmediately(atRate: 1.0)
 
         liveStartupTask = Task { @MainActor in
-            var lastClock = player.currentTime().seconds
-            var advancingSamples = 0
-            for attempt in 0..<50 {
+            for _ in 0..<40 {
                 do { try await Task.sleep(nanoseconds: 100_000_000) } catch { return }
-                guard !Task.isCancelled, self.player === player, player.currentItem != nil else { return }
-                if player.currentItem?.status == .failed { return }
-
-                let clock = player.currentTime().seconds
-                if clock.isFinite, lastClock.isFinite, clock > lastClock + 0.02 {
-                    advancingSamples += 1
-                } else {
-                    advancingSamples = 0
+                guard !Task.isCancelled, self.player === player else { return }
+                if player.currentItem?.status == .failed {
+                    return // The item-scoped validation task handles failures.
                 }
-                lastClock = clock
-
-                // Consideriamo realmente avviata la diretta quando il clock avanza o
-                // AVPlayer è in playing, non semplicemente quando item.status è ready.
-                if player.timeControlStatus == .playing || advancingSamples >= 2 {
+                if player.timeControlStatus == .playing {
                     self.livePlaybackStarted = true
                     return
-                }
-
-                // Se il controllo nativo mostra pausa durante lo startup, forza il rate
-                // solo in questa finestra iniziale. Dopo l'avvio non interferiamo più.
-                if player.currentItem?.status == .readyToPlay && (player.rate == 0 || attempt % 8 == 7) {
-                    player.playImmediately(atRate: 1.0)
-                } else if attempt % 10 == 9 {
-                    player.play()
                 }
             }
             guard !Task.isCancelled, self.player === player else { return }
@@ -3173,8 +3132,6 @@ struct PlayerScreen: View {
         guard !pictureInPictureActive, !fullScreenTransitionActive else { return }
         liveStartupTask?.cancel()
         liveStartupTask = nil
-        vodStartupTask?.cancel()
-        vodStartupTask = nil
         validationTask?.cancel()
         validationTask = nil
         if let currentDescriptor, let player {
