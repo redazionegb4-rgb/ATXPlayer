@@ -2773,18 +2773,22 @@ struct PlayerScreen: View {
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
+                    .opacity(1)
 
                 if isLive && !livePlaybackStarted {
-                    VStack(spacing: 14) {
-                        ProgressView()
-                            .controlSize(.large)
-                            .tint(.white)
-                        Text("Avvio diretta…")
-                            .font(.headline)
-                            .foregroundStyle(.white)
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 8) {
+                            ProgressView().tint(.white)
+                            Text("Connessione alla diretta…")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(.bottom, 28)
                     }
-                    .padding(24)
-                    .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .allowsHitTesting(false)
                 }
             } else if failed || currentURL == nil {
                 VStack(spacing: 16) {
@@ -2929,7 +2933,7 @@ struct PlayerScreen: View {
         ]
         let asset = AVURLAsset(url: currentURL, options: assetOptions)
         let item = AVPlayerItem(asset: asset)
-        item.preferredForwardBufferDuration = isLive ? 0.0 : 3.0
+        item.preferredForwardBufferDuration = isLive ? 0 : 3.0
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = isLive
         if isLive {
             // Buffer molto ridotto, ma non azzerato: migliora la compatibilità
@@ -2940,9 +2944,6 @@ struct PlayerScreen: View {
         }
         let newPlayer = AVPlayer(playerItem: item)
         ActivePlaybackRegistry.shared.activate(newPlayer)
-        // Live IPTV must start as soon as packets are available. Waiting to build a
-        // larger safety buffer made many TS channels feel slow and could leave the
-        // startup overlay visible even though audio was already playing.
         newPlayer.automaticallyWaitsToMinimizeStalling = !isLive
         newPlayer.preventsDisplaySleepDuringVideoPlayback = true
         player = newPlayer
@@ -3014,7 +3015,7 @@ struct PlayerScreen: View {
         liveStartupTask?.cancel()
         livePlaybackStarted = false
         liveStartupAttempts = 0
-        player.currentItem?.preferredForwardBufferDuration = 0.0
+        player.currentItem?.preferredForwardBufferDuration = 0
         player.currentItem?.canUseNetworkResourcesForLiveStreamingWhilePaused = true
 
         // Do not wait for readyToPlay: AVPlayer starts loading and decoding immediately.
@@ -3027,12 +3028,12 @@ struct PlayerScreen: View {
                 if player.currentItem?.status == .failed {
                     return // The item-scoped validation task handles failures.
                 }
-                // Some MPEG-TS IPTV streams begin decoding audio while AVPlayer still
-                // reports .waitingToPlayAtSpecifiedRate. Do not keep "Avvio diretta…"
-                // over a stream that has already started. currentTime/rate are more
-                // reliable startup signals for these feeds.
-                let seconds = player.currentTime().seconds
-                if player.timeControlStatus == .playing || player.rate > 0 || (seconds.isFinite && seconds > 0.02) || player.currentItem?.status == .readyToPlay {
+                // Per i Live non aspettiamo esclusivamente timeControlStatus=.playing:
+                // molti server iniziano a decodificare audio/video mentre AVPlayer è ancora
+                // in waitingToPlayAtSpecifiedRate. Appena l'item è pronto (o il clock avanza)
+                // togliamo l'overlay senza nascondere mai il layer video.
+                let clockStarted = player.currentTime().seconds.isFinite && player.currentTime().seconds > 0
+                if player.timeControlStatus == .playing || player.currentItem?.status == .readyToPlay || clockStarted {
                     self.livePlaybackStarted = true
                     return
                 }
@@ -4977,7 +4978,11 @@ private struct RebornContinueCard: View {
 }
 
 private struct RebornLiveRow: View {
+    @EnvironmentObject private var session: AppSession
     let item: LiveStream
+    @State private var currentEPGTitle: String?
+    @State private var epgLoaded = false
+
     var body: some View {
         HStack(spacing: 12) {
             OptimizedAsyncImage(url: URL(string: item.streamIcon ?? "")) { phase in
@@ -4985,14 +4990,39 @@ private struct RebornLiveRow: View {
                 else { Image(systemName: "tv.fill").foregroundStyle(.white.opacity(0.7)) }
             }
             .frame(width: 76, height: 56).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) { Circle().fill(rebornRed).frame(width: 7, height: 7); Text("IN DIRETTA").font(.system(size: 9, weight: .black)).foregroundStyle(rebornRed) }
-                Text(item.name).font(.subheadline.bold()).foregroundStyle(.white).lineLimit(2)
+                Text(item.name).font(.subheadline.bold()).foregroundStyle(.white).lineLimit(1)
+                if let currentEPGTitle, !currentEPGTitle.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.fill").font(.system(size: 9))
+                        Text(currentEPGTitle).font(.caption).lineLimit(1)
+                    }
+                    .foregroundStyle(.white.opacity(0.62))
+                }
             }
             Spacer()
             Image(systemName: "play.fill").foregroundStyle(.white).frame(width: 36, height: 36).background(Color.white.opacity(0.12), in: Circle())
         }
         .padding(10).background(rebornCard, in: RoundedRectangle(cornerRadius: 8))
+        .task(id: item.streamID) { await loadCurrentEPG() }
+    }
+
+    @MainActor
+    private func loadCurrentEPG() async {
+        guard !epgLoaded else { return }
+        epgLoaded = true
+        do {
+            let listings = try await APIClient.shared.shortEPG(baseURL: session.baseURL, username: session.username, password: session.password, streamID: item.streamID, limit: 4)
+            let now = Date().timeIntervalSince1970
+            let current = listings.first { listing in
+                guard let a = listing.startTimestamp.flatMap(TimeInterval.init), let b = listing.stopTimestamp.flatMap(TimeInterval.init) else { return false }
+                return a <= now && now < b
+            } ?? listings.first
+            currentEPGTitle = current?.title
+        } catch {
+            currentEPGTitle = nil
+        }
     }
 }
 
