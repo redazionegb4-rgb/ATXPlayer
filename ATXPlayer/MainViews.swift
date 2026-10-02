@@ -2723,6 +2723,8 @@ struct PlayerScreen: View {
 
     @State private var player: AVPlayer?
     @State private var failed = false
+    @State private var playbackFailureCode = ""
+    @State private var validationTask: Task<Void, Never>?
     @State private var pictureInPictureActive = false
     @State private var fullScreenTransitionActive = false
     @State private var showResumePrompt = false
@@ -2740,7 +2742,6 @@ struct PlayerScreen: View {
     @State private var liveStartupTask: Task<Void, Never>?
     @State private var compatibilityURL: URL?
     @State private var compatibilityAttempted = false
-    @State private var videoProbeTask: Task<Void, Never>?
 
     init(title: String, url: URL?, isLive: Bool, resume: PlaybackDescriptor? = nil, episodeQueue: [PlaybackQueueItem] = [], startIndex: Int = 0) {
         self.title = title
@@ -2787,7 +2788,19 @@ struct PlayerScreen: View {
                     .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
             } else if failed || currentURL == nil {
-                EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.primary)
+                VStack(spacing: 16) {
+                    EmptyStateView(title: "Riproduzione non disponibile", icon: "play.slash", message: "Il flusso potrebbe essere offline o in un formato non supportato.").foregroundStyle(.white)
+                    if !playbackFailureCode.isEmpty {
+                        Text(playbackFailureCode).font(.caption).foregroundStyle(.white.opacity(0.7))
+                    }
+                    Button("Riprova") {
+                        failed = false
+                        playbackFailureCode = ""
+                        compatibilityURL = nil
+                        compatibilityAttempted = false
+                        configurePlayer()
+                    }.buttonStyle(.borderedProminent)
+                }
             } else {
                 ProgressView("Apertura player…").tint(.white).foregroundStyle(.primary)
             }
@@ -2825,7 +2838,7 @@ struct PlayerScreen: View {
         }
         .task { configurePlayer() }
         .onAppear { playerPresented.wrappedValue = true }
-        .onDisappear { playerPresented.wrappedValue = false }
+
         .onChange(of: scenePhase) { newPhase in
             if newPhase == .active {
                 resumePlaybackIfNeeded()
@@ -2839,6 +2852,7 @@ struct PlayerScreen: View {
             // In quel passaggio PlayerScreen può ricevere onDisappear: NON dobbiamo
             // distruggere l'AVPlayerItem, altrimenti la riproduzione si interrompe.
             guard !fullScreenTransitionActive else { return }
+            playerPresented.wrappedValue = false
             closePlayerIfNeeded()
         }
     }
@@ -2940,7 +2954,8 @@ struct PlayerScreen: View {
         }
 
         validate(item: item, player: newPlayer)
-        if isLive { startVideoProbe(item: item, player: newPlayer, sourceURL: currentURL) }
+        // Do not switch a working stream based on a video-output probe.
+        // Rendering through AVPlayerViewController is independent of that probe.
     }
 
     // Some IPTV servers expose the same live stream as MPEG-TS and HLS.
@@ -2967,34 +2982,8 @@ struct PlayerScreen: View {
         return nil
     }
 
-    private func startVideoProbe(item: AVPlayerItem, player: AVPlayer, sourceURL: URL) {
-        videoProbeTask?.cancel()
-        guard !compatibilityAttempted, let fallback = compatibilityCandidate(for: sourceURL), fallback != sourceURL else { return }
-
-        let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-        ])
-        item.add(output)
-
-        videoProbeTask = Task { @MainActor in
-            // Give the original stream enough time to produce its first decoded frame.
-            for _ in 0..<8 {
-                do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
-                guard !Task.isCancelled, self.player === player else { return }
-                let t = player.currentTime()
-                if output.hasNewPixelBuffer(forItemTime: t) { return }
-            }
-
-            guard self.player === player, player.currentItem === item else { return }
-            // Only retry when playback itself is alive (typical audio-only/black-video case).
-            guard player.rate > 0 || player.timeControlStatus == .playing else { return }
-            self.compatibilityAttempted = true
-            self.switchToCompatibilityURL(fallback)
-        }
-    }
-
     private func switchToCompatibilityURL(_ fallback: URL) {
-        videoProbeTask?.cancel()
+        validationTask?.cancel()
         liveStartupTask?.cancel()
         if let player {
             removeObservers(from: player)
@@ -3013,16 +3002,9 @@ struct PlayerScreen: View {
             return
         }
 
-        player.playImmediately(atRate: 1.0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            guard self.player === player, player.timeControlStatus != .playing else { return }
-            player.pause()
-            player.playImmediately(atRate: 1.0)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
-            guard self.player === player, player.timeControlStatus != .playing else { return }
-            player.playImmediately(atRate: 1.0)
-        }
+        // Let AVPlayer manage readiness and buffering; pausing during preparation
+        // can interrupt the initial request on some providers.
+        player.play()
     }
 
 
@@ -3041,10 +3023,9 @@ struct PlayerScreen: View {
                 do { try await Task.sleep(nanoseconds: 100_000_000) } catch { return }
                 guard !Task.isCancelled, self.player === player else { return }
                 if player.currentItem?.status == .failed {
-                    self.failed = true
-                    return
+                    return // The item-scoped validation task handles failures.
                 }
-                if player.timeControlStatus == .playing || player.rate > 0 {
+                if player.timeControlStatus == .playing {
                     self.livePlaybackStarted = true
                     return
                 }
@@ -3063,12 +3044,28 @@ struct PlayerScreen: View {
     }
 
     private func validate(item: AVPlayerItem, player: AVPlayer) {
-        Task {
-            try? await Task.sleep(nanoseconds: isLive ? 8_000_000_000 : 2_000_000_000)
-            if item.status == .failed {
-                failed = true
-                player.pause()
+        validationTask?.cancel()
+        validationTask = Task { @MainActor in
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 250_000_000) } catch { return }
+                // An old item must never tear down a replacement or next episode.
+                guard self.player === player, player.currentItem === item else { return }
+                guard item.status == .failed else { continue }
+                if isLive, !compatibilityAttempted, let source = currentURL,
+                   let fallback = compatibilityCandidate(for: source) {
+                    compatibilityAttempted = true
+                    switchToCompatibilityURL(fallback)
+                    return
+                }
+                if let error = item.error as NSError? {
+                    playbackFailureCode = "\(error.domain) (\(error.code))"
+                }
+                liveStartupTask?.cancel()
+                removeObservers(from: player)
+                ActivePlaybackRegistry.shared.deactivate(player)
                 self.player = nil
+                failed = true
+                return
             }
         }
     }
@@ -3135,8 +3132,8 @@ struct PlayerScreen: View {
         guard !pictureInPictureActive, !fullScreenTransitionActive else { return }
         liveStartupTask?.cancel()
         liveStartupTask = nil
-        videoProbeTask?.cancel()
-        videoProbeTask = nil
+        validationTask?.cancel()
+        validationTask = nil
         if let currentDescriptor, let player {
             session.recordProgress(for: currentDescriptor, position: player.currentTime().seconds, duration: player.currentItem?.duration.seconds ?? 0)
         }
@@ -5371,48 +5368,74 @@ private struct ATXMosaicPlayerView: View {
     var body: some View {
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
-            let columns = channels.count == 2 ? (landscape ? 2 : 1) : 2
-            let rows = channels.count == 2 ? (landscape ? 1 : 2) : 2
-            let cellWidth = geo.size.width / CGFloat(columns)
-            let cellHeight = geo.size.height / CGFloat(rows)
-
+            let rowCounts = landscape
+                ? (channels.count <= 2 ? [channels.count] : [2, channels.count - 2])
+                : Array(repeating: 1, count: channels.count)
+            let gap: CGFloat = 2
+            let cellHeight = (geo.size.height - gap * CGFloat(max(0, rowCounts.count - 1))) / CGFloat(max(1, rowCounts.count))
             ZStack(alignment: .topLeading) {
-                Color.black.ignoresSafeArea()
-                VStack(spacing: 2) {
-                    ForEach(0..<rows, id: \.self) { row in
-                        HStack(spacing: 2) {
-                            ForEach(0..<columns, id: \.self) { column in
-                                let index = row * columns + column
-                                if channels.indices.contains(index) {
-                                    let channel = channels[index]
-                                    ATXMosaicCell(
-                                        channel: channel,
-                                        url: session.streamURL(type: .live, id: channel.streamID),
-                                        muted: audibleID != channel.streamID
-                                    )
-                                    .frame(width: cellWidth, height: cellHeight)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { audibleID = channel.streamID }
-                                } else {
-                                    Color.black.frame(width: cellWidth, height: cellHeight)
-                                }
+                Color.black
+                VStack(spacing: gap) {
+                    ForEach(rowCounts.indices, id: \.self) { row in
+                        let count = rowCounts[row]
+                        let offset = rowCounts.prefix(row).reduce(0, +)
+                        let cellWidth = (geo.size.width - gap * CGFloat(max(0, count - 1))) / CGFloat(max(1, count))
+                        HStack(spacing: gap) {
+                            ForEach(0..<count, id: \.self) { column in
+                                let channel = channels[offset + column]
+                                ATXMosaicCell(
+                                    channel: channel,
+                                    url: session.streamURL(type: .live, id: channel.streamID),
+                                    muted: audibleID != channel.streamID
+                                )
+                                .frame(width: cellWidth, height: cellHeight)
+                                .contentShape(Rectangle())
+                                .onTapGesture { audibleID = channel.streamID }
                             }
                         }
                     }
                 }
-                .frame(width: geo.size.width, height: geo.size.height)
-                .ignoresSafeArea()
-
                 Button { dismiss() } label: {
                     Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
                         .frame(width: 42, height: 42).background(.black.opacity(0.72), in: Circle())
-                }.padding(12)
+                }.padding(.top, max(12, geo.safeAreaInsets.top)).padding(.leading, 12)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
-        .background(Color.black.ignoresSafeArea())
+        .ignoresSafeArea()
+        .background(Color.black)
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-        .onAppear { audibleID = channels.first?.streamID }
+        .onAppear {
+            ActivePlaybackRegistry.shared.stopCurrent()
+            audibleID = channels.first?.streamID
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay])
+            try? AVAudioSession.sharedInstance().setActive(true)
+        }
+    }
+}
+
+// A layer with explicit bounds avoids VideoPlayer's intrinsic sizing and controls
+// competing with the grid. Each channel owns an independent AVPlayer instance.
+private final class ATXMosaicSurface: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var videoLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+}
+
+private struct ATXMosaicVideoSurface: UIViewRepresentable {
+    let player: AVPlayer
+    func makeUIView(context: Context) -> ATXMosaicSurface {
+        let view = ATXMosaicSurface()
+        view.backgroundColor = .black
+        view.videoLayer.videoGravity = .resizeAspectFill
+        view.videoLayer.player = player
+        return view
+    }
+    func updateUIView(_ view: ATXMosaicSurface, context: Context) {
+        if view.videoLayer.player !== player { view.videoLayer.player = player }
+    }
+    static func dismantleUIView(_ view: ATXMosaicSurface, coordinator: ()) {
+        view.videoLayer.player = nil
     }
 }
 
@@ -5421,34 +5444,76 @@ private struct ATXMosaicCell: View {
     let url: URL?
     let muted: Bool
     @State private var player: AVPlayer?
+    @State private var loading = true
+    @State private var unavailable = false
+    @State private var retryID = 0
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             Color.black
-            if let player {
-                VideoPlayer(player: player)
-                    .onAppear { player.isMuted = muted; player.play() }
-                    .onChange(of: muted) { value in player.isMuted = value }
-            } else {
-                ProgressView().tint(.white)
+            if let player { ATXMosaicVideoSurface(player: player) }
+            if loading {
+                VStack(spacing: 8) {
+                    ProgressView().tint(.white)
+                    Text("Connessione…").font(.caption).foregroundStyle(.white)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .top, endPoint: .bottom)
-            HStack {
-                Circle().fill(Color.red).frame(width: 7, height: 7)
-                Text(channel.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1)
+            if unavailable {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                    Text("Canale non disponibile").font(.caption.bold())
+                    Text("Verifica il flusso e le connessioni consentite dalla playlist.")
+                        .font(.caption2).multilineTextAlignment(.center)
+                    Button("Riprova") { retryID += 1 }
+                }
+                .foregroundStyle(.white).padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            VStack {
                 Spacer()
-                if !muted { Image(systemName: "speaker.wave.2.fill").foregroundStyle(.white) }
-            }.padding(8)
+                HStack {
+                    Circle().fill(unavailable ? Color.orange : Color.red).frame(width: 7, height: 7)
+                    Text(channel.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1)
+                    Spacer()
+                    if !muted { Image(systemName: "speaker.wave.2.fill").foregroundStyle(.white) }
+                }.padding(10).background(.black.opacity(0.65))
+            }
+            .allowsHitTesting(false)
         }
         .clipped()
-        .task {
-            guard player == nil, let url else { return }
-            let p = AVPlayer(url: url)
+        .onChange(of: muted) { value in player?.isMuted = value }
+        .task(id: retryID) {
+            stop()
+            loading = true
+            unavailable = false
+            guard let url else { loading = false; unavailable = true; return }
+            let item = AVPlayerItem(url: url)
+            item.preferredForwardBufferDuration = 1
+            let p = AVPlayer(playerItem: item)
             p.isMuted = muted
+            p.automaticallyWaitsToMinimizeStalling = true
             player = p
             p.play()
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 250_000_000) } catch { return }
+                guard player === p, p.currentItem === item else { return }
+                if item.status == .failed {
+                    loading = false
+                    unavailable = true
+                    p.pause()
+                    p.replaceCurrentItem(with: nil)
+                    return
+                }
+                loading = p.timeControlStatus != .playing
+            }
         }
-        .onDisappear { player?.pause(); player = nil }
+        .onDisappear { stop() }
+    }
+
+    private func stop() {
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        player = nil
     }
 }
 
