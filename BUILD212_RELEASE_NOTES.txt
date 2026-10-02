@@ -1,0 +1,14 @@
+ATX Player 5.1 (212) RELEASE SAFE
+
+BASE
+- Restored exact stable Build 164 player path.
+- No Munim/FFmpeg, VLC, MPV, KSPlayer or other experimental playback framework.
+- Live playback code is untouched from Build 164.
+
+FIXES
+- Activation copy button copies the code without the ATX- prefix.
+- Global search presents matching live channels before Film and Serie TV.
+
+MKV
+- Experimental MKV remux pipeline intentionally removed from this release because it
+  was not reliable enough for production. This build prioritizes release stability.
