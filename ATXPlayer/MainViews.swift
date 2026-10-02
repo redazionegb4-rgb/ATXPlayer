@@ -4926,27 +4926,179 @@ private struct RebornSearchView: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.dismiss) private var dismiss
     var initialType: ContentType? = nil
+
     @State private var query = ""
+    @State private var selectedScope: SearchScope = .all
+
+    private enum SearchScope: String, CaseIterable, Identifiable {
+        case all = "TUTTO"
+        case live = "LIVE"
+        case movies = "FILM"
+        case series = "SERIE"
+        var id: String { rawValue }
+    }
+
     private let cols = [GridItem(.adaptive(minimum: 102, maximum: 150), spacing: 8)]
-    private var movieResults: [VODStream] { query.isEmpty ? [] : Array(session.allMovies.filter { $0.name.localizedCaseInsensitiveContains(query) }.prefix(30)) }
-    private var seriesResults: [SeriesItem] { query.isEmpty ? [] : Array(session.allSeries.filter { $0.name.localizedCaseInsensitiveContains(query) }.prefix(30)) }
+
+    private var cleanQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func matches(_ name: String) -> Bool {
+        guard !cleanQuery.isEmpty else { return false }
+        let lhs = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let rhs = cleanQuery.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        return lhs.contains(rhs)
+    }
+
+    private var liveResults: [LiveStream] {
+        guard selectedScope == .all || selectedScope == .live else { return [] }
+        return Array(session.allLive.filter { matches($0.name) }.prefix(selectedScope == .live ? 250 : 80))
+    }
+
+    private var movieResults: [VODStream] {
+        guard selectedScope == .all || selectedScope == .movies else { return [] }
+        return Array(session.allMovies.filter { matches($0.name) }.prefix(selectedScope == .movies ? 150 : 60))
+    }
+
+    private var seriesResults: [SeriesItem] {
+        guard selectedScope == .all || selectedScope == .series else { return [] }
+        return Array(session.allSeries.filter { matches($0.name) }.prefix(selectedScope == .series ? 150 : 60))
+    }
+
+    private var noResults: Bool {
+        !cleanQuery.isEmpty && liveResults.isEmpty && movieResults.isEmpty && seriesResults.isEmpty
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
-                    Button { dismiss() } label: { Image(systemName: "chevron.left").frame(width: 40, height: 40) }.foregroundStyle(.white)
-                    HStack { Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.55)); TextField("Cerca in ATX Player", text: $query).foregroundStyle(.white).textInputAutocapitalization(.never) }
-                        .padding(.horizontal, 12).frame(height: 42).background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
-                }.padding(12)
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.left").frame(width: 40, height: 40)
+                    }
+                    .foregroundStyle(.white)
+
+                    HStack {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.55))
+                        TextField("Canale, film o serie", text: $query)
+                            .foregroundStyle(.white)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        if !query.isEmpty {
+                            Button { query = "" } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.45))
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(height: 42)
+                    .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(SearchScope.allCases) { scope in
+                            Button { selectedScope = scope } label: {
+                                Text(scope.rawValue)
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 15)
+                                    .frame(height: 34)
+                                    .background(
+                                        selectedScope == scope ? rebornRed : Color.white.opacity(0.08),
+                                        in: Capsule()
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                }
+
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 22) {
-                        if !movieResults.isEmpty { Text("Film").font(.title3.bold()).foregroundStyle(.white); LazyVGrid(columns: cols, spacing: 14) { ForEach(movieResults) { item in NavigationLink { MovieDetailView(item: item) } label: { RebornPoster(title: item.name, imageURL: item.streamIcon, width: nil, height: 170) }.buttonStyle(.plain) } } }
-                        if !seriesResults.isEmpty { Text("Serie TV").font(.title3.bold()).foregroundStyle(.white); LazyVGrid(columns: cols, spacing: 14) { ForEach(seriesResults) { item in NavigationLink { SeriesDetailView(item: item) } label: { RebornPoster(title: item.name, imageURL: item.cover, width: nil, height: 170) }.buttonStyle(.plain) } } }
-                    }.padding(14).padding(.bottom, 50)
+                        if cleanQuery.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 34, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.35))
+                                Text("Cerca in tutto il catalogo")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                Text("Usa TUTTO, LIVE, FILM o SERIE.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.5))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                        }
+
+                        if !liveResults.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text("Canali Live").font(.title3.bold()).foregroundStyle(.white)
+                                    Spacer()
+                                    Text("\(liveResults.count)").font(.caption.bold()).foregroundStyle(.white.opacity(0.45))
+                                }
+                                ForEach(liveResults) { item in
+                                    NavigationLink { LiveDetailView(item: item) } label: {
+                                        RebornLiveRow(item: item)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+
+                        if !movieResults.isEmpty {
+                            Text("Film").font(.title3.bold()).foregroundStyle(.white)
+                            LazyVGrid(columns: cols, spacing: 14) {
+                                ForEach(movieResults) { item in
+                                    NavigationLink { MovieDetailView(item: item) } label: {
+                                        RebornPoster(title: item.name, imageURL: item.streamIcon, width: nil, height: 170)
+                                    }.buttonStyle(.plain)
+                                }
+                            }
+                        }
+
+                        if !seriesResults.isEmpty {
+                            Text("Serie TV").font(.title3.bold()).foregroundStyle(.white)
+                            LazyVGrid(columns: cols, spacing: 14) {
+                                ForEach(seriesResults) { item in
+                                    NavigationLink { SeriesDetailView(item: item) } label: {
+                                        RebornPoster(title: item.name, imageURL: item.cover, width: nil, height: 170)
+                                    }.buttonStyle(.plain)
+                                }
+                            }
+                        }
+
+                        if noResults {
+                            EmptyStateView(
+                                title: "Nessun risultato",
+                                icon: "magnifyingglass",
+                                message: "Nessun contenuto trovato in \(selectedScope.rawValue)."
+                            )
+                        }
+                    }
+                    .padding(14)
+                    .padding(.bottom, 50)
                 }
             }
-        }.toolbar(.hidden, for: .navigationBar)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            if let initialType {
+                switch initialType {
+                case .live: selectedScope = .live
+                case .movies: selectedScope = .movies
+                case .series: selectedScope = .series
+                }
+            }
+        }
     }
 }
 
