@@ -4803,6 +4803,8 @@ private struct RebornCatalogView: View {
     @State private var search = ""
     @State private var showSearch = false
     @State private var showCategories = false
+    @State private var nowOnTV: [RebornNowOnTVItem] = []
+    @State private var loadingNowOnTV = false
 
     private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
@@ -4826,7 +4828,10 @@ private struct RebornCatalogView: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     header
                     categorySelector
-                    if type == .live { liveWall } else { posterWall }
+                    if type == .live {
+                        nowOnTVSection
+                        liveWall
+                    } else { posterWall }
                 }.padding(.bottom, 110)
             }
         }
@@ -4835,6 +4840,9 @@ private struct RebornCatalogView: View {
         .sheet(isPresented: $showCategories) { categorySheet }
         .onAppear { selectFirstCategoryIfNeeded() }
         .onChange(of: categories.map(\.categoryID)) { _ in selectFirstCategoryIfNeeded() }
+        .task(id: type == .live ? "live-\(selectedCategory ?? "all")-\(session.allLive.count)" : "catalog") {
+            if type == .live { await loadNowOnTV() }
+        }
     }
 
     private func selectFirstCategoryIfNeeded() {
@@ -4923,12 +4931,109 @@ private struct RebornCatalogView: View {
         }.padding(.horizontal, 12)
     }
 
+    @ViewBuilder
+    private var nowOnTVSection: some View {
+        if !nowOnTV.isEmpty || loadingNowOnTV {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("ORA IN TV").font(.system(size: 20, weight: .black)).foregroundStyle(.white)
+                        Text("In onda adesso · tocca per guardare").font(.caption).foregroundStyle(rebornMuted)
+                    }
+                    Spacer()
+                    if loadingNowOnTV { ProgressView().tint(.white) }
+                }.padding(.horizontal, 16)
+
+                if !nowOnTV.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 10) {
+                            ForEach(nowOnTV) { entry in
+                                NavigationLink { LiveDetailView(item: entry.channel) } label: {
+                                    RebornNowOnTVCard(entry: entry)
+                                }.buttonStyle(.plain)
+                            }
+                        }.padding(.horizontal, 16)
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func loadNowOnTV() async {
+        guard type == .live else { return }
+        loadingNowOnTV = true
+        let candidates = Array(live.prefix(16))
+        let baseURL = session.baseURL, username = session.username, password = session.password
+        let results = await withTaskGroup(of: RebornNowOnTVItem?.self) { group in
+            for channel in candidates {
+                group.addTask {
+                    do {
+                        let listings = try await APIClient.shared.shortEPG(baseURL: baseURL, username: username, password: password, streamID: channel.streamID, limit: 5)
+                        let now = Date().timeIntervalSince1970
+                        guard let idx = listings.firstIndex(where: { listing in
+                            guard let a = listing.startTimestamp.flatMap(TimeInterval.init), let b = listing.stopTimestamp.flatMap(TimeInterval.init) else { return false }
+                            return a <= now && now < b
+                        }) else { return nil }
+                        let current = listings[idx]
+                        guard let title = current.title, !title.isEmpty else { return nil }
+                        let next = listings.indices.contains(idx + 1) ? listings[idx + 1] : nil
+                        return RebornNowOnTVItem(channel: channel, title: title, nextTitle: next?.title, start: current.startTimestamp.flatMap(TimeInterval.init), stop: current.stopTimestamp.flatMap(TimeInterval.init))
+                    } catch { return nil }
+                }
+            }
+            var values: [RebornNowOnTVItem] = []
+            for await value in group { if let value { values.append(value) } }
+            return values
+        }
+        nowOnTV = results.sorted { $0.channel.name.localizedCaseInsensitiveCompare($1.channel.name) == .orderedAscending }
+        loadingNowOnTV = false
+    }
+
     private var liveWall: some View {
         LazyVStack(spacing: 8) {
             ForEach(live) { item in
                 NavigationLink { LiveDetailView(item: item) } label: { RebornLiveRow(item: item) }.buttonStyle(.plain)
             }
         }.padding(.horizontal, 12)
+    }
+}
+
+private struct RebornNowOnTVItem: Identifiable {
+    let channel: LiveStream
+    let title: String
+    let nextTitle: String?
+    let start: TimeInterval?
+    let stop: TimeInterval?
+    var id: Int { channel.streamID }
+    var progress: Double {
+        guard let start, let stop, stop > start else { return 0 }
+        return min(1, max(0, (Date().timeIntervalSince1970 - start) / (stop - start)))
+    }
+}
+
+private struct RebornNowOnTVCard: View {
+    let entry: RebornNowOnTVItem
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 9) {
+                OptimizedAsyncImage(url: URL(string: entry.channel.streamIcon ?? "")) { phase in
+                    if let image = phase.image { image.resizable().scaledToFit().padding(5) }
+                    else { Image(systemName: "tv.fill").foregroundStyle(.white.opacity(0.7)) }
+                }
+                .frame(width: 50, height: 42).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.channel.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1)
+                    Text(entry.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white).lineLimit(2)
+                }
+            }
+            ProgressView(value: entry.progress).tint(rebornRed)
+            if let next = entry.nextTitle, !next.isEmpty {
+                Text("A seguire: \(next)").font(.caption2).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+            }
+        }
+        .padding(11).frame(width: 250, height: 126, alignment: .topLeading)
+        .background(rebornCard, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
