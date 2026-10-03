@@ -5550,85 +5550,86 @@ private struct ATXDiscoverView: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.dismiss) private var dismiss
     @State private var mood = "NOVITÀ"
-    private let moods = ["NOVITÀ","AZIONE","COMMEDIA","HORROR","DRAMMA","FAMIGLIA"]
+    @State private var scope = "TUTTO"
+    @State private var eveningSeed = Int.random(in: 0...999999)
 
-    private var results: [VODStream] {
-        if mood == "NOVITÀ" { return Array(session.allMovies.prefix(40)) }
-        return Array(session.allMovies.filter {
-            ($0.genre ?? "").localizedCaseInsensitiveContains(mood)
-        }.prefix(40))
-    }
+    private let scopes = ["TUTTO", "FILM", "SERIE"]
+    private let moods = ["NOVITÀ","POPOLARI","PIÙ VOTATI","AZIONE","COMMEDIA","HORROR","DRAMMA","FAMIGLIA","THRILLER","ROMANCE","FANTASY","SCI-FI"]
+    private let moodCards:[(String,String,[String])] = [
+        ("Voglio ridere","face.smiling",["COMMEDIA","COMEDY"]),
+        ("Adrenalina","bolt.fill",["AZIONE","ACTION","THRILLER"]),
+        ("Horror","moon.stars.fill",["HORROR"]),
+        ("Qualcosa di leggero","sparkles",["COMMEDIA","COMEDY","ROMANCE","ROMANTIC"]),
+        ("Per tutta la famiglia","figure.2.and.child.holdinghands",["FAMIGLIA","FAMILY","KIDS","ANIMATION","ANIMAZIONE"])
+    ]
 
-    var body: some View {
-        ZStack { Color.black.ignoresSafeArea()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    RebornPageHeader(title: "Discover", onBack: { dismiss() })
-                    Text("Stasera guarderei…").font(.title.bold()).foregroundStyle(.white).padding(.horizontal,16)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(moods,id:\.self) { x in
-                                Button { mood=x } label: {
-                                    Text(x).font(.caption.bold()).foregroundStyle(.white)
-                                        .padding(.horizontal,14).frame(height:34)
-                                        .background(mood==x ? rebornRed : Color.white.opacity(0.08), in: Capsule())
-                                }.buttonStyle(.plain)
-                            }
-                        }.padding(.horizontal,16)
-                    }
-                    LazyVGrid(columns:[GridItem(.adaptive(minimum:104,maximum:150),spacing:8)],spacing:14) {
-                        ForEach(results) { item in
-                            NavigationLink { MovieDetailView(item:item) } label: {
-                                RebornPoster(title:item.name,imageURL:item.streamIcon,width:nil,height:170)
-                            }.buttonStyle(.plain)
-                        }
-                    }.padding(.horizontal,16)
-                }.padding(.bottom,50)
-            }
-        }.toolbar(.hidden,for:.navigationBar)
+    private func tokens(_ value: String?) -> String { (value ?? "").folding(options:[.diacriticInsensitive,.caseInsensitive],locale:.current).uppercased() }
+    private func genreMatch(_ genre:String?, mood:String)->Bool {
+        let g=tokens(genre); let aliases:[String:[String]]=["AZIONE":["AZIONE","ACTION"],"COMMEDIA":["COMMEDIA","COMEDY"],"HORROR":["HORROR"],"DRAMMA":["DRAMMA","DRAMA"],"FAMIGLIA":["FAMIGLIA","FAMILY","KIDS","ANIMATION","ANIMAZIONE"],"THRILLER":["THRILLER"],"ROMANCE":["ROMANCE","ROMANTIC","ROMANTICO"],"FANTASY":["FANTASY"],"SCI-FI":["SCI-FI","SCIENCE FICTION","FANTASCIENZA"]]
+        return (aliases[mood] ?? [mood]).contains{g.contains($0)}
     }
+    private func ratingValue(_ v:String?)->Double { Double((v ?? "0").replacingOccurrences(of:",",with:".")) ?? 0 }
+    private func addedValue(_ v:String?)->Double { Double(v ?? "0") ?? 0 }
+    private func durationMinutes(_ value:String?)->Int? { guard let v=value else{return nil}; let parts=v.split(separator:":").compactMap{Int($0)}; if parts.count>=2{return parts[0]*60+parts[1]}; return Int(v.filter{$0.isNumber}) }
+
+    private var movies:[VODStream] { let b=session.allMovies; if mood=="NOVITÀ"{return Array(b.sorted{addedValue($0.added)>addedValue($1.added)}.prefix(60))}; if mood=="PIÙ VOTATI"{return Array(b.sorted{ratingValue($0.rating)>ratingValue($1.rating)}.prefix(60))}; if mood=="POPOLARI"{return Array(b.sorted{(ratingValue($0.rating),addedValue($0.added)) > (ratingValue($1.rating),addedValue($1.added))}.prefix(60))}; return Array(b.filter{genreMatch($0.genre,mood:mood)}.prefix(60)) }
+    private var series:[SeriesItem] { let b=session.allSeries; if mood=="NOVITÀ"{return Array(b.sorted{addedValue($0.added ?? $0.lastModified)>addedValue($1.added ?? $1.lastModified)}.prefix(60))}; if mood=="PIÙ VOTATI"{return Array(b.sorted{ratingValue($0.rating)>ratingValue($1.rating)}.prefix(60))}; if mood=="POPOLARI"{return Array(b.sorted{(ratingValue($0.rating),addedValue($0.added)) > (ratingValue($1.rating),addedValue($1.added))}.prefix(60))}; return Array(b.filter{genreMatch($0.genre,mood:mood)}.prefix(60)) }
+    private var evening:[VODStream] { let suitable=session.allMovies.filter{ m in let d=durationMinutes(m.duration) ?? 110; return d>=70 && d<=150 }.sorted{ a,b in let ah=abs((a.streamID &+ eveningSeed)%997), bh=abs((b.streamID &+ eveningSeed)%997); return ah<bh }; return Array(suitable.prefix(5)) }
+    private var smartMovies:[VODStream] {
+        let favTitles=Set(session.accountFavorites.map{$0.title.lowercased()}); let histTitles=Set(session.accountWatchHistory.map{$0.title.lowercased()}); let source=session.allMovies.filter{favTitles.contains($0.name.lowercased()) || histTitles.contains($0.name.lowercased())}; let gs=source.flatMap{($0.genre ?? "").split(separator:",").map{tokens(String($0))}}; let top=Dictionary(grouping:gs,by:{$0}).mapValues{$0.count}.sorted{$0.value>$1.value}.prefix(3).map{$0.key}; guard !top.isEmpty else{return []}; return Array(session.allMovies.filter{m in !favTitles.contains(m.name.lowercased()) && top.contains{tokens(m.genre).contains($0)}}.prefix(16))
+    }
+    private var newEpisodeSeries:[SeriesItem] { let watched=session.accountWatchHistory.filter{$0.kind==ContentType.series.rawValue}; return Array(session.allSeries.filter{s in guard let lm=Double(s.lastModified ?? s.added ?? "") else{return false}; let last=watched.filter{$0.subtitle?.localizedCaseInsensitiveContains(s.name)==true}.map{$0.watchedAt.timeIntervalSince1970}.max() ?? 0; return last>0 && lm>last}.prefix(16)) }
+
+    var body: some View { ZStack{Color.black.ignoresSafeArea(); ScrollView{LazyVStack(alignment:.leading,spacing:20){
+        RebornPageHeader(title:"Discover",onBack:{dismiss()}); Text("Trova qualcosa da guardare").font(.title.bold()).foregroundStyle(.white).padding(.horizontal,16)
+        moodRail
+        if !evening.isEmpty { sectionTitle("Stasera guardo…", subtitle:"5 proposte dalla tua playlist"); horizontalMovies(evening) }
+        if !smartMovies.isEmpty { sectionTitle("Scelti per te", subtitle:"Dai generi che guardi e salvi più spesso"); horizontalMovies(smartMovies) }
+        if !newEpisodeSeries.isEmpty { sectionTitle("Nuovi episodi", subtitle:"Serie che hai già iniziato e sono state aggiornate"); horizontalSeries(newEpisodeSeries) }
+        ContinueSeriesDiscoverSection()
+        LiveNowDiscoverSection()
+        picker(scopes,selection:$scope); picker(moods,selection:$mood)
+        if (scope=="TUTTO" || scope=="FILM") && !movies.isEmpty { discoverHeader("Film · \(mood.capitalized)",count:movies.count,randomAction:{ randomFromGenre() }); movieGrid }
+        if (scope=="TUTTO" || scope=="SERIE") && !series.isEmpty { discoverHeader("Serie TV · \(mood.capitalized)",count:series.count,randomAction:{ randomFromGenre() }); seriesGrid }
+        if ((scope=="FILM"&&movies.isEmpty)||(scope=="SERIE"&&series.isEmpty)||(scope=="TUTTO"&&movies.isEmpty&&series.isEmpty)){ContentUnavailableView("Nessun titolo",systemImage:"sparkles.tv",description:Text("Nessun contenuto della playlist corrisponde a questa categoria.")).foregroundStyle(.white).padding(.top,30)}
+    }.padding(.bottom,60)}}}.toolbar(.hidden,for:.navigationBar) }
+
+    private var moodRail: some View { VStack(alignment:.leading,spacing:10){Text("Che mood hai?").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal,16); ScrollView(.horizontal,showsIndicators:false){HStack(spacing:9){ForEach(moodCards,id:\.0){card in Button{ if let hit=moods.first(where:{m in card.2.contains(where:{a in tokens(m).contains(a) || a.contains(tokens(m))})}){mood=hit} } label:{Label(card.0,systemImage:card.1).font(.caption.bold()).foregroundStyle(.white).padding(.horizontal,14).frame(height:42).background(Color.white.opacity(0.09),in:RoundedRectangle(cornerRadius:12))}.buttonStyle(.plain)}}.padding(.horizontal,16)}} }
+    private func sectionTitle(_ title:String,subtitle:String)->some View { VStack(alignment:.leading,spacing:2){Text(title).font(.headline.bold()).foregroundStyle(.white);Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.48))}.padding(.horizontal,16) }
+    private func picker(_ values:[String],selection:Binding<String>)->some View { ScrollView(.horizontal,showsIndicators:false){HStack(spacing:8){ForEach(values,id:\.self){x in Button{selection.wrappedValue=x}label:{Text(x).font(.caption.bold()).foregroundStyle(.white).padding(.horizontal,14).frame(height:34).background(selection.wrappedValue==x ? rebornRed:Color.white.opacity(0.08),in:Capsule())}.buttonStyle(.plain)}}.padding(.horizontal,16)} }
+    private func discoverHeader(_ title:String,count:Int,randomAction:@escaping()->Void)->some View { HStack{Text(title).font(.headline.bold()).foregroundStyle(.white);Spacer();Button(action:randomAction){Image(systemName:"dice.fill").foregroundStyle(.white).frame(width:34,height:34).background(Color.white.opacity(0.10),in:Circle())};Text("\(count)").font(.caption.bold()).foregroundStyle(.white.opacity(0.45))}.padding(.horizontal,16) }
+    private func randomFromGenre(){ if scope=="SERIE",let x=series.randomElement(){ mood=mood; NotificationCenter.default.post(name:Notification.Name("ATXRandomSeries"),object:x.seriesID) } else if let x=movies.randomElement(){ mood=mood; NotificationCenter.default.post(name:Notification.Name("ATXRandomMovie"),object:x.streamID) } }
+    private var movieGrid:some View { LazyVGrid(columns:[GridItem(.adaptive(minimum:104,maximum:150),spacing:8)],spacing:14){ForEach(movies){x in NavigationLink{MovieDetailView(item:x)}label:{discoverMovieCard(x)}}}.padding(.horizontal,16) }
+    private var seriesGrid:some View { LazyVGrid(columns:[GridItem(.adaptive(minimum:104,maximum:150),spacing:8)],spacing:14){ForEach(series){x in NavigationLink{SeriesDetailView(item:x)}label:{discoverSeriesCard(x)}}}.padding(.horizontal,16) }
+    private func discoverMovieCard(_ x:VODStream)->some View { VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.streamIcon,width:nil,height:170); Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1); why(rating:x.rating,genre:x.genre,duration:x.duration)} }
+    private func discoverSeriesCard(_ x:SeriesItem)->some View { VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.cover,width:nil,height:170);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1);why(rating:x.rating,genre:x.genre,duration:nil)} }
+    private func why(rating:String?,genre:String?,duration:String?)->some View { HStack(spacing:5){if let d=duration,!d.isEmpty{Text(d)};if let g=genre,!g.isEmpty{Text(g.components(separatedBy:",").first ?? g)};if ratingValue(rating)>0{Label(String(format:"%.1f",ratingValue(rating)),systemImage:"star.fill")}}.font(.caption2.bold()).foregroundStyle(.white.opacity(0.55)).lineLimit(1) }
+    private func horizontalMovies(_ items:[VODStream])->some View { ScrollView(.horizontal,showsIndicators:false){HStack(spacing:10){ForEach(items){x in NavigationLink{MovieDetailView(item:x)}label:{VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.streamIcon,width:116,height:168);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width:116,alignment:.leading);why(rating:x.rating,genre:x.genre,duration:x.duration).frame(width:116,alignment:.leading)}}.buttonStyle(.plain)}}.padding(.horizontal,16)} }
+    private func horizontalSeries(_ items:[SeriesItem])->some View { ScrollView(.horizontal,showsIndicators:false){HStack(spacing:10){ForEach(items){x in NavigationLink{SeriesDetailView(item:x)}label:{VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.cover,width:116,height:168);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width:116,alignment:.leading)}}.buttonStyle(.plain)}}.padding(.horizontal,16)} }
+}
+
+private struct ContinueSeriesDiscoverSection: View {
+    @EnvironmentObject var session:AppSession
+    private var items:[SeriesItem] { let names=session.accountWatchHistory.filter{$0.kind==ContentType.series.rawValue}.compactMap{$0.subtitle?.components(separatedBy:" • ").first}; return Array(session.allSeries.filter{s in names.contains(where:{$0.localizedCaseInsensitiveCompare(s.name) == .orderedSame})}.prefix(12)) }
+    var body:some View { if !items.isEmpty { VStack(alignment:.leading,spacing:10){Text("Continua la serie").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal,16);ScrollView(.horizontal,showsIndicators:false){HStack(spacing:10){ForEach(items){x in NavigationLink{SeriesDetailView(item:x)}label:{VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.cover,width:150,height:90);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width:150,alignment:.leading);Text("Vai al prossimo episodio").font(.caption2).foregroundStyle(.white.opacity(0.5))}}.buttonStyle(.plain)}}.padding(.horizontal,16)}} } }
+}
+
+private struct LiveNowDiscoverSection: View {
+    @EnvironmentObject var session:AppSession
+    @State private var now:[Int:String]=[:]
+    private var active:[LiveStream] { Array(session.allLive.filter{now[$0.streamID] != nil}.prefix(18)) }
+    var body:some View { if !active.isEmpty { VStack(alignment:.leading,spacing:10){Text("Live · Ora in TV").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal,16);ScrollView(.horizontal,showsIndicators:false){HStack(spacing:10){ForEach(active){x in NavigationLink{LiveDetailView(item:x)}label:{VStack(alignment:.leading,spacing:4){RebornPoster(title:x.name,imageURL:x.streamIcon,width:150,height:90);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width:150,alignment:.leading);Text(now[x.streamID] ?? "").font(.caption2).foregroundStyle(.white.opacity(0.55)).lineLimit(1).frame(width:150,alignment:.leading)}}.buttonStyle(.plain)}}.padding(.horizontal,16)}} }.task{await load()} }
+    private func load() async { await withTaskGroup(of:(Int,String?).self){group in for x in session.allLive.prefix(24){group.addTask{let e=try? await APIClient.shared.shortEPG(baseURL:session.baseURL,username:session.username,password:session.password,streamID:x.streamID,limit:3);let t=e?.first?.title;return(x.streamID,t)}};for await (id,t) in group{if let t,!t.isEmpty{now[id]=t}}} }
 }
 
 private struct ATXRandomPlayView: View {
-    @EnvironmentObject var session: AppSession
-    @Environment(\.dismiss) private var dismiss
-    @State private var movie: VODStream?
-    @State private var series: SeriesItem?
-    @State private var chooseSeries = false
-
-    var body: some View {
-        ZStack { Color.black.ignoresSafeArea()
-            VStack(spacing:24) {
-                RebornPageHeader(title:"Scelta casuale",onBack:{dismiss()})
-                Spacer()
-                Image(systemName:"dice.fill").font(.system(size:64)).foregroundStyle(rebornRed)
-                if let movie {
-                    Text(movie.name).font(.title.bold()).foregroundStyle(.white).multilineTextAlignment(.center)
-                    NavigationLink { MovieDetailView(item:movie) } label: {
-                        Text("VEDI FILM").font(.headline.bold()).foregroundStyle(.black)
-                            .padding(.horizontal,30).frame(height:48).background(.white,in:Capsule())
-                    }
-                } else if let series {
-                    Text(series.name).font(.title.bold()).foregroundStyle(.white).multilineTextAlignment(.center)
-                    NavigationLink { SeriesDetailView(item:series) } label: {
-                        Text("VEDI SERIE").font(.headline.bold()).foregroundStyle(.black)
-                            .padding(.horizontal,30).frame(height:48).background(.white,in:Capsule())
-                    }
-                }
-                Button { roll() } label: {
-                    Label("SCEGLI DI NUOVO",systemImage:"arrow.clockwise")
-                        .font(.subheadline.bold()).foregroundStyle(.white)
-                }.buttonStyle(.plain)
-                Spacer()
-            }.padding(.horizontal,18)
-        }.toolbar(.hidden,for:.navigationBar).onAppear{roll()}
-    }
-
-    private func roll() {
-        chooseSeries.toggle()
-        if chooseSeries, let x=session.allSeries.randomElement() { series=x; movie=nil }
-        else if let x=session.allMovies.randomElement() { movie=x; series=nil }
-    }
+    @EnvironmentObject var session:AppSession; @Environment(\.dismiss) private var dismiss
+    @State private var movie:VODStream?; @State private var series:SeriesItem?; @State private var chooseSeries=false
+    var body:some View { ZStack{Color.black.ignoresSafeArea();ScrollView{VStack(spacing:18){RebornPageHeader(title:"Sorprendimi",onBack:{dismiss()});if let movie{randomMovieCard(movie)}else if let series{randomSeriesCard(series)}else{ProgressView().tint(.white).padding(.top,80)};Button{roll()}label:{Label("UN'ALTRA SORPRESA",systemImage:"dice.fill").font(.headline.bold()).foregroundStyle(.white).frame(maxWidth:.infinity).frame(height:50).background(rebornRed,in:Capsule())}.buttonStyle(.plain).padding(.horizontal,22)}.padding(.bottom,50)}}.toolbar(.hidden,for:.navigationBar).onAppear{roll()} }
+    private func randomMovieCard(_ x:VODStream)->some View { VStack(spacing:14){RebornPoster(title:x.name,imageURL:x.streamIcon,width:230,height:345);Text(x.name).font(.title2.bold()).foregroundStyle(.white).multilineTextAlignment(.center);metadata(rating:x.rating,genre:x.genre,date:x.releaseDate,duration:x.duration);if let p=x.plot,!p.isEmpty{Text(p).font(.subheadline).foregroundStyle(.white.opacity(0.7)).lineLimit(5).multilineTextAlignment(.center).padding(.horizontal,24)};NavigationLink{MovieDetailView(item:x)}label:{Label("DETTAGLI E GUARDA",systemImage:"play.fill").font(.headline.bold()).foregroundStyle(.black).padding(.horizontal,26).frame(height:48).background(.white,in:Capsule())}} }
+    private func randomSeriesCard(_ x:SeriesItem)->some View { VStack(spacing:14){RebornPoster(title:x.name,imageURL:x.cover,width:230,height:345);Text(x.name).font(.title2.bold()).foregroundStyle(.white).multilineTextAlignment(.center);metadata(rating:x.rating,genre:x.genre,date:x.releaseDate,duration:nil);if let p=x.plot,!p.isEmpty{Text(p).font(.subheadline).foregroundStyle(.white.opacity(0.7)).lineLimit(5).multilineTextAlignment(.center).padding(.horizontal,24)};NavigationLink{SeriesDetailView(item:x)}label:{Label("DETTAGLI E GUARDA",systemImage:"play.fill").font(.headline.bold()).foregroundStyle(.black).padding(.horizontal,26).frame(height:48).background(.white,in:Capsule())}} }
+    private func metadata(rating:String?,genre:String?,date:String?,duration:String?)->some View { HStack(spacing:8){if let r=rating,!r.isEmpty{Label(r,systemImage:"star.fill").foregroundStyle(.yellow)};if let d=date,!d.isEmpty{Text(String(d.prefix(4)))};if let g=genre,!g.isEmpty{Text(g.components(separatedBy:",").first ?? g).lineLimit(1)};if let d=duration,!d.isEmpty{Text(d)}}.font(.caption.bold()).foregroundStyle(.white.opacity(0.7)).padding(.horizontal,16) }
+    private func roll(){chooseSeries.toggle();if chooseSeries,let x=session.allSeries.randomElement(){series=x;movie=nil}else if let x=session.allMovies.randomElement(){movie=x;series=nil}else if let x=session.allSeries.randomElement(){series=x;movie=nil}}
 }
 
 private struct ATXStatsView: View {
