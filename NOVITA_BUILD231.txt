@@ -1,0 +1,6 @@
+ATX Player 5.2 - Build 231
+- Rimossa completamente la funzione Ora in TV dalla Diretta e da Per Te.
+- Aggiunti filtri rapidi Live: Categoria, Preferiti, Ultimi canali.
+- Ultimi canali conserva gli ultimi 15 canali aperti per account.
+- Lista Live: EPG corrente + programma successivo (Dopo) quando disponibile.
+- Player non modificato.

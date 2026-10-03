@@ -348,6 +348,23 @@ final class AppSession: ObservableObject {
             .sorted { $0.addedAt > $1.addedAt }
     }
 
+    var recentLiveChannels: [LiveStream] {
+        let ids = UserDefaults.standard.array(forKey: recentLiveKey) as? [Int] ?? []
+        let byID = Dictionary(uniqueKeysWithValues: allLive.map { ($0.streamID, $0) })
+        return ids.compactMap { byID[$0] }
+    }
+
+    func recordRecentLive(_ item: LiveStream) {
+        var ids = UserDefaults.standard.array(forKey: recentLiveKey) as? [Int] ?? []
+        ids.removeAll { $0 == item.streamID }
+        ids.insert(item.streamID, at: 0)
+        UserDefaults.standard.set(Array(ids.prefix(15)), forKey: recentLiveKey)
+    }
+
+    private var recentLiveKey: String {
+        "atlantix-recent-live-\(accessCode)"
+    }
+
     func isFavorite(kind: ContentType, streamID: Int) -> Bool {
         favorites.contains { $0.id == favoriteKey(kind: kind, streamID: streamID) }
     }

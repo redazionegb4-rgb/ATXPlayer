@@ -2086,7 +2086,7 @@ struct LiveDetailView: View {
             Button { dismiss() } label: { Image(systemName: "chevron.left").font(.headline.bold()).foregroundStyle(.white).frame(width: 44, height: 44).background(Color.black.opacity(0.58), in: Circle()) }
                 .buttonStyle(.plain).padding(.leading, 14).padding(.top, 8)
         }
-        .task { await loadEPG() }
+        .task { session.recordRecentLive(item); await loadEPG() }
     }
 
     private var hero: some View {
@@ -4796,6 +4796,8 @@ private struct RebornHomeView: View {
     }
 }
 
+private enum RebornLiveFilter { case category, favorites, recent }
+
 private struct RebornCatalogView: View {
     @EnvironmentObject var session: AppSession
     let type: ContentType
@@ -4803,8 +4805,7 @@ private struct RebornCatalogView: View {
     @State private var search = ""
     @State private var showSearch = false
     @State private var showCategories = false
-    @State private var nowOnTV: [RebornNowOnTVItem] = []
-    @State private var loadingNowOnTV = false
+    @State private var liveFilter: RebornLiveFilter = .category
 
     private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
@@ -4818,7 +4819,17 @@ private struct RebornCatalogView: View {
         session.allSeries.filter { (selectedCategory == nil || $0.categoryID == selectedCategory) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
     }
     private var live: [LiveStream] {
-        session.allLive.filter { (selectedCategory == nil || $0.categoryID == selectedCategory) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
+        let source: [LiveStream]
+        switch liveFilter {
+        case .category:
+            source = session.allLive.filter { selectedCategory == nil || $0.categoryID == selectedCategory }
+        case .favorites:
+            let ids = Set(session.accountFavorites.filter { $0.kind == ContentType.live.rawValue }.map(\.streamID))
+            source = session.allLive.filter { ids.contains($0.streamID) }
+        case .recent:
+            source = session.recentLiveChannels
+        }
+        return source.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
     }
 
     var body: some View {
@@ -4829,7 +4840,7 @@ private struct RebornCatalogView: View {
                     header
                     categorySelector
                     if type == .live {
-                        nowOnTVSection
+                        liveQuickFilters
                         liveWall
                     } else { posterWall }
                 }.padding(.bottom, 110)
@@ -4840,9 +4851,6 @@ private struct RebornCatalogView: View {
         .sheet(isPresented: $showCategories) { categorySheet }
         .onAppear { selectFirstCategoryIfNeeded() }
         .onChange(of: categories.map(\.categoryID)) { _ in selectFirstCategoryIfNeeded() }
-        .task(id: type == .live ? "live-\(selectedCategory ?? "all")-\(session.allLive.count)" : "catalog") {
-            if type == .live { await loadNowOnTV() }
-        }
     }
 
     private func selectFirstCategoryIfNeeded() {
@@ -4897,7 +4905,7 @@ private struct RebornCatalogView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(categories) { c in
-                            Button { selectedCategory = c.categoryID; showCategories = false } label: {
+                            Button { selectedCategory = c.categoryID; liveFilter = .category; showCategories = false } label: {
                                 HStack {
                                     Text(c.categoryName).font(.body.weight(selectedCategory == c.categoryID ? .bold : .regular)).foregroundStyle(.white)
                                     Spacer()
@@ -4931,146 +4939,25 @@ private struct RebornCatalogView: View {
         }.padding(.horizontal, 12)
     }
 
-    @ViewBuilder
-    private var nowOnTVSection: some View {
-        if !nowOnTV.isEmpty || loadingNowOnTV {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("ORA IN TV").font(.system(size: 20, weight: .black)).foregroundStyle(.white)
-                        Text("In onda adesso · tocca per guardare").font(.caption).foregroundStyle(rebornMuted)
-                    }
-                    Spacer()
-                    if loadingNowOnTV { ProgressView().tint(.white) }
-                }.padding(.horizontal, 16)
-
-                if !nowOnTV.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 10) {
-                            ForEach(nowOnTV) { entry in
-                                NavigationLink { LiveDetailView(item: entry.channel) } label: {
-                                    RebornNowOnTVCard(entry: entry)
-                                }.buttonStyle(.plain)
-                            }
-                        }.padding(.horizontal, 16)
-                    }
-                }
+    private var liveQuickFilters: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                liveFilterChip(.category, title: "Categoria", icon: "rectangle.stack.fill")
+                liveFilterChip(.favorites, title: "Preferiti", icon: "star.fill")
+                liveFilterChip(.recent, title: "Ultimi canali", icon: "clock.arrow.circlepath")
             }
+            .padding(.horizontal, 16)
         }
     }
 
-    @MainActor
-    private func loadNowOnTV() async {
-        guard type == .live else { return }
-        loadingNowOnTV = true
-        // ORA IN TV deve essere un mix editoriale delle categorie Live principali,
-        // non i primi stream della categoria selezionata. Cerchiamo fino a 6 candidati
-        // per categoria per avere margine se alcuni non hanno EPG, poi mostriamo max 2
-        // canali distinti per ciascun gruppo (10 card totali), mescolati tra loro.
-        let wantedGroups: [(key: String, aliases: [String])] = [
-            ("ITALIA", ["ITALIA"]),
-            ("SKY CINEMA", ["SKY CINEMA", "CINEMA SKY"]),
-            ("SKY SPORT", ["SKY SPORT"]),
-            ("SKY CALCIO", ["SKY CALCIO", "SKY CALCIO"]),
-            ("INTRATTENIMENTO", ["INTRATTENIMENTO", "ENTERTAINMENT"])
-        ]
-        func normalizedChannelName(_ raw: String) -> String {
-            var value = raw.uppercased()
-            let qualityTokens = ["4K", "UHD", "FHD", "FULL HD", "FULLHD", "1080P", "1080I", "720P", "HD", "SD", "HEVC", "H265", "H.265", "H264", "H.264"]
-            for token in qualityTokens { value = value.replacingOccurrences(of: token, with: " ") }
-            value = value.replacingOccurrences(of: "[^A-Z0-9À-ÖØ-Ý]+", with: " ", options: .regularExpression)
-            return value.split(separator: " ").joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        func qualityScore(_ name: String) -> Int {
-            let n = name.uppercased()
-            if n.contains("4K") || n.contains("UHD") { return 5 }
-            if n.contains("FHD") || n.contains("FULL HD") || n.contains("FULLHD") || n.contains("1080") { return 4 }
-            if n.contains("HD") || n.contains("720") { return 3 }
-            if n.contains("HEVC") || n.contains("H265") || n.contains("H.265") { return 2 }
-            if n.contains("SD") { return 1 }
-            return 2
-        }
-
-        var candidateGroupByStreamID: [Int: String] = [:]
-        var candidates: [LiveStream] = []
-        for wanted in wantedGroups {
-            let categoryIDs = session.liveCategories.filter { category in
-                let name = category.categoryName.uppercased()
-                return wanted.aliases.contains { name.contains($0) }
-            }.map(\.categoryID)
-            guard !categoryIDs.isEmpty else { continue }
-
-            let matching = session.allLive.filter { channel in
-                guard let cid = channel.categoryID else { return false }
-                return categoryIDs.contains(cid)
-            }
-
-            // Deduplica le diverse risoluzioni dello stesso canale e conserva la migliore.
-            var bestByName: [String: LiveStream] = [:]
-            for channel in matching {
-                let key = normalizedChannelName(channel.name)
-                guard !key.isEmpty else { continue }
-                if let existing = bestByName[key] {
-                    if qualityScore(channel.name) > qualityScore(existing.name) { bestByName[key] = channel }
-                } else {
-                    bestByName[key] = channel
-                }
-            }
-            let groupCandidates = bestByName.values
-                .sorted { lhs, rhs in
-                    let lepg = (lhs.epgChannelID?.isEmpty == false) ? 1 : 0
-                    let repg = (rhs.epgChannelID?.isEmpty == false) ? 1 : 0
-                    if lepg != repg { return lepg > repg }
-                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-                }
-                .prefix(6)
-            for channel in groupCandidates {
-                candidates.append(channel)
-                candidateGroupByStreamID[channel.streamID] = wanted.key
-            }
-        }
-
-        let baseURL = session.baseURL, username = session.username, password = session.password
-        let results = await withTaskGroup(of: RebornNowOnTVItem?.self) { group in
-            for channel in candidates {
-                group.addTask {
-                    do {
-                        let listings = try await APIClient.shared.shortEPG(baseURL: baseURL, username: username, password: password, streamID: channel.streamID, limit: 5)
-                        let now = Date().timeIntervalSince1970
-                        guard let idx = listings.firstIndex(where: { listing in
-                            guard let a = listing.startTimestamp.flatMap(TimeInterval.init), let b = listing.stopTimestamp.flatMap(TimeInterval.init) else { return false }
-                            return a <= now && now < b
-                        }) else { return nil }
-                        let current = listings[idx]
-                        guard let title = current.title, !title.isEmpty else { return nil }
-                        let next = listings.indices.contains(idx + 1) ? listings[idx + 1] : nil
-                        return RebornNowOnTVItem(channel: channel, title: title, nextTitle: next?.title, start: current.startTimestamp.flatMap(TimeInterval.init), stop: current.stopTimestamp.flatMap(TimeInterval.init))
-                    } catch { return nil }
-                }
-            }
-            var values: [RebornNowOnTVItem] = []
-            for await value in group { if let value { values.append(value) } }
-            return values
-        }
-        // Massimo 2 card per categoria, poi interleave: ITALIA → SKY CINEMA → SKY SPORT
-        // → SKY CALCIO → INTRATTENIMENTO e secondo giro. In questo modo la riga è davvero mista.
-        var buckets: [String: [RebornNowOnTVItem]] = [:]
-        for item in results {
-            guard let groupKey = candidateGroupByStreamID[item.channel.streamID] else { continue }
-            buckets[groupKey, default: []].append(item)
-        }
-        for key in buckets.keys {
-            buckets[key]?.sort { $0.channel.name.localizedCaseInsensitiveCompare($1.channel.name) == .orderedAscending }
-        }
-        var mixed: [RebornNowOnTVItem] = []
-        for round in 0..<2 {
-            for wanted in wantedGroups {
-                if let bucket = buckets[wanted.key], bucket.indices.contains(round) { mixed.append(bucket[round]) }
-            }
-        }
-        nowOnTV = mixed
-        loadingNowOnTV = false
+    private func liveFilterChip(_ filter: RebornLiveFilter, title: String, icon: String) -> some View {
+        Button { liveFilter = filter } label: {
+            Label(title, systemImage: icon)
+                .font(.caption.bold())
+                .foregroundStyle(liveFilter == filter ? Color.black : Color.white)
+                .padding(.horizontal, 13).frame(height: 36)
+                .background(liveFilter == filter ? Color.white : Color.white.opacity(0.08), in: Capsule())
+        }.buttonStyle(.plain)
     }
 
     private var liveWall: some View {
@@ -5079,44 +4966,6 @@ private struct RebornCatalogView: View {
                 NavigationLink { LiveDetailView(item: item) } label: { RebornLiveRow(item: item) }.buttonStyle(.plain)
             }
         }.padding(.horizontal, 12)
-    }
-}
-
-private struct RebornNowOnTVItem: Identifiable {
-    let channel: LiveStream
-    let title: String
-    let nextTitle: String?
-    let start: TimeInterval?
-    let stop: TimeInterval?
-    var id: Int { channel.streamID }
-    var progress: Double {
-        guard let start, let stop, stop > start else { return 0 }
-        return min(1, max(0, (Date().timeIntervalSince1970 - start) / (stop - start)))
-    }
-}
-
-private struct RebornNowOnTVCard: View {
-    let entry: RebornNowOnTVItem
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 9) {
-                OptimizedAsyncImage(url: URL(string: entry.channel.streamIcon ?? "")) { phase in
-                    if let image = phase.image { image.resizable().scaledToFit().padding(5) }
-                    else { Image(systemName: "tv.fill").foregroundStyle(.white.opacity(0.7)) }
-                }
-                .frame(width: 50, height: 42).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.channel.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1)
-                    Text(entry.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white).lineLimit(2)
-                }
-            }
-            ProgressView(value: entry.progress).tint(rebornRed)
-            if let next = entry.nextTitle, !next.isEmpty {
-                Text("A seguire: \(next)").font(.caption2).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
-            }
-        }
-        .padding(11).frame(width: 250, height: 126, alignment: .topLeading)
-        .background(rebornCard, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -5161,6 +5010,7 @@ private struct RebornLiveRow: View {
     @EnvironmentObject private var session: AppSession
     let item: LiveStream
     @State private var currentEPGTitle: String?
+    @State private var nextEPGTitle: String?
     @State private var epgLoaded = false
 
     var body: some View {
@@ -5178,7 +5028,10 @@ private struct RebornLiveRow: View {
                         Image(systemName: "clock.fill").font(.system(size: 9))
                         Text(currentEPGTitle).font(.caption).lineLimit(1)
                     }
-                    .foregroundStyle(.white.opacity(0.62))
+                    .foregroundStyle(.white.opacity(0.68))
+                }
+                if let nextEPGTitle, !nextEPGTitle.isEmpty {
+                    Text("Dopo: \(nextEPGTitle)").font(.caption2).foregroundStyle(.white.opacity(0.42)).lineLimit(1)
                 }
             }
             Spacer()
@@ -5200,8 +5053,14 @@ private struct RebornLiveRow: View {
                 return a <= now && now < b
             } ?? listings.first
             currentEPGTitle = current?.title
+            if let current, let index = listings.firstIndex(where: { $0.listID == current.listID }), listings.indices.contains(index + 1) {
+                nextEPGTitle = listings[index + 1].title
+            } else {
+                nextEPGTitle = nil
+            }
         } catch {
             currentEPGTitle = nil
+            nextEPGTitle = nil
         }
     }
 }
@@ -5785,7 +5644,6 @@ private struct ATXForYouView: View {
                         }.padding(14).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
                     }.buttonStyle(.plain).padding(.horizontal, 16)
 
-                    LiveNowDiscoverSection()
                     Spacer(minLength: 70)
                 }
             }
@@ -5841,81 +5699,6 @@ private struct ContinueSeriesDiscoverSection: View {
     @EnvironmentObject var session:AppSession
     private var items:[SeriesItem] { let names=session.accountWatchHistory.filter{$0.kind==ContentType.series.rawValue}.compactMap{$0.subtitle?.components(separatedBy:" • ").first}; return Array(session.allSeries.filter{s in names.contains(where:{$0.localizedCaseInsensitiveCompare(s.name) == .orderedSame})}.prefix(12)) }
     var body:some View { if !items.isEmpty { VStack(alignment:.leading,spacing:10){Text("Continua la serie").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal,16);ScrollView(.horizontal,showsIndicators:false){HStack(spacing:10){ForEach(items){x in NavigationLink{SeriesDetailView(item:x)}label:{VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.cover,width:150,height:90);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width:150,alignment:.leading);Text("Vai al prossimo episodio").font(.caption2).foregroundStyle(.white.opacity(0.5))}}.buttonStyle(.plain)}}.padding(.horizontal,16)}} } }
-}
-
-private struct LiveNowDiscoverSection: View {
-    @EnvironmentObject var session: AppSession
-    @State private var now: [Int: String] = [:]
-
-    private var activeChannels: [LiveStream] {
-        Array(session.allLive.filter { now[$0.streamID] != nil }.prefix(18))
-    }
-
-    var body: some View {
-        Group {
-            if activeChannels.isEmpty {
-                EmptyView()
-            } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Live · Ora in TV")
-                        .font(.headline.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(activeChannels) { item in
-                                NavigationLink {
-                                    LiveDetailView(item: item)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        RebornPoster(title: item.name, imageURL: item.streamIcon, width: 150, height: 90)
-                                        Text(item.name)
-                                            .font(.caption.bold())
-                                            .foregroundStyle(.white)
-                                            .lineLimit(1)
-                                            .frame(width: 150, alignment: .leading)
-                                        Text(now[item.streamID] ?? "")
-                                            .font(.caption2)
-                                            .foregroundStyle(.white.opacity(0.55))
-                                            .lineLimit(1)
-                                            .frame(width: 150, alignment: .leading)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                    }
-                }
-            }
-        }
-        .onAppear {
-            Task { await loadCurrentEPG() }
-        }
-    }
-
-    private func loadCurrentEPG() async {
-        await withTaskGroup(of: (Int, String?).self) { group in
-            for item in session.allLive.prefix(24) {
-                group.addTask {
-                    let epg = try? await APIClient.shared.shortEPG(
-                        baseURL: session.baseURL,
-                        username: session.username,
-                        password: session.password,
-                        streamID: item.streamID,
-                        limit: 3
-                    )
-                    return (item.streamID, epg?.first?.title)
-                }
-            }
-            for await (id, title) in group {
-                if let title = title, !title.isEmpty {
-                    await MainActor.run { now[id] = title }
-                }
-            }
-        }
-    }
 }
 
 private struct ATXRandomPlayView: View {
