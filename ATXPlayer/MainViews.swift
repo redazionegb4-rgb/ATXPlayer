@@ -4963,7 +4963,74 @@ private struct RebornCatalogView: View {
     private func loadNowOnTV() async {
         guard type == .live else { return }
         loadingNowOnTV = true
-        let candidates = Array(live.prefix(16))
+        // ORA IN TV deve essere un mix editoriale delle categorie Live principali,
+        // non i primi stream della categoria selezionata. Cerchiamo fino a 6 candidati
+        // per categoria per avere margine se alcuni non hanno EPG, poi mostriamo max 2
+        // canali distinti per ciascun gruppo (10 card totali), mescolati tra loro.
+        let wantedGroups: [(key: String, aliases: [String])] = [
+            ("ITALIA", ["ITALIA"]),
+            ("SKY CINEMA", ["SKY CINEMA", "CINEMA SKY"]),
+            ("SKY SPORT", ["SKY SPORT"]),
+            ("SKY CALCIO", ["SKY CALCIO", "SKY CALCIO"]),
+            ("INTRATTENIMENTO", ["INTRATTENIMENTO", "ENTERTAINMENT"])
+        ]
+        func normalizedChannelName(_ raw: String) -> String {
+            var value = raw.uppercased()
+            let qualityTokens = ["4K", "UHD", "FHD", "FULL HD", "FULLHD", "1080P", "1080I", "720P", "HD", "SD", "HEVC", "H265", "H.265", "H264", "H.264"]
+            for token in qualityTokens { value = value.replacingOccurrences(of: token, with: " ") }
+            value = value.replacingOccurrences(of: "[^A-Z0-9À-ÖØ-Ý]+", with: " ", options: .regularExpression)
+            return value.split(separator: " ").joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        func qualityScore(_ name: String) -> Int {
+            let n = name.uppercased()
+            if n.contains("4K") || n.contains("UHD") { return 5 }
+            if n.contains("FHD") || n.contains("FULL HD") || n.contains("FULLHD") || n.contains("1080") { return 4 }
+            if n.contains("HD") || n.contains("720") { return 3 }
+            if n.contains("HEVC") || n.contains("H265") || n.contains("H.265") { return 2 }
+            if n.contains("SD") { return 1 }
+            return 2
+        }
+
+        var candidateGroupByStreamID: [Int: String] = [:]
+        var candidates: [LiveStream] = []
+        for wanted in wantedGroups {
+            let categoryIDs = session.liveCategories.filter { category in
+                let name = category.categoryName.uppercased()
+                return wanted.aliases.contains { name.contains($0) }
+            }.map(\.categoryID)
+            guard !categoryIDs.isEmpty else { continue }
+
+            let matching = session.allLive.filter { channel in
+                guard let cid = channel.categoryID else { return false }
+                return categoryIDs.contains(cid)
+            }
+
+            // Deduplica le diverse risoluzioni dello stesso canale e conserva la migliore.
+            var bestByName: [String: LiveStream] = [:]
+            for channel in matching {
+                let key = normalizedChannelName(channel.name)
+                guard !key.isEmpty else { continue }
+                if let existing = bestByName[key] {
+                    if qualityScore(channel.name) > qualityScore(existing.name) { bestByName[key] = channel }
+                } else {
+                    bestByName[key] = channel
+                }
+            }
+            let groupCandidates = bestByName.values
+                .sorted { lhs, rhs in
+                    let lepg = (lhs.epgChannelID?.isEmpty == false) ? 1 : 0
+                    let repg = (rhs.epgChannelID?.isEmpty == false) ? 1 : 0
+                    if lepg != repg { return lepg > repg }
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                }
+                .prefix(6)
+            for channel in groupCandidates {
+                candidates.append(channel)
+                candidateGroupByStreamID[channel.streamID] = wanted.key
+            }
+        }
+
         let baseURL = session.baseURL, username = session.username, password = session.password
         let results = await withTaskGroup(of: RebornNowOnTVItem?.self) { group in
             for channel in candidates {
@@ -4986,7 +5053,23 @@ private struct RebornCatalogView: View {
             for await value in group { if let value { values.append(value) } }
             return values
         }
-        nowOnTV = results.sorted { $0.channel.name.localizedCaseInsensitiveCompare($1.channel.name) == .orderedAscending }
+        // Massimo 2 card per categoria, poi interleave: ITALIA → SKY CINEMA → SKY SPORT
+        // → SKY CALCIO → INTRATTENIMENTO e secondo giro. In questo modo la riga è davvero mista.
+        var buckets: [String: [RebornNowOnTVItem]] = [:]
+        for item in results {
+            guard let groupKey = candidateGroupByStreamID[item.channel.streamID] else { continue }
+            buckets[groupKey, default: []].append(item)
+        }
+        for key in buckets.keys {
+            buckets[key]?.sort { $0.channel.name.localizedCaseInsensitiveCompare($1.channel.name) == .orderedAscending }
+        }
+        var mixed: [RebornNowOnTVItem] = []
+        for round in 0..<2 {
+            for wanted in wantedGroups {
+                if let bucket = buckets[wanted.key], bucket.indices.contains(round) { mixed.append(bucket[round]) }
+            }
+        }
+        nowOnTV = mixed
         loadingNowOnTV = false
     }
 

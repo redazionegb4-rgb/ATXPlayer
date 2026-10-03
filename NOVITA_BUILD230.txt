@@ -1,0 +1,10 @@
+ATX Player 5.2 — Build 230
+
+ORA IN TV
+- Mix reale tra categorie: ITALIA, SKY CINEMA, SKY SPORT, SKY CALCIO, INTRATTENIMENTO.
+- Fino a 2 canali per categoria, massimo 10 card, intercalate tra le categorie.
+- Selezione effettuata su tutti i canali Live, indipendentemente dalla categoria aperta nella schermata Diretta.
+- Mostrati solo canali per cui viene trovato un programma EPG attualmente in onda.
+- Deduplica automatica delle varianti 4K/UHD/FHD/HD/SD/HEVC/H.265/H.264 dello stesso canale.
+- In caso di duplicati viene preferita la variante con qualità più alta.
+- Player non modificato.
