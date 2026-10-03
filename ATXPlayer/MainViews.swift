@@ -382,7 +382,14 @@ struct MainTabView: View {
             if !playerPresented {
                 RebornTabBar(selectedTab: $selectedTab, showsLive: !session.allLive.isEmpty)
             }
+
+            if let message = session.pendingAppMessage {
+                ATXBroadcastPopup(message: message)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(999)
+            }
         }
+        .animation(.easeInOut(duration: 0.22), value: session.pendingAppMessage?.id)
         .environment(\.atxPlayerPresented, $playerPresented)
         .preferredColorScheme(.dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -392,6 +399,7 @@ struct MainTabView: View {
             while !Task.isCancelled && session.isAuthenticated {
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
                 await session.validateRemoteAuthorization()
+                await session.checkAppMessages()
             }
         }
         .onChange(of: selectedTab) { _ in
@@ -401,7 +409,10 @@ struct MainTabView: View {
             if !authenticated { ActivePlaybackRegistry.shared.stopCurrent() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            Task { await session.validateRemoteAuthorization() }
+            Task {
+                await session.validateRemoteAuthorization()
+                await session.checkAppMessages()
+            }
         }
         .onChange(of: session.allLive.isEmpty) { isEmpty in
             // Se dopo login/refresh l'account non ha canali Live, evita di lasciare
@@ -5892,5 +5903,40 @@ private struct RebornPageHeader: View {
             Text(title).font(.system(size: 28, weight: .black)).foregroundStyle(.white)
             Spacer()
         }.padding(.horizontal, 12).padding(.top, 8)
+    }
+}
+
+
+struct ATXBroadcastPopup: View {
+    @EnvironmentObject var session: AppSession
+    let message: ATXAppMessage
+    private var accent: Color { message.kind == "important" ? .red : message.kind == "warning" ? .orange : Color(red: 0.45, green: 0.34, blue: 1) }
+    private var icon: String { message.kind == "important" ? "exclamationmark.triangle.fill" : message.kind == "warning" ? "bell.badge.fill" : "sparkles" }
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.72).ignoresSafeArea().onTapGesture { }
+            VStack(spacing: 0) {
+                ZStack {
+                    Circle().fill(accent.opacity(0.16)).frame(width: 76, height: 76)
+                    Circle().stroke(accent.opacity(0.35), lineWidth: 1).frame(width: 76, height: 76)
+                    Image(systemName: icon).font(.system(size: 29, weight: .bold)).foregroundStyle(accent)
+                }.padding(.top, 28)
+                Text("ATX PLAYER").font(.caption2.weight(.black)).tracking(2.2).foregroundStyle(.secondary).padding(.top, 18)
+                Text(message.title).font(.title3.weight(.bold)).multilineTextAlignment(.center).padding(.horizontal, 24).padding(.top, 7)
+                Text(message.body).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(4).padding(.horizontal, 24).padding(.top, 10)
+                if let label = message.button_title, !label.isEmpty, let raw = message.button_url, let url = URL(string: raw) {
+                    Link(destination: url) { Text(label.uppercased()).font(.subheadline.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, 14).background(accent).foregroundStyle(.white).clipShape(RoundedRectangle(cornerRadius: 14)) }.padding(.horizontal, 20).padding(.top, 22)
+                }
+                Button { session.dismissAppMessage(message) } label: {
+                    Text("HO CAPITO").font(.subheadline.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, 14).background(Color.white.opacity(0.08)).foregroundStyle(.primary).clipShape(RoundedRectangle(cornerRadius: 14))
+                }.padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 20)
+            }
+            .frame(maxWidth: 390)
+            .background(.ultraThinMaterial)
+            .overlay(RoundedRectangle(cornerRadius: 28).stroke(Color.white.opacity(0.12), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .shadow(color: .black.opacity(0.5), radius: 36, y: 18)
+            .padding(.horizontal, 24)
+        }
     }
 }

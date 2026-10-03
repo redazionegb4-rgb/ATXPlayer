@@ -31,6 +31,18 @@ actor APIClient {
         catch { throw APIError.invalidResponse }
     }
 
+    func appMessages() async throws -> [ATXAppMessage] {
+        var components = URLComponents(url: remoteAccessURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "action", value: "messages"), URLQueryItem(name: "platform", value: "ios")]
+        guard let url = components.url else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 10
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(ATXMessagesResponse.self, from: data).messages
+    }
+
     func login(baseURL: String, username: String, password: String) async throws -> LoginResponse {
         try await request(baseURL: baseURL, username: username, password: password, action: nil)
     }
@@ -117,3 +129,20 @@ enum APIError: LocalizedError {
 }
 
 struct RemoteLineResponse: Codable { let found: Bool; let active: Bool; let username: String; let password: String; let message: String? }
+
+
+struct ATXMessagesResponse: Codable { let messages: [ATXAppMessage] }
+struct ATXAppMessage: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let body: String
+    let kind: String
+    let platform: String
+    let active: Bool
+    let start_at: String?
+    let expires_at: String?
+    let button_title: String?
+    let button_url: String?
+    let created_at: String?
+    let updated_at: String?
+}

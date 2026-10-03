@@ -98,6 +98,7 @@ final class AppSession: ObservableObject {
     @Published private(set) var playbackProgress: [PlaybackProgress] = []
     @Published private(set) var favorites: [FavoriteItem] = []
     @Published private(set) var watchHistory: [WatchHistoryItem] = []
+    @Published var pendingAppMessage: ATXAppMessage?
 
     var colorScheme: ColorScheme? { appearance == "light" ? .light : appearance == "dark" ? .dark : nil }
 
@@ -167,6 +168,24 @@ final class AppSession: ObservableObject {
             // Un errore di rete temporaneo non espelle il cliente: la sospensione deve
             // essere confermata dall'API remota.
         }
+    }
+
+    func checkAppMessages() async {
+        guard isAuthenticated, pendingAppMessage == nil else { return }
+        do {
+            let messages = try await APIClient.shared.appMessages()
+            let seen = Set(UserDefaults.standard.stringArray(forKey: "atxSeenMessageIDs") ?? [])
+            if let next = messages.first(where: { !seen.contains($0.id) }) { pendingAppMessage = next }
+        } catch { }
+    }
+
+    func dismissAppMessage(_ message: ATXAppMessage) {
+        var seen = UserDefaults.standard.stringArray(forKey: "atxSeenMessageIDs") ?? []
+        if !seen.contains(message.id) { seen.append(message.id) }
+        if seen.count > 200 { seen = Array(seen.suffix(200)) }
+        UserDefaults.standard.set(seen, forKey: "atxSeenMessageIDs")
+        pendingAppMessage = nil
+        Task { await checkAppMessages() }
     }
 
     func reloadRemoteAccess() async {
