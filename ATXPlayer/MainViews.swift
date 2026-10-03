@@ -4742,12 +4742,12 @@ private struct RebornHomeView: View {
                             subtitle: "Fino a 4 canali insieme"
                         )
                     }
-                    NavigationLink { ATXDiscoverView() } label: {
+                    NavigationLink { ATXForYouView() } label: {
                         RebornFeatureHeroCard(
-                            icon: "sparkles.tv.fill",
-                            eyebrow: "PER TE",
-                            title: "Discover",
-                            subtitle: "Scegli cosa guardare"
+                            icon: "person.crop.circle.fill.badge.checkmark",
+                            eyebrow: "PERSONALE",
+                            title: "Per Te",
+                            subtitle: "Riprendi e trova il prossimo titolo"
                         )
                     }
                     NavigationLink { ATXRandomPlayView() } label: {
@@ -5229,7 +5229,7 @@ private struct ATXFeatureHubView: View {
                         Text("Più di un semplice player.")
                             .font(.system(size: 31, weight: .black, design: .rounded))
                             .foregroundStyle(.white)
-                        Text("MultiView, Discover, scelta casuale e statistiche: tutte le nuove esperienze sono qui.")
+                        Text("MultiView, Per Te, scelta casuale e statistiche: tutte le nuove esperienze sono qui.")
                             .font(.subheadline).foregroundStyle(.white.opacity(0.58))
                     }.padding(.horizontal, 16)
 
@@ -5237,9 +5237,9 @@ private struct ATXFeatureHubView: View {
                         ATXFeatureCard(icon: "square.grid.2x2.fill", title: "MultiView Live",
                                        subtitle: "Seleziona da 2 a 4 canali e guardali contemporaneamente.", badge: "LIVE")
                     }
-                    NavigationLink { ATXDiscoverView() } label: {
-                        ATXFeatureCard(icon: "sparkles.tv.fill", title: "ATX Discover",
-                                       subtitle: "Dimmi cosa ti va e trova subito qualcosa da guardare.", badge: "SCOPRI")
+                    NavigationLink { ATXForYouView() } label: {
+                        ATXFeatureCard(icon: "person.crop.circle.fill.badge.checkmark", title: "Per Te",
+                                       subtitle: "Riprendi, continua le serie e trova proposte dalla tua libreria.", badge: "PERSONALE")
                     }
                     NavigationLink { ATXRandomPlayView() } label: {
                         ATXFeatureCard(icon: "dice.fill", title: "Sorprendimi",
@@ -5546,81 +5546,107 @@ private struct ATXMosaicCell: View {
     }
 }
 
-private struct ATXDiscoverView: View {
+private struct ATXForYouView: View {
     @EnvironmentObject var session: AppSession
     @Environment(\.dismiss) private var dismiss
-    @State private var mood = "NOVITÀ"
-    @State private var scope = "TUTTO"
-    @State private var eveningSeed = Int.random(in: 0...999999)
 
-    private let scopes = ["TUTTO", "FILM", "SERIE"]
-    private let moods = ["NOVITÀ","POPOLARI","PIÙ VOTATI","AZIONE","COMMEDIA","HORROR","DRAMMA","FAMIGLIA","THRILLER","ROMANCE","FANTASY","SCI-FI"]
-    private let moodCards:[(String,String,[String])] = [
-        ("Voglio ridere","face.smiling",["COMMEDIA","COMEDY"]),
-        ("Adrenalina","bolt.fill",["AZIONE","ACTION","THRILLER"]),
-        ("Horror","moon.stars.fill",["HORROR"]),
-        ("Qualcosa di leggero","sparkles",["COMMEDIA","COMEDY","ROMANCE","ROMANTIC"]),
-        ("Per tutta la famiglia","figure.2.and.child.holdinghands",["FAMIGLIA","FAMILY","KIDS","ANIMATION","ANIMAZIONE"])
-    ]
-
-    private func tokens(_ value: String?) -> String { (value ?? "").folding(options:[.diacriticInsensitive,.caseInsensitive],locale:.current).uppercased() }
-    private func genreMatch(_ genre:String?, mood:String)->Bool {
-        let g=tokens(genre); let aliases:[String:[String]]=["AZIONE":["AZIONE","ACTION"],"COMMEDIA":["COMMEDIA","COMEDY"],"HORROR":["HORROR"],"DRAMMA":["DRAMMA","DRAMA"],"FAMIGLIA":["FAMIGLIA","FAMILY","KIDS","ANIMATION","ANIMAZIONE"],"THRILLER":["THRILLER"],"ROMANCE":["ROMANCE","ROMANTIC","ROMANTICO"],"FANTASY":["FANTASY"],"SCI-FI":["SCI-FI","SCIENCE FICTION","FANTASCIENZA"]]
-        return (aliases[mood] ?? [mood]).contains{g.contains($0)}
+    private func token(_ value: String?) -> String {
+        (value ?? "").folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).uppercased()
     }
-    private func ratingValue(_ v:String?)->Double { Double((v ?? "0").replacingOccurrences(of:",",with:".")) ?? 0 }
-    private func addedValue(_ v:String?)->Double { Double(v ?? "0") ?? 0 }
-    private func durationMinutes(_ value:String?)->Int? { guard let v=value else{return nil}; let parts=v.split(separator:":").compactMap{Int($0)}; if parts.count>=2{return parts[0]*60+parts[1]}; return Int(v.filter{$0.isNumber}) }
-
-    private var movies:[VODStream] { let b=session.allMovies; if mood=="NOVITÀ"{return Array(b.sorted{addedValue($0.added)>addedValue($1.added)}.prefix(60))}; if mood=="PIÙ VOTATI"{return Array(b.sorted{ratingValue($0.rating)>ratingValue($1.rating)}.prefix(60))}; if mood=="POPOLARI"{return Array(b.sorted{(ratingValue($0.rating),addedValue($0.added)) > (ratingValue($1.rating),addedValue($1.added))}.prefix(60))}; return Array(b.filter{genreMatch($0.genre,mood:mood)}.prefix(60)) }
-    private var series:[SeriesItem] { let b=session.allSeries; if mood=="NOVITÀ"{return Array(b.sorted{addedValue($0.added ?? $0.lastModified)>addedValue($1.added ?? $1.lastModified)}.prefix(60))}; if mood=="PIÙ VOTATI"{return Array(b.sorted{ratingValue($0.rating)>ratingValue($1.rating)}.prefix(60))}; if mood=="POPOLARI"{return Array(b.sorted{(ratingValue($0.rating),addedValue($0.added)) > (ratingValue($1.rating),addedValue($1.added))}.prefix(60))}; return Array(b.filter{genreMatch($0.genre,mood:mood)}.prefix(60)) }
-    private var evening:[VODStream] { let suitable=session.allMovies.filter{ m in let d=durationMinutes(m.duration) ?? 110; return d>=70 && d<=150 }.sorted{ a,b in let ah=abs((a.streamID &+ eveningSeed)%997), bh=abs((b.streamID &+ eveningSeed)%997); return ah<bh }; return Array(suitable.prefix(5)) }
-    private var smartMovies:[VODStream] {
-        let favTitles=Set(session.accountFavorites.map{$0.title.lowercased()}); let histTitles=Set(session.accountWatchHistory.map{$0.title.lowercased()}); let source=session.allMovies.filter{favTitles.contains($0.name.lowercased()) || histTitles.contains($0.name.lowercased())}; let gs=source.flatMap{($0.genre ?? "").split(separator:",").map{tokens(String($0))}}; let top=Dictionary(grouping:gs,by:{$0}).mapValues{$0.count}.sorted{$0.value>$1.value}.prefix(3).map{$0.key}; guard !top.isEmpty else{return []}; return Array(session.allMovies.filter{m in !favTitles.contains(m.name.lowercased()) && top.contains{tokens(m.genre).contains($0)}}.prefix(16))
-    }
-    private var newEpisodeSeries:[SeriesItem] { let watched=session.accountWatchHistory.filter{$0.kind==ContentType.series.rawValue}; return Array(session.allSeries.filter{s in guard let lm=Double(s.lastModified ?? s.added ?? "") else{return false}; let last=watched.filter{$0.subtitle?.localizedCaseInsensitiveContains(s.name)==true}.map{$0.watchedAt.timeIntervalSince1970}.max() ?? 0; return last>0 && lm>last}.prefix(16)) }
-
-    var body: some View { ZStack{Color.black.ignoresSafeArea(); ScrollView{LazyVStack(alignment:.leading,spacing:20){
-        RebornPageHeader(title:"Discover",onBack:{dismiss()}); Text("Trova qualcosa da guardare").font(.title.bold()).foregroundStyle(.white).padding(.horizontal,16)
-        moodRail
-        if !evening.isEmpty { sectionTitle("Stasera guardo…", subtitle:"5 proposte dalla tua playlist"); horizontalMovies(evening) }
-        if !smartMovies.isEmpty { sectionTitle("Scelti per te", subtitle:"Dai generi che guardi e salvi più spesso"); horizontalMovies(smartMovies) }
-        if !newEpisodeSeries.isEmpty { sectionTitle("Nuovi episodi", subtitle:"Serie che hai già iniziato e sono state aggiornate"); horizontalSeries(newEpisodeSeries) }
-        ContinueSeriesDiscoverSection()
-        LiveNowDiscoverSection()
-        picker(scopes,selection:$scope); picker(moods,selection:$mood)
-        if (scope=="TUTTO" || scope=="FILM") && !movies.isEmpty { discoverHeader("Film · \(mood.capitalized)",count:movies.count,randomAction:{ randomFromGenre() }); movieGrid }
-        if (scope=="TUTTO" || scope=="SERIE") && !series.isEmpty { discoverHeader("Serie TV · \(mood.capitalized)",count:series.count,randomAction:{ randomFromGenre() }); seriesGrid }
-        if ((scope == "FILM" && movies.isEmpty) || (scope == "SERIE" && series.isEmpty) || (scope == "TUTTO" && movies.isEmpty && series.isEmpty)) {
-            VStack(spacing: 10) {
-                Image(systemName: "sparkles.tv")
-                    .font(.system(size: 34))
-                    .foregroundStyle(.white.opacity(0.55))
-                Text("Nessun titolo")
-                    .font(.headline.bold())
-                    .foregroundStyle(.white)
-                Text("Nessun contenuto della playlist corrisponde a questa categoria.")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.55))
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 30)
+    private func rating(_ value: String?) -> Double { Double(value ?? "") ?? 0 }
+    private var favoriteTitles: Set<String> { Set(session.accountFavorites.map { $0.title.lowercased() }) }
+    private var historyTitles: Set<String> { Set(session.accountWatchHistory.map { $0.title.lowercased() }) }
+    private var interestMovies: [VODStream] {
+        let source = session.allMovies.filter { favoriteTitles.contains($0.name.lowercased()) || historyTitles.contains($0.name.lowercased()) }
+        let genres = source.flatMap { ($0.genre ?? "").split(separator: ",").map { token(String($0)) } }
+        let top = Dictionary(grouping: genres, by: { $0 }).mapValues(\.count).sorted { $0.value > $1.value }.prefix(3).map(\.key)
+        let candidates = session.allMovies.filter { item in
+            !historyTitles.contains(item.name.lowercased()) && !favoriteTitles.contains(item.name.lowercased()) && top.contains { token(item.genre).contains($0) }
         }
-    }.padding(.bottom,60)}}.toolbar(.hidden,for:.navigationBar) }
+        return Array(candidates.sorted { rating($0.rating) > rating($1.rating) }.prefix(16))
+    }
+    private var freshForYou: [VODStream] {
+        Array(session.allMovies.filter { !historyTitles.contains($0.name.lowercased()) }.sorted { ($0.added ?? "") > ($1.added ?? "") }.prefix(16))
+    }
 
-    private var moodRail: some View { VStack(alignment:.leading,spacing:10){Text("Che mood hai?").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal,16); ScrollView(.horizontal,showsIndicators:false){HStack(spacing:9){ForEach(moodCards,id:\.0){card in Button{ if let hit=moods.first(where:{m in card.2.contains(where:{a in tokens(m).contains(a) || a.contains(tokens(m))})}){mood=hit} } label:{Label(card.0,systemImage:card.1).font(.caption.bold()).foregroundStyle(.white).padding(.horizontal,14).frame(height:42).background(Color.white.opacity(0.09),in:RoundedRectangle(cornerRadius:12))}.buttonStyle(.plain)}}.padding(.horizontal,16)}} }
-    private func sectionTitle(_ title:String,subtitle:String)->some View { VStack(alignment:.leading,spacing:2){Text(title).font(.headline.bold()).foregroundStyle(.white);Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.48))}.padding(.horizontal,16) }
-    private func picker(_ values:[String],selection:Binding<String>)->some View { ScrollView(.horizontal,showsIndicators:false){HStack(spacing:8){ForEach(values,id:\.self){x in Button{selection.wrappedValue=x}label:{Text(x).font(.caption.bold()).foregroundStyle(.white).padding(.horizontal,14).frame(height:34).background(selection.wrappedValue==x ? rebornRed:Color.white.opacity(0.08),in:Capsule())}.buttonStyle(.plain)}}.padding(.horizontal,16)} }
-    private func discoverHeader(_ title:String,count:Int,randomAction:@escaping()->Void)->some View { HStack{Text(title).font(.headline.bold()).foregroundStyle(.white);Spacer();Button(action:randomAction){Image(systemName:"dice.fill").foregroundStyle(.white).frame(width:34,height:34).background(Color.white.opacity(0.10),in:Circle())};Text("\(count)").font(.caption.bold()).foregroundStyle(.white.opacity(0.45))}.padding(.horizontal,16) }
-    private func randomFromGenre(){ if scope=="SERIE",let x=series.randomElement(){ mood=mood; NotificationCenter.default.post(name:Notification.Name("ATXRandomSeries"),object:x.seriesID) } else if let x=movies.randomElement(){ mood=mood; NotificationCenter.default.post(name:Notification.Name("ATXRandomMovie"),object:x.streamID) } }
-    private var movieGrid:some View { LazyVGrid(columns:[GridItem(.adaptive(minimum:104,maximum:150),spacing:8)],spacing:14){ForEach(movies){x in NavigationLink{MovieDetailView(item:x)}label:{discoverMovieCard(x)}}}.padding(.horizontal,16) }
-    private var seriesGrid:some View { LazyVGrid(columns:[GridItem(.adaptive(minimum:104,maximum:150),spacing:8)],spacing:14){ForEach(series){x in NavigationLink{SeriesDetailView(item:x)}label:{discoverSeriesCard(x)}}}.padding(.horizontal,16) }
-    private func discoverMovieCard(_ x:VODStream)->some View { VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.streamIcon,width:nil,height:170); Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1); why(rating:x.rating,genre:x.genre,duration:x.duration)} }
-    private func discoverSeriesCard(_ x:SeriesItem)->some View { VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.cover,width:nil,height:170);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1);why(rating:x.rating,genre:x.genre,duration:nil)} }
-    private func why(rating:String?,genre:String?,duration:String?)->some View { HStack(spacing:5){if let d=duration,!d.isEmpty{Text(d)};if let g=genre,!g.isEmpty{Text(g.components(separatedBy:",").first ?? g)};if ratingValue(rating)>0{Label(String(format:"%.1f",ratingValue(rating)),systemImage:"star.fill")}}.font(.caption2.bold()).foregroundStyle(.white.opacity(0.55)).lineLimit(1) }
-    private func horizontalMovies(_ items:[VODStream])->some View { ScrollView(.horizontal,showsIndicators:false){HStack(spacing:10){ForEach(items){x in NavigationLink{MovieDetailView(item:x)}label:{VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.streamIcon,width:116,height:168);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width:116,alignment:.leading);why(rating:x.rating,genre:x.genre,duration:x.duration).frame(width:116,alignment:.leading)}}.buttonStyle(.plain)}}.padding(.horizontal,16)} }
-    private func horizontalSeries(_ items:[SeriesItem])->some View { ScrollView(.horizontal,showsIndicators:false){HStack(spacing:10){ForEach(items){x in NavigationLink{SeriesDetailView(item:x)}label:{VStack(alignment:.leading,spacing:5){RebornPoster(title:x.name,imageURL:x.cover,width:116,height:168);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width:116,alignment:.leading)}}.buttonStyle(.plain)}}.padding(.horizontal,16)} }
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 22) {
+                    RebornPageHeader(title: "Per Te", onBack: { dismiss() })
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("IL TUO ATX").font(.caption.bold()).tracking(1.4).foregroundStyle(rebornRed)
+                        Text("Tutto ciò che ti serve, senza cercare.").font(.system(size: 27, weight: .black, design: .rounded)).foregroundStyle(.white)
+                        Text("Riprendi ciò che hai iniziato e trova proposte dalla tua libreria.").font(.subheadline).foregroundStyle(.white.opacity(0.56))
+                    }.padding(.horizontal, 16)
+
+                    if !session.continueWatching.isEmpty { continueRail }
+                    ContinueSeriesDiscoverSection()
+                    if !interestMovies.isEmpty { movieRail("Potrebbero piacerti", items: interestMovies) }
+                    if !freshForYou.isEmpty { movieRail("Appena aggiunti", items: freshForYou) }
+
+                    NavigationLink { ATXRandomPlayView() } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "dice.fill").font(.title2.bold()).foregroundStyle(.white).frame(width: 48, height: 48).background(rebornRed, in: RoundedRectangle(cornerRadius: 14))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Non sai cosa guardare?").font(.headline.bold()).foregroundStyle(.white)
+                                Text("Lascia scegliere ATX dalla tua playlist").font(.caption).foregroundStyle(.white.opacity(0.52))
+                            }
+                            Spacer(); Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.35))
+                        }.padding(14).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+                    }.buttonStyle(.plain).padding(.horizontal, 16)
+
+                    LiveNowDiscoverSection()
+                    Spacer(minLength: 70)
+                }
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var continueRail: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Riprendi subito").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal, 16)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(session.continueWatching.prefix(16))) { item in
+                        let kind = ContentType(rawValue: item.kind) ?? .movies
+                        let descriptor = PlaybackDescriptor(kind: kind, streamID: item.streamID, title: item.title, subtitle: item.subtitle, imageURL: item.imageURL, fileExtension: item.fileExtension)
+                        NavigationLink { PlayerScreen(title: item.title, url: session.streamURL(type: kind, id: item.streamID, ext: item.fileExtension), isLive: false, resume: descriptor) } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                RebornPoster(title: item.title, imageURL: item.imageURL, width: 150, height: 92)
+                                Text(item.title).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width: 150, alignment: .leading)
+                                ProgressView(value: item.fraction).tint(rebornRed).frame(width: 150)
+                            }
+                        }.buttonStyle(.plain)
+                    }
+                }.padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func movieRail(_ title: String, items: [VODStream]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.headline.bold()).foregroundStyle(.white).padding(.horizontal, 16)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(items) { item in
+                        NavigationLink { MovieDetailView(item: item) } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                RebornPoster(title: item.name, imageURL: item.streamIcon, width: 116, height: 168)
+                                Text(item.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width: 116, alignment: .leading)
+                                HStack(spacing: 5) {
+                                    if let genre = item.genre, !genre.isEmpty { Text(genre.components(separatedBy: ",").first ?? genre).lineLimit(1) }
+                                    if rating(item.rating) > 0 { Label(String(format: "%.1f", rating(item.rating)), systemImage: "star.fill") }
+                                }.font(.caption2.bold()).foregroundStyle(.white.opacity(0.5)).frame(width: 116, alignment: .leading)
+                            }
+                        }.buttonStyle(.plain)
+                    }
+                }.padding(.horizontal, 16)
+            }
+        }
+    }
 }
 
 private struct ContinueSeriesDiscoverSection: View {
