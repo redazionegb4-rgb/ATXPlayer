@@ -5591,7 +5591,22 @@ private struct ATXDiscoverView: View {
         picker(scopes,selection:$scope); picker(moods,selection:$mood)
         if (scope=="TUTTO" || scope=="FILM") && !movies.isEmpty { discoverHeader("Film · \(mood.capitalized)",count:movies.count,randomAction:{ randomFromGenre() }); movieGrid }
         if (scope=="TUTTO" || scope=="SERIE") && !series.isEmpty { discoverHeader("Serie TV · \(mood.capitalized)",count:series.count,randomAction:{ randomFromGenre() }); seriesGrid }
-        if ((scope=="FILM"&&movies.isEmpty)||(scope=="SERIE"&&series.isEmpty)||(scope=="TUTTO"&&movies.isEmpty&&series.isEmpty)){ContentUnavailableView("Nessun titolo",systemImage:"sparkles.tv",description:Text("Nessun contenuto della playlist corrisponde a questa categoria.")).foregroundStyle(.white).padding(.top,30)}
+        if ((scope == "FILM" && movies.isEmpty) || (scope == "SERIE" && series.isEmpty) || (scope == "TUTTO" && movies.isEmpty && series.isEmpty)) {
+            VStack(spacing: 10) {
+                Image(systemName: "sparkles.tv")
+                    .font(.system(size: 34))
+                    .foregroundStyle(.white.opacity(0.55))
+                Text("Nessun titolo")
+                    .font(.headline.bold())
+                    .foregroundStyle(.white)
+                Text("Nessun contenuto della playlist corrisponde a questa categoria.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.55))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 30)
+        }
     }.padding(.bottom,60)}}.toolbar(.hidden,for:.navigationBar) }
 
     private var moodRail: some View { VStack(alignment:.leading,spacing:10){Text("Che mood hai?").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal,16); ScrollView(.horizontal,showsIndicators:false){HStack(spacing:9){ForEach(moodCards,id:\.0){card in Button{ if let hit=moods.first(where:{m in card.2.contains(where:{a in tokens(m).contains(a) || a.contains(tokens(m))})}){mood=hit} } label:{Label(card.0,systemImage:card.1).font(.caption.bold()).foregroundStyle(.white).padding(.horizontal,14).frame(height:42).background(Color.white.opacity(0.09),in:RoundedRectangle(cornerRadius:12))}.buttonStyle(.plain)}}.padding(.horizontal,16)}} }
@@ -5615,11 +5630,78 @@ private struct ContinueSeriesDiscoverSection: View {
 }
 
 private struct LiveNowDiscoverSection: View {
-    @EnvironmentObject var session:AppSession
-    @State private var now:[Int:String]=[:]
-    private var active:[LiveStream] { Array(session.allLive.filter{now[$0.streamID] != nil}.prefix(18)) }
-    var body:some View { if !active.isEmpty { VStack(alignment:.leading,spacing:10){Text("Live · Ora in TV").font(.headline.bold()).foregroundStyle(.white).padding(.horizontal,16);ScrollView(.horizontal,showsIndicators:false){HStack(spacing:10){ForEach(active){x in NavigationLink{LiveDetailView(item:x)}label:{VStack(alignment:.leading,spacing:4){RebornPoster(title:x.name,imageURL:x.streamIcon,width:150,height:90);Text(x.name).font(.caption.bold()).foregroundStyle(.white).lineLimit(1).frame(width:150,alignment:.leading);Text(now[x.streamID] ?? "").font(.caption2).foregroundStyle(.white.opacity(0.55)).lineLimit(1).frame(width:150,alignment:.leading)}}.buttonStyle(.plain)}}.padding(.horizontal,16)}} }.task{await load()} }
-    private func load() async { await withTaskGroup(of:(Int,String?).self){group in for x in session.allLive.prefix(24){group.addTask{let e=try? await APIClient.shared.shortEPG(baseURL:session.baseURL,username:session.username,password:session.password,streamID:x.streamID,limit:3);let t=e?.first?.title;return(x.streamID,t)}};for await (id,t) in group{if let t,!t.isEmpty{now[id]=t}}} }
+    @EnvironmentObject var session: AppSession
+    @State private var now: [Int: String] = [:]
+
+    private var activeChannels: [LiveStream] {
+        Array(session.allLive.filter { now[$0.streamID] != nil }.prefix(18))
+    }
+
+    var body: some View {
+        Group {
+            if activeChannels.isEmpty {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Live · Ora in TV")
+                        .font(.headline.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(activeChannels) { item in
+                                NavigationLink {
+                                    LiveDetailView(item: item)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        RebornPoster(title: item.name, imageURL: item.streamIcon, width: 150, height: 90)
+                                        Text(item.name)
+                                            .font(.caption.bold())
+                                            .foregroundStyle(.white)
+                                            .lineLimit(1)
+                                            .frame(width: 150, alignment: .leading)
+                                        Text(now[item.streamID] ?? "")
+                                            .font(.caption2)
+                                            .foregroundStyle(.white.opacity(0.55))
+                                            .lineLimit(1)
+                                            .frame(width: 150, alignment: .leading)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            Task { await loadCurrentEPG() }
+        }
+    }
+
+    private func loadCurrentEPG() async {
+        await withTaskGroup(of: (Int, String?).self) { group in
+            for item in session.allLive.prefix(24) {
+                group.addTask {
+                    let epg = try? await APIClient.shared.shortEPG(
+                        baseURL: session.baseURL,
+                        username: session.username,
+                        password: session.password,
+                        streamID: item.streamID,
+                        limit: 3
+                    )
+                    return (item.streamID, epg?.first?.title)
+                }
+            }
+            for await (id, title) in group {
+                if let title = title, !title.isEmpty {
+                    await MainActor.run { now[id] = title }
+                }
+            }
+        }
+    }
 }
 
 private struct ATXRandomPlayView: View {
