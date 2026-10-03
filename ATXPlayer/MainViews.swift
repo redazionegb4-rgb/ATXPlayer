@@ -4796,7 +4796,7 @@ private struct RebornHomeView: View {
     }
 }
 
-private enum RebornLiveFilter { case category, favorites, recent }
+private enum RebornCatalogFilter { case category, favorites, recent }
 
 private struct RebornCatalogView: View {
     @EnvironmentObject var session: AppSession
@@ -4805,7 +4805,7 @@ private struct RebornCatalogView: View {
     @State private var search = ""
     @State private var showSearch = false
     @State private var showCategories = false
-    @State private var liveFilter: RebornLiveFilter = .category
+    @State private var catalogFilter: RebornCatalogFilter = .category
 
     private var title: String { type == .live ? "Diretta" : type == .movies ? "Film" : "Serie TV" }
     private var categories: [Category] { type == .live ? session.liveCategories : type == .movies ? session.movieCategories : session.seriesCategories }
@@ -4813,14 +4813,45 @@ private struct RebornCatalogView: View {
     private let posterCols = [GridItem(.adaptive(minimum: 104, maximum: 150), spacing: 8)]
 
     private var movies: [VODStream] {
-        session.allMovies.filter { (selectedCategory == nil || $0.categoryID == selectedCategory) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
+        let source: [VODStream]
+        switch catalogFilter {
+        case .category:
+            source = session.allMovies.filter { selectedCategory == nil || $0.categoryID == selectedCategory }
+        case .favorites:
+            let ids = Set(session.accountFavorites.filter { $0.kind == ContentType.movies.rawValue }.map(\.streamID))
+            source = session.allMovies.filter { ids.contains($0.streamID) }
+        case .recent:
+            let recentIDs = session.accountWatchHistory.filter { $0.kind == ContentType.movies.rawValue }.map(\.streamID)
+            let byID = Dictionary(uniqueKeysWithValues: session.allMovies.map { ($0.streamID, $0) })
+            var seen = Set<Int>()
+            source = recentIDs.compactMap { id in guard seen.insert(id).inserted else { return nil }; return byID[id] }
+        }
+        return source.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
     }
     private var series: [SeriesItem] {
-        session.allSeries.filter { (selectedCategory == nil || $0.categoryID == selectedCategory) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }
+        let source: [SeriesItem]
+        switch catalogFilter {
+        case .category:
+            source = session.allSeries.filter { selectedCategory == nil || $0.categoryID == selectedCategory }
+        case .favorites:
+            let ids = Set(session.accountFavorites.filter { $0.kind == ContentType.series.rawValue }.map(\.streamID))
+            source = session.allSeries.filter { ids.contains($0.seriesID) }
+        case .recent:
+            let watchedNames = session.accountWatchHistory
+                .filter { $0.kind == ContentType.series.rawValue }
+                .compactMap { $0.subtitle?.components(separatedBy: " • ").first }
+            var seen = Set<String>()
+            source = watchedNames.compactMap { name in
+                let key = name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                guard seen.insert(key).inserted else { return nil }
+                return session.allSeries.first { $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+            }
+        }
+        return source.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
     }
     private var live: [LiveStream] {
         let source: [LiveStream]
-        switch liveFilter {
+        switch catalogFilter {
         case .category:
             source = session.allLive.filter { selectedCategory == nil || $0.categoryID == selectedCategory }
         case .favorites:
@@ -4839,10 +4870,8 @@ private struct RebornCatalogView: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     header
                     categorySelector
-                    if type == .live {
-                        liveQuickFilters
-                        liveWall
-                    } else { posterWall }
+                    catalogQuickFilters
+                    if type == .live { liveWall } else { posterWall }
                 }.padding(.bottom, 110)
             }
         }
@@ -4905,7 +4934,7 @@ private struct RebornCatalogView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(categories) { c in
-                            Button { selectedCategory = c.categoryID; liveFilter = .category; showCategories = false } label: {
+                            Button { selectedCategory = c.categoryID; catalogFilter = .category; showCategories = false } label: {
                                 HStack {
                                     Text(c.categoryName).font(.body.weight(selectedCategory == c.categoryID ? .bold : .regular)).foregroundStyle(.white)
                                     Spacer()
@@ -4939,24 +4968,24 @@ private struct RebornCatalogView: View {
         }.padding(.horizontal, 12)
     }
 
-    private var liveQuickFilters: some View {
+    private var catalogQuickFilters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                liveFilterChip(.category, title: "Categoria", icon: "rectangle.stack.fill")
-                liveFilterChip(.favorites, title: "Preferiti", icon: "star.fill")
-                liveFilterChip(.recent, title: "Ultimi canali", icon: "clock.arrow.circlepath")
+                catalogFilterChip(.category, title: "Categoria", icon: "rectangle.stack.fill")
+                catalogFilterChip(.favorites, title: "Preferiti", icon: "star.fill")
+                catalogFilterChip(.recent, title: type == .live ? "Ultimi canali" : type == .movies ? "Ultimi film" : "Ultime serie", icon: "clock.arrow.circlepath")
             }
             .padding(.horizontal, 16)
         }
     }
 
-    private func liveFilterChip(_ filter: RebornLiveFilter, title: String, icon: String) -> some View {
-        Button { liveFilter = filter } label: {
+    private func catalogFilterChip(_ filter: RebornCatalogFilter, title: String, icon: String) -> some View {
+        Button { catalogFilter = filter } label: {
             Label(title, systemImage: icon)
                 .font(.caption.bold())
-                .foregroundStyle(liveFilter == filter ? Color.black : Color.white)
+                .foregroundStyle(catalogFilter == filter ? Color.black : Color.white)
                 .padding(.horizontal, 13).frame(height: 36)
-                .background(liveFilter == filter ? Color.white : Color.white.opacity(0.08), in: Capsule())
+                .background(catalogFilter == filter ? Color.white : Color.white.opacity(0.08), in: Capsule())
         }.buttonStyle(.plain)
     }
 
